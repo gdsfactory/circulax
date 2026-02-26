@@ -39,6 +39,52 @@ def _complex_physics(
     return f.real, f.imag, q.real, q.imag
 
 
+def _primal_and_jac_real(
+    f, v: Array, p: Array
+) -> tuple[tuple[Array, Array], tuple[Array, Array]]:
+    """Compute f(v,p) and its Jacobian w.r.t. v in a single forward sweep.
+
+    Sweeps n unit tangents via ``jax.jvp``, extracting the primal from the
+    first sweep rather than computing it separately.  Jacobian is returned in
+    ``(n_eqs, n_vars)`` shape to match ``jax.jacfwd`` convention.
+    """
+    n = v.shape[0]
+    g = lambda v_: f(v_, p)  # close over p; differentiate w.r.t. v only
+    (f_vals, q_vals), (dfs, dqs) = jax.vmap(
+        lambda e: jax.jvp(g, (v,), (e,))
+    )(jnp.eye(n))
+    return (f_vals[0], q_vals[0]), (dfs.T, dqs.T)
+
+
+def _primal_and_jac_complex(
+    f, vr: Array, vi: Array, p: Array
+) -> tuple[
+    tuple[Array, Array, Array, Array],
+    tuple[Array, Array, Array, Array],
+    tuple[Array, Array, Array, Array],
+]:
+    """Compute f(vr,vi,p) and its Jacobian w.r.t. (vr, vi) in two forward sweeps.
+
+    Mirrors ``jax.jacfwd(f, argnums=(0, 1))``: sweeps unit tangents for vr
+    then vi, extracting the primal from the first sweep.  Each Jacobian block
+    is returned in ``(n_eqs, n_vars)`` shape.
+    """
+    n = vr.shape[0]
+    zeros_vr = jnp.zeros_like(vr)
+    zeros_vi = jnp.zeros_like(vi)
+    g = lambda vr_, vi_: f(vr_, vi_, p)  # close over p; differentiate w.r.t. vr, vi only
+    (fr_s, fi_s, qr_s, qi_s), (dfr_r, dfi_r, dqr_r, dqi_r) = jax.vmap(
+        lambda e: jax.jvp(g, (vr, vi), (e, zeros_vi))
+    )(jnp.eye(n))
+    _, (dfr_i, dfi_i, dqr_i, dqi_i) = jax.vmap(
+        lambda e: jax.jvp(g, (vr, vi), (zeros_vr, e))
+    )(jnp.eye(n))
+    primal = (fr_s[0], fi_s[0], qr_s[0], qi_s[0])
+    jac_r = (dfr_r.T, dfi_r.T, dqr_r.T, dqi_r.T)
+    jac_i = (dfr_i.T, dfi_i.T, dqr_i.T, dqi_i.T)
+    return primal, jac_r, jac_i
+
+
 def assemble_system_real(
     y_guess: Array,
     component_groups: dict,
@@ -83,8 +129,9 @@ def assemble_system_real(
 
         physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
 
-        (f_l, q_l) = jax.vmap(physics_at_t1)(v_locs, group.params)
-        (df_l, dq_l) = jax.vmap(jax.jacfwd(physics_at_t1))(v_locs, group.params)
+        (f_l, q_l), (df_l, dq_l) = jax.vmap(
+            functools.partial(_primal_and_jac_real, physics_at_t1)
+        )(v_locs, group.params)
 
         total_f = total_f.at[group.eq_indices].add(f_l)
         total_q = total_q.at[group.eq_indices].add(q_l)
@@ -193,16 +240,15 @@ def assemble_system_complex(
 
         physics_split = functools.partial(_complex_physics, group=group, t1=t1)
 
-        fr, fi, qr, qi = jax.vmap(physics_split)(v_r, v_i, group.params)
+        (fr, fi, qr, qi), (dfr_r, dfi_r, dqr_r, dqi_r), (dfr_i, dfi_i, dqr_i, dqi_i) = (
+            jax.vmap(functools.partial(_primal_and_jac_complex, physics_split))(
+                v_r, v_i, group.params
+            )
+        )
 
         idx_r, idx_i = group.eq_indices, group.eq_indices + half_size
         total_f = total_f.at[idx_r].add(fr).at[idx_i].add(fi)
         total_q = total_q.at[idx_r].add(qr).at[idx_i].add(qi)
-
-        jac_res = jax.vmap(jax.jacfwd(physics_split, argnums=(0, 1)))(
-            v_r, v_i, group.params
-        )
-        ((dfr_r, dfr_i), (dfi_r, dfi_i), (dqr_r, dqr_i), (dqi_r, dqi_i)) = jac_res
 
         vals_blocks[0].append((dfr_r + dqr_r / dt).reshape(-1))  # RR
         vals_blocks[1].append((dfr_i + dqr_i / dt).reshape(-1))  # RI
