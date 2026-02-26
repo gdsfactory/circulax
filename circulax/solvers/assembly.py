@@ -165,12 +165,12 @@ def assemble_residual_only_real(
 
     Returns:
         A two-tuple ``(total_f, total_q)`` where both arrays have shape
-        ``(sys_size,)`` and ``dtype=float64``.
+        ``(sys_size,)`` and ``dtype`` matching ``y_guess.dtype``.
 
     """
     sys_size = y_guess.shape[0]
-    total_f = jnp.zeros(sys_size, dtype=jnp.float64)
-    total_q = jnp.zeros(sys_size, dtype=jnp.float64)
+    total_f = jnp.zeros(sys_size, dtype=y_guess.dtype)
+    total_q = jnp.zeros(sys_size, dtype=y_guess.dtype)
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
@@ -282,15 +282,15 @@ def assemble_residual_only_complex(
 
     Returns:
         A two-tuple ``(total_f, total_q)`` where both arrays have shape
-        ``(2 * num_vars,)`` and ``dtype=float64``.
+        ``(2 * num_vars,)`` and ``dtype`` matching ``y_guess.dtype``.
 
     """
     sys_size = y_guess.shape[0]
     half_size = sys_size // 2
     y_real, y_imag = y_guess[:half_size], y_guess[half_size:]
 
-    total_f = jnp.zeros(sys_size, dtype=jnp.float64)
-    total_q = jnp.zeros(sys_size, dtype=jnp.float64)
+    total_f = jnp.zeros(sys_size, dtype=y_guess.dtype)
+    total_q = jnp.zeros(sys_size, dtype=y_guess.dtype)
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]

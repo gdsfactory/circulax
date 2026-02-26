@@ -29,6 +29,21 @@ import optimistix as optx
 
 from circulax.solvers.assembly import assemble_system_complex, assemble_system_real
 
+# ---------------------------------------------------------------------------
+# Solver constants
+# ---------------------------------------------------------------------------
+GROUND_STIFFNESS: float = 1e9
+"""Penalty added to ground-node diagonal entries to enforce V=0."""
+
+DC_DT: float = 1e18
+"""Effective timestep used for DC analysis; makes capacitor stamps vanish (C/dt → 0)."""
+
+DAMPING_FACTOR: float = 0.5
+"""Newton-step damping coefficient: limits each step to at most ``DAMPING_FACTOR / |δy|_max``."""
+
+DAMPING_EPS: float = 1e-9
+"""Small additive epsilon that prevents division by zero in the damping formula."""
+
 # Check if split solver available — KLUHandleManager was added in a later version of klujax.
 split_solver_available = True
 try:
@@ -132,22 +147,22 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         """
 
         def dc_step(y: jax.Array, _: Any) -> jax.Array:
-            # 1. Assemble System (dt=1e18 effectively removes time-dependent terms like C*dv/dt)
+            # 1. Assemble System (DC_DT effectively removes time-dependent terms like C*dv/dt)
             if self.is_complex:
                 total_f, _, all_vals = assemble_system_complex(
-                    y, component_groups, t1=0.0, dt=1e18
+                    y, component_groups, t1=0.0, dt=DC_DT
                 )
             else:
                 total_f, _, all_vals = assemble_system_real(
-                    y, component_groups, t1=0.0, dt=1e18
+                    y, component_groups, t1=0.0, dt=DC_DT
                 )
 
             # 2. Apply Ground Constraints to Residual
-            #    We add a massive penalty (1e9 * V) to the residual at ground nodes.
+            #    We add a massive penalty (GROUND_STIFFNESS * V) to the residual at ground nodes.
             #    This forces the solver to drive V -> 0.
             total_f_grounded = total_f
             for idx in self.ground_indices:
-                total_f_grounded = total_f_grounded.at[idx].add(1e9 * y[idx])
+                total_f_grounded = total_f_grounded.at[idx].add(GROUND_STIFFNESS * y[idx])
 
             # 3. Solve Linear System (J * delta = -R)
             sol = self._solve_impl(all_vals, -total_f_grounded)
@@ -156,7 +171,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             # 4. Apply Voltage Limiting (Damping)
             #    Prevents the solver from taking huge steps that crash exponentials (diodes/transistors).
             max_change = jnp.max(jnp.abs(delta))
-            damping = jnp.minimum(1.0, 0.5 / (max_change + 1e-9))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
 
             return y + delta * damping
 
@@ -205,7 +220,7 @@ class DenseSolver(CircuitLinearSolver):
 
         # 3. Apply Ground Constraints (Stiff Diagonal)
         for idx in self.ground_indices:
-            J = J.at[idx, idx].add(1e9)
+            J = J.at[idx, idx].add(GROUND_STIFFNESS)
 
         # 4. Dense Solve (LU)
         x = jnp.linalg.solve(J, residual)
@@ -287,7 +302,7 @@ class KLUSplitSolver(CircuitLinearSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         # 1. Prepare raw value vector including Ground and Leakage entries
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -387,7 +402,7 @@ class KlursSplitSolver(KLUSplitSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         # 1. Prepare raw value vector including Ground and Leakage entries
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -503,7 +518,7 @@ class KLUSplitFactorSolver(KLUSplitSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         """Regular solve - does full factor + solve."""
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -542,7 +557,7 @@ class KLUSplitFactorSolver(KLUSplitSolver):
 
     def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
         """Factor the Jacobian and return numeric handle."""
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -597,7 +612,7 @@ class KLUSolver(CircuitLinearSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         # 1. Prepare raw value vector including Ground and Leakage entries
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -699,7 +714,7 @@ class SparseSolver(CircuitLinearSolver):
         #    Add Leakage & Ground stiffness to diagonal
         diag_vals = diag_vals + self.g_leak
         for idx in self.ground_indices:
-            diag_vals = diag_vals.at[idx].add(1e9)
+            diag_vals = diag_vals.at[idx].add(GROUND_STIFFNESS)
 
         #    Invert diagonal for Jacobi Preconditioner
         inv_diag = jnp.where(jnp.abs(diag_vals) < 1e-12, 1.0, 1.0 / diag_vals)
@@ -716,7 +731,7 @@ class SparseSolver(CircuitLinearSolver):
             # Add Leakage & Ground contributions
             Ax = Ax + (x * self.g_leak)
             for idx in self.ground_indices:
-                Ax = Ax.at[idx].add(1e9 * x[idx])
+                Ax = Ax.at[idx].add(GROUND_STIFFNESS * x[idx])
             return Ax
 
         # 3. Solve (BiCGStab)

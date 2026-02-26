@@ -17,7 +17,12 @@ from circulax.solvers.assembly import (
     assemble_system_complex,
     assemble_system_real,
 )
-from circulax.solvers.linear import CircuitLinearSolver
+from circulax.solvers.linear import (
+    DAMPING_EPS,
+    DAMPING_FACTOR,
+    GROUND_STIFFNESS,
+    CircuitLinearSolver,
+)
 
 
 def _compute_history(component_groups, y_c, t, num_vars) -> ArrayLike:
@@ -111,7 +116,7 @@ class VectorizedTransientSolver(AbstractSolver):
 
             # C. Apply Ground Constraints (RHS)
             for idx in ground_indices:
-                residual = residual.at[idx].add(1e9 * y[idx])
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
             # D. Solve Linear System
             #    Strategy handles the flat 2N system automatically
@@ -120,7 +125,7 @@ class VectorizedTransientSolver(AbstractSolver):
 
             # E. Damping
             max_change = jnp.max(jnp.abs(delta))
-            damping = jnp.minimum(1.0, 0.5 / (max_change + 1e-9))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
 
             return y + delta * damping
 
@@ -215,7 +220,7 @@ class VectorizedTransientSolver(AbstractSolver):
 #             residual = total_f + (total_q - q_prev) / dt
 
 #             for idx in ground_indices:
-#                 residual = residual.at[idx].add(1e9 * y[idx])
+#                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
 #             sol = self.linear_solver.solve_with_frozen_jacobian(
 #                 -residual, numeric_handle
@@ -223,7 +228,7 @@ class VectorizedTransientSolver(AbstractSolver):
 #             delta = sol.value
 
 #             max_change = jnp.max(jnp.abs(delta))
-#             damping = jnp.minimum(1.0, 0.5 / (max_change + 1e-9))
+#             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
 
 #             return y + delta * damping
 
