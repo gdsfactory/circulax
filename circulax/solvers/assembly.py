@@ -20,9 +20,23 @@ parts — allowing complex circuit analyses to reuse real-valued sparse linear
 algebra kernels.
 """
 
+import functools
+
 import jax
 import jax.numpy as jnp
 from jax import Array
+
+
+def _real_physics(v: Array, p: Array, group, t1: float) -> tuple[Array, Array]:
+    return group.physics_func(y=v, args=p, t=t1)
+
+
+def _complex_physics(
+    vr: Array, vi: Array, p: Array, group, t1: float
+) -> tuple[Array, Array, Array, Array]:
+    v = vr + 1j * vi
+    f, q = group.physics_func(y=v, args=p, t=t1)
+    return f.real, f.imag, q.real, q.imag
 
 
 def assemble_system_real(
@@ -67,8 +81,7 @@ def assemble_system_real(
         group = component_groups[k]
         v_locs = y_guess[group.var_indices]
 
-        def physics_at_t1(v: Array, p: Array) -> tuple[Array, Array]:
-            return group.physics_func(y=v, args=p, t=t1)
+        physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
 
         (f_l, q_l) = jax.vmap(physics_at_t1)(v_locs, group.params)
         (df_l, dq_l) = jax.vmap(jax.jacfwd(physics_at_t1))(v_locs, group.params)
@@ -116,8 +129,7 @@ def assemble_residual_only_real(
         group = component_groups[k]
         v = y_guess[group.var_indices]
 
-        def physics_at_t1(v: Array, p: Array) -> tuple[Array, Array]:
-            return group.physics_func(y=v, args=p, t=t1)
+        physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
 
         f_l, q_l = jax.vmap(physics_at_t1)(v, group.params)
 
@@ -179,12 +191,7 @@ def assemble_system_complex(
         group = component_groups[k]
         v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
 
-        def physics_split(
-            vr: Array, vi: Array, p: Array
-        ) -> tuple[Array, Array, Array, Array]:
-            v = vr + 1j * vi
-            f, q = group.physics_func(y=v, args=p, t=t1)
-            return f.real, f.imag, q.real, q.imag
+        physics_split = functools.partial(_complex_physics, group=group, t1=t1)
 
         fr, fi, qr, qi = jax.vmap(physics_split)(v_r, v_i, group.params)
 
@@ -243,12 +250,7 @@ def assemble_residual_only_complex(
         group = component_groups[k]
         v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
 
-        def physics_split(
-            vr: Array, vi: Array, p: Array
-        ) -> tuple[Array, Array, Array, Array]:
-            v = vr + 1j * vi
-            f, q = group.physics_func(y=v, args=p, t=t1)
-            return f.real, f.imag, q.real, q.imag
+        physics_split = functools.partial(_complex_physics, group=group, t1=t1)
 
         fr, fi, qr, qi = jax.vmap(physics_split)(v_r, v_i, group.params)
 
