@@ -1369,8 +1369,8 @@ packages:
   requires_python: '>=3.7'
 - pypi: ./
   name: circulax
-  version: 0.1.1.dev2+g405bc2b2f.d20260226
-  sha256: 815b322f1050d476978adb57f093492587a156bc9af6c275535f518279ca5769
+  version: 0.1.1.dev3+g3603b1199.d20260226
+  sha256: a457c3003a815f37af62c21aa22560180e68265c5521aded99d68a779f6a49a8
   requires_dist:
   - diffrax>=0.7.0,<0.8
   - jax>=0.7.1,<0.8
@@ -1379,7 +1379,7 @@ packages:
   - lineax
   - matplotlib
   - numpy
-  - sax==0.16.11
+  - sax>=0.15.15
   - typing-extensions>=4.13.2
   - black ; extra == 'dev'
   - hippogriffe==0.2.2 ; extra == 'dev'
