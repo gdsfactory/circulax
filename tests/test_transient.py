@@ -16,7 +16,7 @@ def test_short_transient_runs_float(simple_lrc_netlist, solver):
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
     # Solve DC operating point and run a very short transient with zero forcing
-    linear_strat = solver.from_circuit(groups, sys_size, is_complex=False)
+    linear_strat = solver.from_component_groups(groups, sys_size, is_complex=False)
     y_guess = jnp.zeros(sys_size)
     y_op = linear_strat.solve_dc(groups, y_guess)
 
@@ -51,7 +51,7 @@ def test_short_transient_runs_complex(simple_optical_netlist, solver):
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
 
     # Solve DC operating point and run a very short transient with zero forcing
-    linear_strat = solver.from_circuit(groups, sys_size, is_complex=True)
+    linear_strat = solver.from_component_groups(groups, sys_size, is_complex=True)
 
     y_guess_flat = jnp.zeros(sys_size * 2, dtype=jnp.float64)
     y_op_flat = linear_strat.solve_dc(groups, y_guess_flat)

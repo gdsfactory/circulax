@@ -31,7 +31,7 @@ def test_solve_operation_point_residual_small(simple_lrc_netlist: Netlist, solve
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
-    linear_strat = solver.from_circuit(groups, sys_size, is_complex=False)
+    linear_strat = solver.from_component_groups(groups, sys_size, is_complex=False)
     y_guess = jnp.zeros(sys_size)
     y_op = linear_strat.solve_dc(groups, y_guess)
 
@@ -50,7 +50,7 @@ def test_solve_operation_point_residual_small_complex(simple_optical_netlist: Ne
     net_dict, models_map = simple_optical_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
-    linear_strat = solver.from_circuit(groups, sys_size, is_complex=True)
+    linear_strat = solver.from_component_groups(groups, sys_size, is_complex=True)
     y_guess = jnp.ones(2 * sys_size)
     y_op = linear_strat.solve_dc(groups, y_guess)
 
