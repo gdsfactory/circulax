@@ -23,7 +23,7 @@ dependencies = [
     "jax>=0.7.1,<0.8",
     "jaxlib>=0.7.1,<0.8",
     "diffrax>=0.7.0,<0.8",
-    "sax>=0.15.15,<0.16",
+    "sax>=0.15.15",
     "matplotlib",
     "typing-extensions>=4.13.2",
     "lineax",

@@ -29,6 +29,21 @@ import optimistix as optx
 
 from circulax.solvers.assembly import assemble_system_complex, assemble_system_real
 
+# ---------------------------------------------------------------------------
+# Solver constants
+# ---------------------------------------------------------------------------
+GROUND_STIFFNESS: float = 1e9
+"""Penalty added to ground-node diagonal entries to enforce V=0."""
+
+DC_DT: float = 1e18
+"""Effective timestep used for DC analysis; makes capacitor stamps vanish (C/dt → 0)."""
+
+DAMPING_FACTOR: float = 0.5
+"""Newton-step damping coefficient: limits each step to at most ``DAMPING_FACTOR / |δy|_max``."""
+
+DAMPING_EPS: float = 1e-9
+"""Small additive epsilon that prevents division by zero in the damping formula."""
+
 # Check if split solver available — KLUHandleManager was added in a later version of klujax.
 split_solver_available = True
 try:
@@ -45,6 +60,63 @@ except ImportError:
     # Provide dummy sentinels so the eqx.field annotations below don't cause NameErrors
     KLUHandleManager = object  # type: ignore[assignment,misc]
     KLURSHandleManager = object  # type: ignore[assignment,misc]
+
+# ---------------------------------------------------------------------------
+# Index-building helpers shared across all solver factory classmethods
+# ---------------------------------------------------------------------------
+
+
+def _build_index_arrays(
+    component_groups: dict, num_vars: int, is_complex: bool
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """Extract COO row/col index arrays from component groups and expand for complex systems.
+
+    Returns:
+        (static_rows, static_cols, ground_idxs, sys_size) as numpy arrays.
+    """
+    all_rows, all_cols = [], []
+    for k in sorted(component_groups.keys()):
+        g = component_groups[k]
+        all_rows.append(np.array(g.jac_rows).reshape(-1))
+        all_cols.append(np.array(g.jac_cols).reshape(-1))
+
+    static_rows = np.concatenate(all_rows)
+    static_cols = np.concatenate(all_cols)
+    sys_size = num_vars
+    ground_idxs = np.array([0], dtype=np.int32)
+
+    if is_complex:
+        # Expand to 2N x 2N block structure:  [ RR  RI ]
+        #                                      [ IR  II ]
+        N = num_vars
+        static_rows = np.concatenate([static_rows, static_rows, static_rows + N, static_rows + N])
+        static_cols = np.concatenate([static_cols, static_cols + N, static_cols, static_cols + N])
+        sys_size = N * 2
+        ground_idxs = np.array([0, num_vars], dtype=np.int32)
+
+    return static_rows, static_cols, ground_idxs, sys_size
+
+
+def _klu_deduplicate(
+    static_rows: np.ndarray,
+    static_cols: np.ndarray,
+    ground_idxs: np.ndarray,
+    sys_size: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    """Build unique COO index arrays for KLU, coalescing circuit + ground + leakage entries.
+
+    Returns:
+        (u_rows, u_cols, map_idx, n_unique)
+    """
+    leak_diag = np.arange(sys_size, dtype=np.int32)
+    full_rows = np.concatenate([static_rows, ground_idxs, leak_diag])
+    full_cols = np.concatenate([static_cols, ground_idxs, leak_diag])
+    rc_hashes = full_rows.astype(np.int64) * sys_size + full_cols.astype(np.int64)
+    unique_hashes, map_indices = np.unique(rc_hashes, return_inverse=True)
+    u_rows = (unique_hashes // sys_size).astype(np.int32)
+    u_cols = (unique_hashes % sys_size).astype(np.int32)
+    return u_rows, u_cols, map_indices, len(unique_hashes)
+
 
 class CircuitLinearSolver(lx.AbstractLinearSolver):
     """Abstract Base Class for all circuit linear solvers.
@@ -132,22 +204,22 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         """
 
         def dc_step(y: jax.Array, _: Any) -> jax.Array:
-            # 1. Assemble System (dt=1e18 effectively removes time-dependent terms like C*dv/dt)
+            # 1. Assemble System (DC_DT effectively removes time-dependent terms like C*dv/dt)
             if self.is_complex:
                 total_f, _, all_vals = assemble_system_complex(
-                    y, component_groups, t1=0.0, dt=1e18
+                    y, component_groups, t1=0.0, dt=DC_DT
                 )
             else:
                 total_f, _, all_vals = assemble_system_real(
-                    y, component_groups, t1=0.0, dt=1e18
+                    y, component_groups, t1=0.0, dt=DC_DT
                 )
 
             # 2. Apply Ground Constraints to Residual
-            #    We add a massive penalty (1e9 * V) to the residual at ground nodes.
+            #    We add a massive penalty (GROUND_STIFFNESS * V) to the residual at ground nodes.
             #    This forces the solver to drive V -> 0.
             total_f_grounded = total_f
             for idx in self.ground_indices:
-                total_f_grounded = total_f_grounded.at[idx].add(1e9 * y[idx])
+                total_f_grounded = total_f_grounded.at[idx].add(GROUND_STIFFNESS * y[idx])
 
             # 3. Solve Linear System (J * delta = -R)
             sol = self._solve_impl(all_vals, -total_f_grounded)
@@ -156,7 +228,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             # 4. Apply Voltage Limiting (Damping)
             #    Prevents the solver from taking huge steps that crash exponentials (diodes/transistors).
             max_change = jnp.max(jnp.abs(delta))
-            damping = jnp.minimum(1.0, 0.5 / (max_change + 1e-9))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
 
             return y + delta * damping
 
@@ -205,44 +277,23 @@ class DenseSolver(CircuitLinearSolver):
 
         # 3. Apply Ground Constraints (Stiff Diagonal)
         for idx in self.ground_indices:
-            J = J.at[idx, idx].add(1e9)
+            J = J.at[idx, idx].add(GROUND_STIFFNESS)
 
         # 4. Dense Solve (LU)
         x = jnp.linalg.solve(J, residual)
         return lx.Solution(value=x, result=lx.RESULTS.successful, state=None, stats={})
 
     @classmethod
-    def from_circuit(
+    def from_component_groups(
         cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
     ) -> "DenseSolver":
         """Factory method to pre-calculate indices for the dense matrix."""
-        all_rows, all_cols = [], []
-        for k in sorted(component_groups.keys()):
-            g = component_groups[k]
-            all_rows.append(np.array(g.jac_rows).reshape(-1))
-            all_cols.append(np.array(g.jac_cols).reshape(-1))
-
-        static_rows = np.concatenate(all_rows)
-        static_cols = np.concatenate(all_cols)
-
-        sys_size = num_vars
-        ground_idxs = np.array([0], dtype=np.int32)
-
-        if is_complex:
-            # Expand to 2N x 2N Block Structure:
-            # [ RR  RI ]
-            # [ IR  II ]
-            sys_size = num_vars * 2
-            r, c = static_rows, static_cols
-            N = num_vars
-
-            static_rows = np.concatenate([r, r, r + N, r + N])
-            static_cols = np.concatenate([c, c + N, c, c + N])
-            ground_idxs = np.array([0, num_vars], dtype=np.int32)
-
+        rows, cols, ground_idxs, sys_size = _build_index_arrays(
+            component_groups, num_vars, is_complex
+        )
         return cls(
-            static_rows=jnp.array(static_rows),
-            static_cols=jnp.array(static_cols),
+            static_rows=jnp.array(rows),
+            static_cols=jnp.array(cols),
             sys_size=sys_size,
             ground_indices=jnp.array(ground_idxs),
             is_complex=is_complex,
@@ -287,7 +338,7 @@ class KLUSplitSolver(CircuitLinearSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         # 1. Prepare raw value vector including Ground and Leakage entries
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -310,52 +361,19 @@ class KLUSplitSolver(CircuitLinearSolver):
         )
 
     @classmethod
-    def from_circuit(
+    def from_component_groups(
         cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
-    ) -> "KLUSolver":
+    ) -> "KLUSplitSolver":
         """Factory method to pre-hash indices for sparse coalescence."""
-        all_rows, all_cols = [], []
-        for k in sorted(component_groups.keys()):
-            g = component_groups[k]
-            all_rows.append(np.array(g.jac_rows).reshape(-1))
-            all_cols.append(np.array(g.jac_cols).reshape(-1))
-
-        static_rows = np.concatenate(all_rows)
-        static_cols = np.concatenate(all_cols)
-
-        sys_size = num_vars
-        ground_idxs = np.array([0], dtype=np.int32)
-
-        if is_complex:
-            sys_size = num_vars * 2
-            r, c = static_rows, static_cols
-            N = num_vars
-            static_rows = np.concatenate([r, r, r + N, r + N])
-            static_cols = np.concatenate([c, c + N, c, c + N])
-            ground_idxs = np.array([0, num_vars], dtype=np.int32)
-
-        # We must include indices for the full leakage diagonal
-        leak_rows = np.arange(sys_size, dtype=np.int32)
-        leak_cols = np.arange(sys_size, dtype=np.int32)
-
-        # Combine Circuit + Ground + Leakage indices
-        full_rows = np.concatenate([static_rows, ground_idxs, leak_rows])
-        full_cols = np.concatenate([static_cols, ground_idxs, leak_cols])
-
-        # Hashing to find unique entries for coalescence
-        rc_hashes = full_rows.astype(np.int64) * sys_size + full_cols.astype(np.int64)
-        unique_hashes, map_indices = np.unique(rc_hashes, return_inverse=True)
-
-        u_rows = (unique_hashes // sys_size).astype(np.int32)
-        u_cols = (unique_hashes % sys_size).astype(np.int32)
-        n_unique = len(unique_hashes)
-
+        rows, cols, ground_idxs, sys_size = _build_index_arrays(
+            component_groups, num_vars, is_complex
+        )
+        u_rows, u_cols, map_idx, n_unique = _klu_deduplicate(rows, cols, ground_idxs, sys_size)
         symbolic = klujax.analyze(u_rows, u_cols, sys_size)
-
         return cls(
             u_rows=jnp.array(u_rows),
             u_cols=jnp.array(u_cols),
-            map_idx=jnp.array(map_indices),
+            map_idx=jnp.array(map_idx),
             n_unique=n_unique,
             _handle_wrapper=symbolic,
             ground_indices=jnp.array(ground_idxs),
@@ -387,7 +405,7 @@ class KlursSplitSolver(KLUSplitSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         # 1. Prepare raw value vector including Ground and Leakage entries
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -412,52 +430,19 @@ class KlursSplitSolver(KLUSplitSolver):
 
 
     @classmethod
-    def from_circuit(
-        cls, component_groups: dict[str, Any], num_vars: int, is_complex: bool = False
-    ) -> "KLUSolver":
+    def from_component_groups(
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
+    ) -> "KlursSplitSolver":
         """Factory method to pre-hash indices for sparse coalescence."""
-        all_rows, all_cols = [], []
-        for k in sorted(component_groups.keys()):
-            g = component_groups[k]
-            all_rows.append(np.array(g.jac_rows).reshape(-1))
-            all_cols.append(np.array(g.jac_cols).reshape(-1))
-
-        static_rows = np.concatenate(all_rows)
-        static_cols = np.concatenate(all_cols)
-
-        sys_size = num_vars
-        ground_idxs = np.array([0], dtype=np.int32)
-
-        if is_complex:
-            sys_size = num_vars * 2
-            r, c = static_rows, static_cols
-            N = num_vars
-            static_rows = np.concatenate([r, r, r + N, r + N])
-            static_cols = np.concatenate([c, c + N, c, c + N])
-            ground_idxs = np.array([0, num_vars], dtype=np.int32)
-
-        # We must include indices for the full leakage diagonal
-        leak_rows = np.arange(sys_size, dtype=np.int32)
-        leak_cols = np.arange(sys_size, dtype=np.int32)
-
-        # Combine Circuit + Ground + Leakage indices
-        full_rows = np.concatenate([static_rows, ground_idxs, leak_rows])
-        full_cols = np.concatenate([static_cols, ground_idxs, leak_cols])
-
-        # Hashing to find unique entries for coalescence
-        rc_hashes = full_rows.astype(np.int64) * sys_size + full_cols.astype(np.int64)
-        unique_hashes, map_indices = np.unique(rc_hashes, return_inverse=True)
-
-        u_rows = (unique_hashes // sys_size).astype(np.int32)
-        u_cols = (unique_hashes % sys_size).astype(np.int32)
-        n_unique = len(unique_hashes)
-
+        rows, cols, ground_idxs, sys_size = _build_index_arrays(
+            component_groups, num_vars, is_complex
+        )
+        u_rows, u_cols, map_idx, n_unique = _klu_deduplicate(rows, cols, ground_idxs, sys_size)
         symbol = klurs.analyze(u_rows, u_cols, sys_size)
-
         return cls(
             u_rows=jnp.array(u_rows),
             u_cols=jnp.array(u_cols),
-            map_idx=jnp.array(map_indices),
+            map_idx=jnp.array(map_idx),
             n_unique=n_unique,
             _handle_wrapper=symbol,
             ground_indices=jnp.array(ground_idxs),
@@ -503,7 +488,7 @@ class KLUSplitFactorSolver(KLUSplitSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         """Regular solve - does full factor + solve."""
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -542,7 +527,7 @@ class KLUSplitFactorSolver(KLUSplitSolver):
 
     def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
         """Factor the Jacobian and return numeric handle."""
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -597,7 +582,7 @@ class KLUSolver(CircuitLinearSolver):
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         # 1. Prepare raw value vector including Ground and Leakage entries
-        g_vals = jnp.full(self.ground_indices.shape[0], 1e9, dtype=all_vals.dtype)
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
@@ -614,50 +599,18 @@ class KLUSolver(CircuitLinearSolver):
         )
 
     @classmethod
-    def from_circuit(
+    def from_component_groups(
         cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
     ) -> "KLUSolver":
         """Factory method to pre-hash indices for sparse coalescence."""
-        all_rows, all_cols = [], []
-        for k in sorted(component_groups.keys()):
-            g = component_groups[k]
-            all_rows.append(np.array(g.jac_rows).reshape(-1))
-            all_cols.append(np.array(g.jac_cols).reshape(-1))
-
-        static_rows = np.concatenate(all_rows)
-        static_cols = np.concatenate(all_cols)
-
-        sys_size = num_vars
-        ground_idxs = np.array([0], dtype=np.int32)
-
-        if is_complex:
-            sys_size = num_vars * 2
-            r, c = static_rows, static_cols
-            N = num_vars
-            static_rows = np.concatenate([r, r, r + N, r + N])
-            static_cols = np.concatenate([c, c + N, c, c + N])
-            ground_idxs = np.array([0, num_vars], dtype=np.int32)
-
-        # We must include indices for the full leakage diagonal
-        leak_rows = np.arange(sys_size, dtype=np.int32)
-        leak_cols = np.arange(sys_size, dtype=np.int32)
-
-        # Combine Circuit + Ground + Leakage indices
-        full_rows = np.concatenate([static_rows, ground_idxs, leak_rows])
-        full_cols = np.concatenate([static_cols, ground_idxs, leak_cols])
-
-        # Hashing to find unique entries for coalescence
-        rc_hashes = full_rows.astype(np.int64) * sys_size + full_cols.astype(np.int64)
-        unique_hashes, map_indices = np.unique(rc_hashes, return_inverse=True)
-
-        u_rows = (unique_hashes // sys_size).astype(np.int32)
-        u_cols = (unique_hashes % sys_size).astype(np.int32)
-        n_unique = len(unique_hashes)
-
+        rows, cols, ground_idxs, sys_size = _build_index_arrays(
+            component_groups, num_vars, is_complex
+        )
+        u_rows, u_cols, map_idx, n_unique = _klu_deduplicate(rows, cols, ground_idxs, sys_size)
         return cls(
             u_rows=jnp.array(u_rows),
             u_cols=jnp.array(u_cols),
-            map_idx=jnp.array(map_indices),
+            map_idx=jnp.array(map_idx),
             n_unique=n_unique,
             ground_indices=jnp.array(ground_idxs),
             sys_size=sys_size,
@@ -699,7 +652,7 @@ class SparseSolver(CircuitLinearSolver):
         #    Add Leakage & Ground stiffness to diagonal
         diag_vals = diag_vals + self.g_leak
         for idx in self.ground_indices:
-            diag_vals = diag_vals.at[idx].add(1e9)
+            diag_vals = diag_vals.at[idx].add(GROUND_STIFFNESS)
 
         #    Invert diagonal for Jacobi Preconditioner
         inv_diag = jnp.where(jnp.abs(diag_vals) < 1e-12, 1.0, 1.0 / diag_vals)
@@ -716,7 +669,7 @@ class SparseSolver(CircuitLinearSolver):
             # Add Leakage & Ground contributions
             Ax = Ax + (x * self.g_leak)
             for idx in self.ground_indices:
-                Ax = Ax.at[idx].add(1e9 * x[idx])
+                Ax = Ax.at[idx].add(GROUND_STIFFNESS * x[idx])
             return Ax
 
         # 3. Solve (BiCGStab)
@@ -733,37 +686,17 @@ class SparseSolver(CircuitLinearSolver):
         return lx.Solution(value=x, result=lx.RESULTS.successful, state=None, stats={})
 
     @classmethod
-    def from_circuit(
+    def from_component_groups(
         cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
     ) -> "SparseSolver":
         """Factory method to prepare indices and diagonal mask."""
-        all_rows, all_cols = [], []
-        for k in sorted(component_groups.keys()):
-            g = component_groups[k]
-            all_rows.append(np.array(g.jac_rows).reshape(-1))
-            all_cols.append(np.array(g.jac_cols).reshape(-1))
-
-        static_rows = np.concatenate(all_rows)
-        static_cols = np.concatenate(all_cols)
-
-        sys_size = num_vars
-        ground_idxs = np.array([0], dtype=np.int32)
-
-        if is_complex:
-            sys_size = num_vars * 2
-            r, c = static_rows, static_cols
-            N = num_vars
-            static_rows = np.concatenate([r, r, r + N, r + N])
-            static_cols = np.concatenate([c, c + N, c, c + N])
-            ground_idxs = np.array([0, num_vars], dtype=np.int32)
-
-        # Create mask to identify diagonal elements (row == col) efficiently
-        diag_mask = static_rows == static_cols
-
+        rows, cols, ground_idxs, sys_size = _build_index_arrays(
+            component_groups, num_vars, is_complex
+        )
         return cls(
-            static_rows=jnp.array(static_rows),
-            static_cols=jnp.array(static_cols),
-            diag_mask=jnp.array(diag_mask),
+            static_rows=jnp.array(rows),
+            static_cols=jnp.array(cols),
+            diag_mask=jnp.array(rows == cols),
             sys_size=sys_size,
             ground_indices=jnp.array(ground_idxs),
             is_complex=is_complex,
@@ -823,6 +756,6 @@ def analyze_circuit(
             msg
         )
 
-    linear_strategy = solver_class.from_circuit(groups, num_vars, is_complex=is_complex)
+    linear_strategy = solver_class.from_component_groups(groups, num_vars, is_complex=is_complex)
 
     return linear_strategy
