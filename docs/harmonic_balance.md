@@ -177,6 +177,6 @@ amplitudes = jnp.abs(y_freq[:, node]) * jnp.where(harmonics == 0, 1.0, 2.0)
 
 ### Scalability
 
-The Newton Jacobian has shape $(K \cdot n) \times (K \cdot n)$ and is stored as a dense array.  For 5 harmonics ($K=11$) and 200 circuit nodes this is $2200 \times 2200 \approx 40\,\text{MB}$ — tractable on any modern machine.
+The Newton Jacobian has shape $(K \cdot n) \times (K \cdot n)$ and is stored as a dense array.  For 10 harmonics ($K=21$) and 200 circuit nodes this is $4200 \times 4200 \approx 80\,\text{MB}$ — tractable on any modern machine.
 
 For large circuits, the block-circulant structure of the HB Jacobian can be exploited to reduce the problem to $n$ independent $K \times K$ linear systems (one per node), achieved by diagonalising with `jnp.fft.ifft`.  This is not yet implemented but is a natural future extension given Circulax's JAX foundation.
