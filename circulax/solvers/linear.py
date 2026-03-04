@@ -728,6 +728,13 @@ def analyze_circuit(
     appropriate numerical backend for solving the linear system of equations
     derived from a circuit's topology.
 
+    The available backends are
+
+    "default": KLUSolver,
+    "klu": KLUSolver,
+    "dense": DenseSolver,
+    "sparse": SparseSolver,
+
     Args:
         groups (list): A list of component groups that define the circuit's
             structure and properties.
