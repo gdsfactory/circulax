@@ -210,10 +210,12 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             vector ``y``, equal to the number of nets plus the total number of
             state variables across all instances. This is the length of the array
             passed to the solver.
-        - **port_to_node_map** (``dict[str, int]``) — the raw ``"Instance,Port"``
-            → node index map produced by ``build_net_map``, returned for use by
-            callers that need to extract specific node voltages from the solution
-            vector.
+        - **port_to_node_map** (``dict[str, int]``) — maps both
+            ``"Instance,port"`` and ``"Instance,state"`` keys to their integer
+            indices in the global state vector ``y``. Port keys resolve to shared
+            node indices (multiple ports on the same net share one index); state
+            keys resolve to unique per-instance indices. Use this to extract
+            specific node voltages or internal state variables from the solution.
 
     Raises:
         ValueError: If a component type listed in the netlist is not present in
@@ -298,7 +300,8 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         all_var_indices = []
         for item in items:
             state_indices = []
-            for _ in range(item["num_states"]):
+            for s_name in comp_cls.states:
+                port_to_node_map[f"{item['name']},{s_name}"] = sys_size
                 state_indices.append(sys_size)
                 sys_size += 1
             all_var_indices.append(item["ports"] + state_indices)

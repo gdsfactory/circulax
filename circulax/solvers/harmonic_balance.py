@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import optimistix as optx
 from jax import Array
 
-from circulax.solvers.assembly import assemble_residual_only_real
+from circulax.solvers.assembly import assemble_residual_only_complex, assemble_residual_only_real
 from circulax.solvers.linear import (
     DAMPING_EPS,
     DAMPING_FACTOR,
@@ -53,8 +53,10 @@ def _hb_residual(
     t_points: Array,
     omega: float,
     ground_indices: Array,
+    *,
+    is_complex: bool = False,
 ) -> Array:
-    """Evaluate the Harmonic Balance residual for a real circuit.
+    """Evaluate the Harmonic Balance residual for a real or unrolled-complex circuit.
 
     Evaluates circuit physics at K time points via ``jax.vmap``, transforms
     to the frequency domain, applies the ``jkw`` scaling to reactive terms,
@@ -66,6 +68,9 @@ def _hb_residual(
         t_points: Time sample points, shape ``(K,)``, covering one period.
         omega: Fundamental angular frequency ``2*pi*f0``.
         ground_indices: Indices of ground nodes (enforced to zero voltage).
+        is_complex: If ``True``, use the complex (unrolled) assembly function.
+            The state vector is expected in ``[re | im]`` block format of shape
+            ``(K, 2*num_vars)``.
 
     Returns:
         Real residual array of shape ``(K, sys_size)``.
@@ -75,9 +80,10 @@ def _hb_residual(
     N_harm = (K - 1) // 2
 
     # Evaluate (f, q) at all K time points simultaneously.
-    # assemble_residual_only_real dt arg is unused (symmetry with assemble_system_real).
+    # The dt argument is unused for residual-only assembly.
+    assemble_fn = assemble_residual_only_complex if is_complex else assemble_residual_only_real
     f_time, q_time = jax.vmap(
-        lambda y_t, t: assemble_residual_only_real(y_t, component_groups, t, 1.0)
+        lambda y_t, t: assemble_fn(y_t, component_groups, t, 1.0)
     )(y_time, t_points)
     # f_time, q_time: shape (K, sys_size)
 
@@ -127,7 +133,8 @@ def setup_harmonic_balance(
             accuracy for strongly nonlinear circuits at the cost of a larger
             Jacobian (K*sys_size x K*sys_size).
         is_complex: Set ``True`` for photonic (complex-valued) circuits.
-            Currently only real circuits are supported.
+            The state vector is stored in unrolled ``[re | im]`` block format
+            of length ``2 * num_vars``.
         g_leak: Small leakage conductance added to the Jacobian diagonal for
             regularisation. Prevents singular matrices when floating nodes
             have no DC path to ground.
@@ -138,11 +145,7 @@ def setup_harmonic_balance(
         point ``y_dc``. Compatible with ``jax.jit``.
 
     """
-    if is_complex:
-        msg = "Harmonic balance for complex (photonic) circuits is not yet supported."
-        raise NotImplementedError(msg)
-
-    _, _, ground_idxs, sys_size = _build_index_arrays(groups, num_vars, is_complex=False)
+    _, _, ground_idxs, sys_size = _build_index_arrays(groups, num_vars, is_complex=is_complex)
     ground_indices = jnp.array(ground_idxs)
 
     K = 2 * num_harmonics + 1
@@ -181,7 +184,7 @@ def setup_harmonic_balance(
         def residual_fn(y_flat: Array) -> Array:
             y_time = y_flat.reshape(K, sys_size)
             return _hb_residual(
-                y_time, groups, t_points, omega, ground_indices
+                y_time, groups, t_points, omega, ground_indices, is_complex=is_complex
             ).flatten()
 
         def newton_step(y_flat: Array, _: Any) -> Array:
