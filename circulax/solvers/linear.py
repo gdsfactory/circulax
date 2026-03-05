@@ -183,7 +183,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         return False
 
     def solve_dc(
-        self, component_groups: dict[str, Any], y_guess: jax.Array
+        self, component_groups: dict[str, Any], y_guess: jax.Array,
+        rtol:float=1e-6, atol:float=1e-6, max_steps: int = 100,
     ) -> jax.Array:
         """Performs a robust DC Operating Point analysis (Newton-Raphson).
 
@@ -233,8 +234,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             return y + delta * damping
 
         # 5. Run Newton Loop (Optimistix)
-        solver = optx.FixedPointIteration(rtol=1e-6, atol=1e-6)
-        sol = optx.fixed_point(dc_step, solver, y_guess, max_steps=100, throw=False)
+        solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
+        sol = optx.fixed_point(dc_step, solver, y_guess, max_steps=max_steps, throw=False)
         return sol.value
 
 
