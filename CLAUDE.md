@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 Circulax is a differentiable, JAX-based circuit simulator supporting both electronic and photonic circuits. It formulates netlists as DAE (Differential Algebraic Equation) systems — F(y) + dQ/dt = 0 — and uses automatic differentiation for gradient-based optimization and inverse design.
