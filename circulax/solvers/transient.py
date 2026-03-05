@@ -298,6 +298,16 @@ def setup_transient(
                 `diffrax.diffeqsolve`.
 
     """
+    fdomain_names = [g.name for g in groups.values() if getattr(g, "is_fdomain", False)]
+    if fdomain_names:
+        msg = (
+            "Frequency-domain components cannot be used in transient simulation "
+            "(time-domain convolution is not supported). "
+            f"Offending groups: {fdomain_names}. "
+            "Use setup_harmonic_balance() instead."
+        )
+        raise RuntimeError(msg)
+
     if transient_solver is None:
         transient_solver = VectorizedTransientSolver
 

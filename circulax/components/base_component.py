@@ -89,6 +89,7 @@ class CircuitComponent(eqx.Module):
     states: ClassVar[tuple[str, ...]] = ()
 
     _uses_time: ClassVar[bool] = False
+    _is_fdomain: ClassVar[bool] = False
 
     _VarsType_P: ClassVar[Any] = None
     _VarsType_S: ClassVar[Any] = None

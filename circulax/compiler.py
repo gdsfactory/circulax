@@ -58,6 +58,7 @@ class ComponentGroup(eqx.Module):
     jac_cols: jnp.ndarray
 
     index_map: dict[str, int] | None = eqx.field(static=True, default=None)
+    is_fdomain: bool = eqx.field(static=True, default=False)
 
 
 def get_model_width(func: callable) -> int:
@@ -330,6 +331,7 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             jac_rows=jac_rows,
             jac_cols=jac_cols,
             index_map=index_map,
+            is_fdomain=getattr(comp_cls, "_is_fdomain", False),
         )
 
     return compiled_groups, sys_size, port_to_node_map
