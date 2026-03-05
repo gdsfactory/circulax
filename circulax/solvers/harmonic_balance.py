@@ -96,6 +96,32 @@ def _hb_residual(
     jkw = (1j * omega) * k[:, None]  # (N_harm+1, 1)
     R_k = F_k + jkw * Q_k
 
+    # Add frequency-domain component contributions directly in the spectral domain.
+    # For each f-domain group and each harmonic k, I_k = Y(k*f0) @ V_k where
+    # V_k = rfft(y_time)[k] is the raw (unnormalized) Fourier coefficient — consistent
+    # with the units of F_k above.
+    fdomain_keys = [gk for gk in sorted(component_groups.keys()) if component_groups[gk].is_fdomain]
+    if fdomain_keys:
+        sys_size = y_time.shape[1]
+        f0 = omega / (2.0 * jnp.pi)
+        freqs = jnp.arange(N_harm + 1, dtype=jnp.float64) * f0  # (N_harm+1,)
+        y_freq = jnp.fft.rfft(y_time, axis=0)  # (N_harm+1, sys_size) complex
+
+        for gk in fdomain_keys:
+            group = component_groups[gk]
+
+            def _fdomain_contrib(v_k: jax.Array, f_k: float) -> jax.Array:
+                """Compute f-domain current contribution at a single harmonic."""
+                v_ports = v_k[group.var_indices]  # (N, n_ports) complex
+                Y_mats = jax.vmap(lambda p: group.physics_func(f_k, p))(group.params)
+                i_ports = jnp.einsum("nij,nj->ni", Y_mats, v_ports)  # (N, n_ports) complex
+                contrib = jnp.zeros(sys_size, dtype=jnp.complex128)
+                return contrib.at[group.eq_indices].add(i_ports)
+
+            # Evaluate over all harmonics simultaneously.
+            fdomain_R_k = jax.vmap(_fdomain_contrib)(y_freq, freqs)  # (N_harm+1, sys_size)
+            R_k = R_k + fdomain_R_k
+
     # Transform back to time domain to yield a real residual.
     R_time = jnp.fft.irfft(R_k, n=K, axis=0)  # (K, sys_size)
 

@@ -125,6 +125,16 @@ def assemble_system_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain component: evaluate admittance at f=0 (DC).
+            v_locs = y_guess[group.var_indices]
+            Y_mats = jax.vmap(lambda p: group.physics_func(0.0, p))(group.params)
+            Y_real = Y_mats.real  # (N, n_ports, n_ports)
+            f_l = jnp.einsum("nij,nj->ni", Y_real, v_locs)  # (N, n_ports)
+            total_f = total_f.at[group.eq_indices].add(f_l)
+            vals_list.append(Y_real.reshape(-1))  # Jacobian = Y at DC
+            continue
+
         v_locs = y_guess[group.var_indices]
 
         physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
@@ -174,6 +184,11 @@ def assemble_residual_only_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain groups have no time-domain physics; their contribution is
+            # added directly in the frequency domain by the HB solver.
+            continue
+
         v = y_guess[group.var_indices]
 
         physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
@@ -236,6 +251,24 @@ def assemble_system_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain component: evaluate admittance at f=0 (DC) — complex circuit path.
+            v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
+            v_c = v_r + 1j * v_i  # (N, n_ports) complex
+            Y_mats = jax.vmap(lambda p: group.physics_func(0.0, p))(group.params)
+            i_c = jnp.einsum("nij,nj->ni", Y_mats, v_c)  # (N, n_ports) complex
+            idx_r, idx_i = group.eq_indices, group.eq_indices + half_size
+            total_f = total_f.at[idx_r].add(i_c.real).at[idx_i].add(i_c.imag)
+            # Jacobian blocks: dI/dVr = Y.real, dI/dVi = -Y.imag (by Cauchy-Riemann)
+            # For general complex Y: dIr/dVr = Yr, dIr/dVi = -Yi, dIi/dVr = Yi, dIi/dVi = Yr
+            Yr = Y_mats.real  # (N, n_ports, n_ports)
+            Yi = Y_mats.imag
+            vals_blocks[0].append(Yr.reshape(-1))   # RR: dIr/dVr
+            vals_blocks[1].append((-Yi).reshape(-1))  # RI: dIr/dVi
+            vals_blocks[2].append(Yi.reshape(-1))    # IR: dIi/dVr
+            vals_blocks[3].append(Yr.reshape(-1))    # II: dIi/dVi
+            continue
+
         v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
 
         physics_split = functools.partial(_complex_physics, group=group, t1=t1)
@@ -294,6 +327,11 @@ def assemble_residual_only_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain groups have no time-domain physics; their contribution is
+            # added directly in the frequency domain by the HB solver.
+            continue
+
         v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
 
         physics_split = functools.partial(_complex_physics, group=group, t1=t1)
