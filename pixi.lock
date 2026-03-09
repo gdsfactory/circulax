@@ -1369,7 +1369,7 @@ packages:
   requires_python: '>=3.7'
 - pypi: ./
   name: circulax
-  version: 0.1.2.dev3+g7e60ba86c.d20260302
+  version: 0.1.2.dev22+ge583a2bd1.d20260309
   sha256: fa67ee913ef14abf09cce0fb80c4b57b21ac02027f0f7bdb0b043e31dcce7d94
   requires_dist:
   - diffrax>=0.7.0,<0.8
