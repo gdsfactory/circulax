@@ -666,42 +666,24 @@ class KlursSplitSolver(KLUSplitSolver):
 
 
 class KLUSplitFactorSolver(KLUSplitSolver):
-    """Solves the system using the KLU sparse solver (via `klujax`) with split interface.
+    """Solves the system using the KLU sparse solver (via `klujax`) with split factor/solve interface.
 
-    This solver performs symbolic analysis ONCE during initialization and reuses
-    the symbolic handle for subsequent solves, significantly speeding up non-linear
-    simulations (Newton-Raphson iterations). This version of the solver is further enhanced but calculting the numeric
-    part of the KLU solution only once
+    Extends :class:`KLUSplitSolver` with an explicit numeric factorization step so the
+    Jacobian can be **factored once per time step** and reused across all Newton iterations
+    within that step (Modified Newton / frozen-Jacobian scheme).  Use together with
+    :class:`~circulax.solvers.transient.FactorizedTransientSolver`.
 
     Best For:
-        - Large circuits (N > 5000) running on CPU.
-        - DC Operating Points of massive meshes.
-
-    Attributes:
-        Bp, Bi: CSC format indices (fixed structure).
-        csc_map_idx: Mapping from raw value indices to CSC value vector.
-        symbolic_handle: Pointer to the pre-computed KLU symbolic analysis.
+        - Large circuits (N > 5000) running on CPU where the Jacobian changes slowly.
+        - Transient simulations with many Newton iterations per step.
 
     """
-
-    u_rows: jax.Array
-    u_cols: jax.Array
-    map_idx: jax.Array
-
-    n_unique: int = eqx.field(static=True)
-    sys_size: int = eqx.field(static=True)
-
-    # numeric_handle: Optional[jax.Array] = None
-
-    _handle_wrapper: KLUHandleManager = eqx.field(static=True)
-
-    g_leak: float = 1e-9
 
     def cleanup(self) -> None:  # noqa: D102
         del self._handle_wrapper
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        """Regular solve - does full factor + solve."""
+        """Full factor + solve in one call (used by DC solver)."""
         g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
@@ -725,10 +707,43 @@ class KLUSplitFactorSolver(KLUSplitSolver):
             stats={},
         )
 
+    def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
+        """Factor the Jacobian and return a numeric handle for repeated solves.
+
+        Args:
+            all_vals: Flattened non-zero Jacobian values (COO format).
+
+        Returns:
+            Opaque numeric handle (``int32`` JAX scalar) to pass to
+            :meth:`solve_with_frozen_jacobian`.  Must be freed with
+            ``klujax.free_numeric`` after use to avoid C++ memory leaks.
+
+        """
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
+        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
+
+        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
+        coalesced_vals = jax.ops.segment_sum(
+            raw_vals, self.map_idx, num_segments=self.n_unique
+        )
+
+        return klujax.factor(
+            self.u_rows, self.u_cols, coalesced_vals, self._handle_wrapper.handle
+        )
+
     def solve_with_frozen_jacobian(
         self, residual: jax.Array, numeric: jax.Array
     ) -> lx.Solution:
-        """Solve using pre-computed numeric factorization (for frozen Jacobian Newton)."""
+        """Solve using a pre-computed numeric factorization.
+
+        Args:
+            residual: The right-hand side vector ``-F(y)``.
+            numeric: Handle returned by :meth:`factor_jacobian`.
+
+        Returns:
+            :class:`lineax.Solution` with the Newton step ``δy``.
+
+        """
         solution = klujax.solve_with_numeric(
             numeric, residual, self._handle_wrapper.handle
         )
@@ -739,38 +754,14 @@ class KLUSplitFactorSolver(KLUSplitSolver):
             stats={},
         )
 
-    def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
-        """Factor the Jacobian and return numeric handle."""
-        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
-        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(
-            raw_vals, self.map_idx, num_segments=self.n_unique
+    @classmethod
+    def from_component_groups(
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
+    ) -> "KLUSplitFactorSolver":
+        """Factory — delegates to :meth:`KLUSplitSolver.from_component_groups`."""
+        return super().from_component_groups(  # type: ignore[return-value]
+            component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
         )
-
-        return klujax.factor(
-            self.u_rows, self.u_cols, coalesced_vals, self.symbolic_handle
-        )
-
-    # def __del__(self):
-    #     self.cleanup()
-
-    # def cleanup(self):
-    #     """Free the C++ symbolic handle. Call when done with the solver."""
-    #     # Check if handle exists and is not None
-    #     if hasattr(self, 'symbolic_handle') and self.symbolic_handle is not None:
-    #         # We must be careful not to free Tracers during JIT compilation.
-    #         # Tracers are instances of jax.core.Tracer.
-    #         # If we are inside JIT, calling free_symbolic creates a side-effect node
-    #         # which is fine (it gets DCE'd if unused), but for __del__ we want immediate host cleanup.
-    #         try:
-    #             # Eagerly call free if it's a concrete array
-    #             if isinstance(self.symbolic_handle, jax.Array):
-    #                  klujax.free_symbolic(self.symbolic_handle)
-    #         except Exception:
-    #             # Fallback or silence errors during shutdown
-    #             pass
 
 
 class KLUSolver(CircuitLinearSolver):
@@ -928,10 +919,12 @@ backends: dict[str, type[CircuitLinearSolver]] = {
 
 if split_solver_available:
     backends["klu_split"] = KLUSplitSolver
+    backends["klu_split_factor"] = KLUSplitFactorSolver
     backends["klu_rs_split"] = KlursSplitSolver
 else:
     # Silently fall back to KLUSolver when KLUHandleManager is not available
     backends["klu_split"] = KLUSolver
+    backends["klu_split_factor"] = KLUSolver
     backends["klu_rs_split"] = KLUSolver
 
 
