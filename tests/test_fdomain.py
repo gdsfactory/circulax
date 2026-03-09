@@ -17,7 +17,7 @@ import pytest
 from circulax.compiler import compile_netlist
 from circulax.s_transforms import fdomain_component
 from circulax.solvers import setup_harmonic_balance
-from circulax.solvers.linear import DenseSolver
+from circulax.solvers import analyze_circuit
 
 # ---------------------------------------------------------------------------
 # Shared skin-effect component definition
@@ -167,7 +167,7 @@ def test_dc_with_fdomain():
     """DC analysis with an fdomain component returns a finite, converged solution."""
     net_dict, models_map = _divider_netlist()
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-    solver = DenseSolver.from_component_groups(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="dense")
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     assert jnp.isfinite(y_dc).all()
@@ -188,7 +188,7 @@ def test_hb_fdomain_voltage_divider():
     """
     net_dict, models_map = _divider_netlist()
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-    solver = DenseSolver.from_component_groups(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="dense")
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     run_hb = setup_harmonic_balance(groups, sys_size, freq=_FREQ, num_harmonics=_NUM_HARMONICS)
@@ -216,7 +216,7 @@ def test_hb_fdomain_higher_harmonics_small():
     """Higher harmonics should be near-zero for a linear f-domain circuit driven by a pure sinusoid."""
     net_dict, models_map = _divider_netlist()
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-    solver = DenseSolver.from_component_groups(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="dense")
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     run_hb = setup_harmonic_balance(groups, sys_size, freq=_FREQ, num_harmonics=_NUM_HARMONICS)
@@ -233,7 +233,7 @@ def test_hb_fdomain_shapes():
     """HB with an fdomain component returns arrays with correct shapes."""
     net_dict, models_map = _divider_netlist()
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
-    solver = DenseSolver.from_component_groups(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="dense")
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     run_hb = setup_harmonic_balance(groups, sys_size, freq=_FREQ, num_harmonics=_NUM_HARMONICS)
@@ -249,7 +249,7 @@ def test_hb_fdomain_jit():
     """jax.jit(run_hb) gives the same result for a circuit with fdomain components."""
     net_dict, models_map = _divider_netlist()
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
-    solver = DenseSolver.from_component_groups(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="dense")
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     run_hb = setup_harmonic_balance(groups, sys_size, freq=_FREQ, num_harmonics=_NUM_HARMONICS)
@@ -263,7 +263,7 @@ def test_hb_fdomain_grad():
     """jax.grad differentiates a scalar loss through run_hb w.r.t. y_dc."""
     net_dict, models_map = _divider_netlist()
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
-    solver = DenseSolver.from_component_groups(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="dense")
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     run_hb = setup_harmonic_balance(groups, sys_size, freq=_FREQ, num_harmonics=_NUM_HARMONICS)
@@ -288,7 +288,7 @@ def test_transient_fdomain_raises():
 
     net_dict, models_map = _divider_netlist()
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
-    solver = DenseSolver.from_component_groups(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="dense")
 
     with pytest.raises(RuntimeError, match="Frequency-domain"):
         setup_transient(groups, solver)

@@ -3,19 +3,27 @@ import jax.numpy as jnp
 import pytest
 
 from circulax.compiler import compile_netlist
-from circulax.solvers.linear import backends
+from circulax.solvers.linear import backends, analyze_circuit
 from circulax.solvers.transient import VectorizedTransientSolver
 
-solvers = set(backends.values())
+# One canonical backend name per unique solver implementation
+_seen_classes: set = set()
+_backends: list[str] = []
+for _name, _cls in backends.items():
+    if _name == "default":
+        continue
+    if _cls not in _seen_classes:
+        _seen_classes.add(_cls)
+        _backends.append(_name)
 
 
-@pytest.mark.parametrize("solver", solvers, ids=lambda x: x.__name__)
-def test_short_transient_runs_float(simple_lrc_netlist, solver):
+@pytest.mark.parametrize("backend", _backends)
+def test_short_transient_runs_float(simple_lrc_netlist, backend):
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
     # Solve DC operating point and run a very short transient with zero forcing
-    linear_strat = solver.from_component_groups(groups, sys_size, is_complex=False)
+    linear_strat = analyze_circuit(groups, sys_size, backend=backend, is_complex=False)
     y_guess = jnp.zeros(sys_size)
     y_op = linear_strat.solve_dc(groups, y_guess)
 
@@ -44,13 +52,13 @@ def test_short_transient_runs_float(simple_lrc_netlist, solver):
     assert jnp.isfinite(sol.ys).all()
 
 
-@pytest.mark.parametrize("solver", solvers, ids=lambda x: x.__name__)
-def test_short_transient_runs_complex(simple_optical_netlist, solver):
+@pytest.mark.parametrize("backend", _backends)
+def test_short_transient_runs_complex(simple_optical_netlist, backend):
     net_dict, models_map = simple_optical_netlist
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
 
     # Solve DC operating point and run a very short transient with zero forcing
-    linear_strat = solver.from_component_groups(groups, sys_size, is_complex=True)
+    linear_strat = analyze_circuit(groups, sys_size, backend=backend, is_complex=True)
 
     y_guess_flat = jnp.zeros(sys_size * 2, dtype=jnp.float64)
     y_op_flat = linear_strat.solve_dc(groups, y_guess_flat)
