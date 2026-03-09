@@ -7,6 +7,8 @@ from circulax.solvers.linear import analyze_circuit, backends
 from circulax.solvers.transient import (
     BDF2FactorizedTransientSolver,
     BDF2VectorizedTransientSolver,
+    SDIRK3FactorizedTransientSolver,
+    SDIRK3VectorizedTransientSolver,
     VectorizedTransientSolver,
 )
 
@@ -263,6 +265,73 @@ def test_bdf2_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     sol_factor = diffrax.diffeqsolve(
         term,
         BDF2FactorizedTransientSolver(linear_solver=strat_factor),
+        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
+        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+    )
+
+    assert sol_factor.ys.shape == sol_vec.ys.shape
+    assert jnp.allclose(sol_factor.ys, sol_vec.ys, atol=1e-4)
+
+
+@pytest.mark.parametrize("backend", _backends)
+def test_sdirk3_vectorized_runs_float(simple_lrc_netlist, backend):
+    """SDIRK3VectorizedTransientSolver should produce a finite trajectory on a real LRC circuit."""
+    net_dict, models_map = simple_lrc_netlist
+    groups, sys_size, _ = compile_netlist(net_dict, models_map)
+
+    linear_strat = analyze_circuit(groups, sys_size, backend=backend, is_complex=False)
+    y_op = linear_strat.solve_dc(groups, jnp.zeros(sys_size))
+
+    solver = SDIRK3VectorizedTransientSolver(linear_solver=linear_strat)
+    term = diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y))
+
+    t_max = 1e-9
+    saveat = diffrax.SaveAt(ts=jnp.linspace(0, t_max, 5))
+
+    sol = diffrax.diffeqsolve(
+        term,
+        solver,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
+    )
+
+    assert sol.ys.shape == (5, sys_size)
+    assert jnp.isfinite(sol.ys).all()
+
+
+def test_sdirk3_factorized_matches_vectorized(simple_lrc_netlist) -> None:
+    """SDIRK3FactorizedTransientSolver should match SDIRK3VectorizedTransientSolver on a linear LRC circuit."""
+    from circulax.solvers.linear import split_solver_available
+
+    if not split_solver_available:
+        pytest.skip("requires klujax KLUHandleManager")
+
+    net_dict, models_map = simple_lrc_netlist
+    groups, sys_size, _ = compile_netlist(net_dict, models_map)
+
+    t_max = 1e-9
+    saveat = diffrax.SaveAt(ts=jnp.linspace(0, t_max, 5))
+    term = diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y))
+
+    strat_full = analyze_circuit(groups, sys_size, backend="klu_split")
+    y_op = strat_full.solve_dc(groups, jnp.zeros(sys_size))
+
+    sol_vec = diffrax.diffeqsolve(
+        term,
+        SDIRK3VectorizedTransientSolver(linear_solver=strat_full),
+        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
+        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+    )
+
+    strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
+    sol_factor = diffrax.diffeqsolve(
+        term,
+        SDIRK3FactorizedTransientSolver(linear_solver=strat_factor),
         t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
         args=(groups, sys_size), saveat=saveat, max_steps=1000,
     )

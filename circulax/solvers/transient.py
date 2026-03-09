@@ -633,6 +633,300 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
         return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
 
 
+# ==============================================================================
+# SDIRK3 — 3rd-ORDER A-STABLE SOLVER
+# ==============================================================================
+
+# Alexander (1977) 3-stage, 3rd-order, L-stable SDIRK method.
+# γ is the A-stable root of  6γ³ - 18γ² + 9γ - 1 = 0  (≈ 0.4359).
+# The same diagonal value γ means J_eff = dF/dy + (1/(γh)) dQ/dy is
+# identical for all three stages — factor once, reuse across all stages.
+#
+# Butcher tableau  (a31 = b1, a32 = b2, so y_{n+1} = Y3):
+#
+#   c1 = γ    |  γ      0      0
+#   c2        |  a21    γ      0
+#   c3 = 1    |  b1     b2     γ
+#             ──────────────────────
+#               b1     b2     γ
+#
+# Companion residual at stage i:
+#   R_i(Y_i) = F(Y_i) + (Q(Y_i) - Q_hist_i) / (γh) = 0
+#
+# History terms:
+#   Q_hist_1 = Q(y_n)
+#   Q_hist_2 = Q(y_n) + (a21/γ) · (Q(Y1) - Q(y_n))
+#   Q_hist_3 = Q(y_n) + (b1/γ)  · (Q(Y1) - Q(y_n)) + (b2/γ) · (Q(Y2) - Q(y_n))
+
+_SDIRK3_G = 0.4358665215084589  # A-stable root of 6γ³ - 18γ² + 9γ - 1 = 0
+_SDIRK3_INV_G = 1.0 / _SDIRK3_G  # alpha = 1/γ for assembly (step size = γh)
+_SDIRK3_C2 = (1.0 + _SDIRK3_G) / 2.0
+_SDIRK3_A21 = _SDIRK3_C2 - _SDIRK3_G  # = (1 - γ) / 2
+_SDIRK3_B1 = _SDIRK3_G * (_SDIRK3_G - 2.0) / (_SDIRK3_G - 1.0)  # a31 = b1
+_SDIRK3_B2 = 1.0 - _SDIRK3_G - _SDIRK3_B1  # a32 = b2
+
+
+class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
+    """3rd-order A-stable SDIRK3 solver using full Newton-Raphson at each stage.
+
+    Uses Alexander's L-stable 3-stage SDIRK tableau with the companion method.
+    Each timestep performs 3 sequential Newton solves (one per stage) with the
+    Jacobian reassembled at every iteration.  The same ``solver_state`` 2-tuple
+    ``(y_prev, dt_prev)`` as Backward Euler is used — SDIRK3 is a one-step method.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 3
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        y_prev_step, dt_prev = solver_state
+
+        # Predictor (1st-order extrapolation, same as BE)
+        rate = (y0 - y_prev_step) / (dt_prev + 1e-30)
+        y_pred = y0 + rate * h_n
+
+        alpha = _SDIRK3_INV_G  # J_eff = dF/dy + (1/(γh)) dQ/dy
+
+        # History at y_n (= y0)
+        y_c0 = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+        q_n = _compute_history(component_groups, y_c0, t0, num_vars)
+
+        ground_indices = [0, num_vars] if is_complex else [0]
+
+        def _run_stage(y_init, q_hist, t_stage):
+            def newton_update_step(y, _) -> float:
+                if is_complex:
+                    total_f, total_q, all_vals = assemble_system_complex(
+                        y, component_groups, t_stage, h_n, alpha=alpha
+                    )
+                else:
+                    total_f, total_q, all_vals = assemble_system_real(
+                        y, component_groups, t_stage, h_n, alpha=alpha
+                    )
+                residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
+                for idx in ground_indices:
+                    residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+                sol = self.linear_solver._solve_impl(all_vals, -residual)  # noqa: SLF001
+                delta = sol.value
+                max_change = jnp.max(jnp.abs(delta))
+                damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+                return y + delta * damping
+
+            fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=20, throw=False)
+            return stage_sol.value, stage_sol.result
+
+        # Stage 1 — t_s1 = t0 + γ·h
+        t_s1 = t0 + _SDIRK3_G * h_n
+        Y1, r1 = _run_stage(y_pred, q_n, t_s1)
+        Y1_c = Y1[:num_vars] + 1j * Y1[num_vars:] if is_complex else Y1
+        q_Y1 = _compute_history(component_groups, Y1_c, t_s1, num_vars)
+        q_hist_2 = q_n + (_SDIRK3_A21 / _SDIRK3_G) * (q_Y1 - q_n)
+
+        # Stage 2 — t_s2 = t0 + c2·h
+        t_s2 = t0 + _SDIRK3_C2 * h_n
+        Y2, r2 = _run_stage(Y1, q_hist_2, t_s2)
+        Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
+        q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+
+        # Stage 3 — t_s3 = t1 (c3 = 1), y_{n+1} = Y3
+        Y3, r3 = _run_stage(Y2, q_hist_3, t1)
+
+        y_next = Y3
+        y_error = Y3 - y_pred
+        all_ok = (r1 == optx.RESULTS.successful) & (r2 == optx.RESULTS.successful) & (r3 == optx.RESULTS.successful)
+        result = jax.lax.cond(
+            all_ok,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, (y0, h_n), result
+
+
+class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
+    """3rd-order A-stable SDIRK3 solver with frozen-Jacobian Newton across all stages.
+
+    Factors J_eff = dF/dy + (1/(γh))·dQ/dy once at the predictor state,
+    then reuses it for all Newton iterations in all three SDIRK stages.
+    This is the recommended backend for large sparse circuits — the single
+    factorisation is shared across all stages because SDIRK's constant diagonal
+    γ gives the same effective Jacobian at every stage.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 3
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        y_prev_step, dt_prev = solver_state
+
+        rate = (y0 - y_prev_step) / (dt_prev + 1e-30)
+        y_pred = y0 + rate * h_n
+
+        alpha = _SDIRK3_INV_G
+
+        # Factor J_eff ONCE at predictor — reused for all stages and iterations
+        if is_complex:
+            _, _, frozen_jac_vals = assemble_system_complex(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0, num_vars]
+        else:
+            _, _, frozen_jac_vals = assemble_system_real(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0]
+
+        numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
+
+        y_c0 = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+        q_n = _compute_history(component_groups, y_c0, t0, num_vars)
+
+        def _run_stage(y_init, q_hist):
+            def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
+                if is_complex:
+                    total_f, total_q = assemble_residual_only_complex(y, component_groups, t1, h_n)
+                else:
+                    total_f, total_q = assemble_residual_only_real(y, component_groups, t1, h_n)
+                residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
+                for idx in ground_indices:
+                    residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+                sol = self.linear_solver.solve_with_frozen_jacobian(-residual, numeric_handle)
+                delta = sol.value
+                max_change = jnp.max(jnp.abs(delta))
+                damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+                return y + delta * damping
+
+            fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+            stage_sol = optx.fixed_point(
+                newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False
+            )
+            return stage_sol.value, stage_sol.result
+
+        t_s1 = t0 + _SDIRK3_G * h_n
+        Y1, r1 = _run_stage(y_pred, q_n)
+        Y1_c = Y1[:num_vars] + 1j * Y1[num_vars:] if is_complex else Y1
+        q_Y1 = _compute_history(component_groups, Y1_c, t_s1, num_vars)
+        q_hist_2 = q_n + (_SDIRK3_A21 / _SDIRK3_G) * (q_Y1 - q_n)
+
+        t_s2 = t0 + _SDIRK3_C2 * h_n
+        Y2, r2 = _run_stage(Y1, q_hist_2)
+        Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
+        q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+
+        Y3, r3 = _run_stage(Y2, q_hist_3)
+        free_numeric(numeric_handle)
+
+        y_next = Y3
+        y_error = Y3 - y_pred
+        all_ok = (r1 == optx.RESULTS.successful) & (r2 == optx.RESULTS.successful) & (r3 == optx.RESULTS.successful)
+        result = jax.lax.cond(
+            all_ok,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, (y0, h_n), result
+
+
+class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
+    """3rd-order A-stable SDIRK3 solver with KLU refactor at each Newton iteration.
+
+    Provides full quadratic Newton convergence via ``klujax.refactor`` within
+    each stage, combined with SDIRK3 time discretisation for 3rd-order accuracy.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 3
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        y_prev_step, dt_prev = solver_state
+
+        rate = (y0 - y_prev_step) / (dt_prev + 1e-30)
+        y_pred = y0 + rate * h_n
+
+        alpha = _SDIRK3_INV_G
+
+        if is_complex:
+            _, _, init_vals = assemble_system_complex(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0, num_vars]
+        else:
+            _, _, init_vals = assemble_system_real(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0]
+
+        numeric_handle = self.linear_solver.factor_jacobian(init_vals)
+
+        y_c0 = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+        q_n = _compute_history(component_groups, y_c0, t0, num_vars)
+
+        def _run_stage(y_init, q_hist, t_stage):
+            def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
+                if is_complex:
+                    total_f, total_q, all_vals = assemble_system_complex(
+                        y, component_groups, t_stage, h_n, alpha=alpha
+                    )
+                else:
+                    total_f, total_q, all_vals = assemble_system_real(
+                        y, component_groups, t_stage, h_n, alpha=alpha
+                    )
+                refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
+                residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
+                for idx in ground_indices:
+                    residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+                sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
+                delta = sol.value
+                max_change = jnp.max(jnp.abs(delta))
+                damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+                return y + delta * damping
+
+            fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+            stage_sol = optx.fixed_point(
+                newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False
+            )
+            return stage_sol.value, stage_sol.result
+
+        t_s1 = t0 + _SDIRK3_G * h_n
+        Y1, r1 = _run_stage(y_pred, q_n, t_s1)
+        Y1_c = Y1[:num_vars] + 1j * Y1[num_vars:] if is_complex else Y1
+        q_Y1 = _compute_history(component_groups, Y1_c, t_s1, num_vars)
+        q_hist_2 = q_n + (_SDIRK3_A21 / _SDIRK3_G) * (q_Y1 - q_n)
+
+        t_s2 = t0 + _SDIRK3_C2 * h_n
+        Y2, r2 = _run_stage(Y1, q_hist_2, t_s2)
+        Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
+        q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+
+        Y3, r3 = _run_stage(Y2, q_hist_3, t1)
+        free_numeric(numeric_handle)
+
+        y_next = Y3
+        y_error = Y3 - y_pred
+        all_ok = (r1 == optx.RESULTS.successful) & (r2 == optx.RESULTS.successful) & (r3 == optx.RESULTS.successful)
+        result = jax.lax.cond(
+            all_ok,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, (y0, h_n), result
+
+
 def setup_transient(
     groups: list,
     linear_strategy: CircuitLinearSolver,
