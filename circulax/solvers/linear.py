@@ -61,6 +61,8 @@ except ImportError:
     KLUHandleManager = object  # type: ignore[assignment,misc]
     KLURSHandleManager = object  # type: ignore[assignment,misc]
 
+split_refactor_available: bool = split_solver_available and hasattr(klujax, "refactor")
+
 # ---------------------------------------------------------------------------
 # Index-building helpers shared across all solver factory classmethods
 # ---------------------------------------------------------------------------
@@ -665,8 +667,8 @@ class KlursSplitSolver(KLUSplitSolver):
         )
 
 
-class KLUSplitFactorSolver(KLUSplitSolver):
-    """Solves the system using the KLU sparse solver (via `klujax`) with split factor/solve interface.
+class KLUSplitLinear(KLUSplitSolver):
+    """KLU split solver paired with Modified Newton (frozen-Jacobian) for linear convergence.
 
     Extends :class:`KLUSplitSolver` with an explicit numeric factorization step so the
     Jacobian can be **factored once per time step** and reused across all Newton iterations
@@ -757,7 +759,61 @@ class KLUSplitFactorSolver(KLUSplitSolver):
     @classmethod
     def from_component_groups(
         cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
-    ) -> "KLUSplitFactorSolver":
+    ) -> "KLUSplitLinear":
+        """Factory — delegates to :meth:`KLUSplitSolver.from_component_groups`."""
+        return super().from_component_groups(  # type: ignore[return-value]
+            component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
+        )
+
+
+KLUSplitFactorSolver = KLUSplitLinear  # backward-compat alias
+
+
+class KLUSplitQuadratic(KLUSplitLinear):
+    """KLU split solver paired with full Newton for quadratic convergence via ``klu_refactor``.
+
+    Extends :class:`KLUSplitLinear` with :meth:`refactor_jacobian`, which updates the numeric
+    LU factorization in-place using ``klujax.refactor``.  The sparsity pattern is fixed for a
+    given circuit topology, so KLU reuses the existing memory allocation and fill-reducing
+    permutation — only the L/U values are recomputed.  This gives full Newton (quadratic)
+    convergence at a fraction of the cost of re-calling ``klu_factor`` at every iteration.
+
+    Use together with :class:`~circulax.solvers.transient.RefactoringTransientSolver`.
+
+    Best For:
+        - Large circuits on CPU with nonlinear devices where quadratic convergence is desired.
+        - Transient simulations where the Jacobian changes significantly between Newton iterates.
+
+    """
+
+    def refactor_jacobian(self, all_vals: jax.Array, numeric: jax.Array) -> jax.Array:
+        """Update the numeric factorization in-place with new Jacobian values.
+
+        Reuses the existing memory allocation and fill-reducing permutation from the
+        symbolic analysis; only the L/U values are recomputed.  Faster than calling
+        :meth:`~KLUSplitLinear.factor_jacobian` from scratch each Newton iteration.
+
+        Args:
+            all_vals: Flattened non-zero Jacobian values (COO format).
+            numeric: Existing handle returned by :meth:`~KLUSplitLinear.factor_jacobian`.
+
+        Returns:
+            Refreshed numeric handle (same underlying C++ object, now connected in the
+            XLA computation graph so the refactor cannot be eliminated as dead code).
+
+        """
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
+        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
+        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
+        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
+        return klujax.refactor(
+            self.u_rows, self.u_cols, coalesced_vals, numeric, self._handle_wrapper.handle
+        )
+
+    @classmethod
+    def from_component_groups(
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
+    ) -> "KLUSplitQuadratic":
         """Factory — delegates to :meth:`KLUSplitSolver.from_component_groups`."""
         return super().from_component_groups(  # type: ignore[return-value]
             component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
@@ -918,13 +974,18 @@ backends: dict[str, type[CircuitLinearSolver]] = {
 }
 
 if split_solver_available:
-    backends["klu_split"] = KLUSplitSolver
-    backends["klu_split_factor"] = KLUSplitFactorSolver
+    backends["klu_split_linear"] = KLUSplitLinear
+    backends["klu_split"] = KLUSplitQuadratic if split_refactor_available else KLUSplitLinear
     backends["klu_rs_split"] = KlursSplitSolver
+    # Legacy aliases
+    backends["klu_split_factor"] = KLUSplitLinear
+    backends["klu_split_refactor"] = KLUSplitQuadratic if split_refactor_available else KLUSplitLinear
 else:
     # Silently fall back to KLUSolver when KLUHandleManager is not available
     backends["klu_split"] = KLUSolver
+    backends["klu_split_linear"] = KLUSolver
     backends["klu_split_factor"] = KLUSolver
+    backends["klu_split_refactor"] = KLUSolver
     backends["klu_rs_split"] = KLUSolver
 
 

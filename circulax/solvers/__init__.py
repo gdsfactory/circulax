@@ -7,15 +7,27 @@ from .linear import (
     CircuitLinearSolver,
     DenseSolver,
     KLUSolver,
+    KLUSplitLinear,
+    KLUSplitQuadratic,
     SparseSolver,
     analyze_circuit,
+    split_refactor_available,
 )
-from .transient import VectorizedTransientSolver, setup_transient
+from .transient import (
+    FactorizedTransientSolver,
+    RefactoringTransientSolver,
+    VectorizedTransientSolver,
+    setup_transient,
+)
 
 __all__ = [
     "CircuitLinearSolver",
     "DenseSolver",
+    "FactorizedTransientSolver",
     "KLUSolver",
+    "KLUSplitLinear",
+    "KLUSplitQuadratic",
+    "RefactoringTransientSolver",
     "SparseSolver",
     "VectorizedTransientSolver",
     "analyze_circuit",
@@ -24,4 +36,5 @@ __all__ = [
     "setup_ac_sweep",
     "setup_harmonic_balance",
     "setup_transient",
+    "split_refactor_available",
 ]

@@ -266,6 +266,100 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
         return y_next, y_error, {"y0": y0, "y1": y_next}, (y0, dt), result
 
 
+class RefactoringTransientSolver(FactorizedTransientSolver):
+    """Transient solver with full Newton (quadratic) convergence using ``klujax.refactor``.
+
+    At each timestep the Jacobian is factored once at the predicted state to allocate the
+    numeric handle.  Each Newton iteration then calls ``klujax.refactor`` — which reuses
+    the existing memory and fill-reducing permutation but recomputes L/U values for the
+    current iterate J(y_k) — followed by a triangular solve.  This gives full quadratic
+    Newton convergence at a fraction of the cost of re-factoring from scratch each iteration.
+
+    Convergence is quadratic so ``newton_max_steps`` is set to 20, matching
+    :class:`VectorizedTransientSolver`.  Adaptive damping ``min(1, 0.5 / max|δy|)``
+    is applied at each iteration to stabilise convergence in stiff or strongly nonlinear
+    regions.
+
+    Requires :class:`~circulax.solvers.linear.KLUSplitQuadratic` as the ``linear_solver``
+    — use ``analyze_circuit(..., backend="klu_split")``.
+    """
+
+    newton_max_steps: int = 20  # quadratic convergence; matches VectorizedTransientSolver default
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        dt = t1 - t0
+        y_prev_step, dt_prev = solver_state
+
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+
+        # 1. Predictor
+        rate = (y0 - y_prev_step) / (dt_prev + 1e-30)
+        y_pred = y0 + rate * dt
+
+        # 2. Compute History
+        y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+        q_prev = _compute_history(component_groups, y_c, t0, num_vars)
+
+        # 3. Factor ONCE at predicted state (allocates and initialises the numeric handle)
+        if is_complex:
+            _, _, init_vals = assemble_system_complex(y_pred, component_groups, t1, dt)
+            ground_indices = [0, num_vars]
+        else:
+            _, _, init_vals = assemble_system_real(y_pred, component_groups, t1, dt)
+            ground_indices = [0]
+
+        numeric_handle = self.linear_solver.factor_jacobian(init_vals)  # noqa: SLF001
+
+        # 4. Newton loop: refactor J(y_k) in-place each iteration, then solve
+        def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
+            if is_complex:
+                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, dt)
+            else:
+                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, dt)
+
+            refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)  # noqa: SLF001
+
+            residual = total_f + (total_q - q_prev) / dt
+            for idx in ground_indices:
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            sol = self.linear_solver.solve_with_frozen_jacobian(  # noqa: SLF001
+                -residual, refreshed_handle
+            )
+            delta = sol.value
+
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+
+            return y + delta * damping
+
+        # 5. Run Newton loop
+        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        sol = optx.fixed_point(
+            newton_update_step,
+            fpi,
+            y_pred,
+            max_steps=self.newton_max_steps,
+            throw=False,
+        )
+
+        # 6. Free the numeric handle to prevent C++ memory leaks
+        free_numeric(numeric_handle)
+
+        y_next = sol.value
+        y_error = y_next - y_pred
+
+        result = jax.lax.cond(
+            sol.result == optx.RESULTS.successful,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+
+        return y_next, y_error, {"y0": y0, "y1": y_next}, (y0, dt), result
+
+
 def setup_transient(
     groups: list,
     linear_strategy: CircuitLinearSolver,

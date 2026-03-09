@@ -116,7 +116,7 @@ def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  #
         args=(groups, sys_size), saveat=saveat, max_steps=1000,
     )
 
-    strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_factor")
+    strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
     sol_factor = diffrax.diffeqsolve(
         term,
         FactorizedTransientSolver(linear_solver=strat_factor),
@@ -126,3 +126,41 @@ def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  #
 
     assert sol_factor.ys.shape == sol_full.ys.shape
     assert jnp.allclose(sol_factor.ys, sol_full.ys, atol=1e-4)
+
+
+def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:  # noqa: ANN001
+    """RefactoringTransientSolver (klu_refactor) should produce the same trajectory
+    as VectorizedTransientSolver (full Newton) on a linear LRC circuit."""
+    from circulax.solvers.linear import split_refactor_available
+
+    if not split_refactor_available:
+        pytest.skip("requires klujax refactor interface")
+
+    from circulax.solvers.transient import RefactoringTransientSolver
+
+    net_dict, models_map = simple_lrc_netlist
+    groups, sys_size, _ = compile_netlist(net_dict, models_map)
+
+    t_max = 1e-9
+    saveat = diffrax.SaveAt(ts=jnp.linspace(0, t_max, 5))
+    term = diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y))
+
+    strat = analyze_circuit(groups, sys_size, backend="klu_split")
+    y_op = strat.solve_dc(groups, jnp.zeros(sys_size))
+
+    sol_full = diffrax.diffeqsolve(
+        term,
+        VectorizedTransientSolver(linear_solver=strat),
+        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
+        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+    )
+
+    sol_refactor = diffrax.diffeqsolve(
+        term,
+        RefactoringTransientSolver(linear_solver=strat),
+        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
+        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+    )
+
+    assert sol_refactor.ys.shape == sol_full.ys.shape
+    assert jnp.allclose(sol_refactor.ys, sol_full.ys, atol=1e-4)
