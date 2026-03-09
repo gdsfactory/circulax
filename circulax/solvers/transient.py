@@ -943,7 +943,7 @@ def setup_transient(
         linear_strategy (CircuitLinearSolver): The configured linear solver
             strategy, typically obtained from `analyze_circuit`.
         transient_solver (optional): The transient solver class to use.
-            If None, `VectorizedTransientSolver` will be used.
+            If None, `BDF2VectorizedTransientSolver` will be used.
 
     Returns:
         Callable[..., Any]: A function that executes the transient analysis.
@@ -978,7 +978,7 @@ def setup_transient(
         raise RuntimeError(msg)
 
     if transient_solver is None:
-        transient_solver = VectorizedTransientSolver
+        transient_solver = BDF2VectorizedTransientSolver
 
     tsolver = transient_solver(linear_solver=linear_strategy)
 
