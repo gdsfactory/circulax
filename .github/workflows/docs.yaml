@@ -24,14 +24,5 @@ jobs:
           environments: default
           cache: true
 
-      - name: Copy readme
-        run: pixi run copy_readme
-
-      - name: Copy examples
-        run: pixi run copy-examples
-
-      - name: Install Jupyter kernel
-        run: pixi run install_ipkernel
-
       - name: Deploy docs
-        run: pixi run mkdocs gh-deploy --force
+        run: pixi run docs-deploy

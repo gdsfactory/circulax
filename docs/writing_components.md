@@ -10,12 +10,12 @@ This architecture ensures your components are automatically compatible with JIT 
 
 Four decorators are available. Pick based on what your component's physics looks like:
 
-| Decorator | Function signature | Use case | DC | Transient | HB |
-|---|---|---|:---:|:---:|:---:|
-| `@component` | `(signals, s, **params) → (f_dict, q_dict)` | Electrical & photonic — time-invariant physics | ✓ | ✓ | ✓ |
-| `@source` | `(signals, s, t, **params) → (f_dict, q_dict)` | Time-varying sources (AC, pulse, modulated optical) | ✓ | ✓ | ✓ |
-| `@fdomain_component` | `(f, **params) → Y_matrix` | Electrically frequency-dependent impedance (skin effect, wideband interconnect) | ✓ | ✗ | ✓ |
-| `sax_component` | `(**params) → SAX S-dict` | Photonic models already written for the SAX library | ✓ | ✓ | ✓ |
+| Decorator | Use case | DC | Transient | HB |
+|---|---|:--:|:--:|:--:|
+| `@component` | Electrical & photonic — time-invariant physics | ✓ | ✓ | ✓ |
+| `@source` | Time-varying sources (AC, pulse, modulated optical) | ✓ | ✓ | ✓ |
+| `@fdomain_component` | Electrically frequency-dependent impedance (skin effect, wideband interconnect) | ✓ | ✗ | ✓ |
+| `sax_component` | Photonic models already written for the SAX library | ✓ | ✓ | ✓ |
 
 ---
 

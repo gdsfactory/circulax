@@ -1,22 +1,31 @@
 theme:
     name: material
     features:
-        #- navigation.sections  # Sections are included in the navigation on the left.
-        - toc.integrate  # Table of contents is integrated on the left; does not appear separately on the right.
-        - header.autohide  # header disappears as you scroll
-        - navigation.prune  # Only render visible navigation items, collapsing deeper levels
+        - content.code.copy          # copy button on every code block
+        - content.code.annotate      # inline (1) annotations in code blocks
+        - content.tabs.link          # syncs tabbed sections across pages
+        - navigation.tabs            # top horizontal tabs per top-level nav section
+        - navigation.tabs.sticky     # tabs stay visible while scrolling
+        - navigation.top             # back-to-top button when scrolling up
+        - navigation.prune           # only render visible navigation items
+        - header.autohide            # header disappears as you scroll
+        - search.suggest             # autocomplete in search box
+        - search.highlight           # highlight matches in search results
     logo: images/logo.svg
+    font:
+        text: Inter
+        code: JetBrains Mono
     palette:
-        - scheme: slate
-          toggle:
-             icon: material/weather-sunny
-             name: Switch to light mode
-        - scheme: white
+        - scheme: default
           primary: white
           accent: amber
           toggle:
              icon: material/weather-night
              name: Switch to dark mode
+        - scheme: slate
+          toggle:
+             icon: material/weather-sunny
+             name: Switch to light mode
 
     icon:
         repo: fontawesome/brands/github  # GitHub logo in top right
@@ -26,40 +35,28 @@ theme:
 site_name: circulax
 site_description: A Differentiable, Functional Circuit Analyzer based on JAX.
 
+repo_url: https://github.com/cdaunt/circulax
+repo_name: cdaunt/circulax
+
 edit_uri: ""
 
 strict: false  # Don't allow warnings during the build process
 
+copyright: Copyright &copy; 2024 cdaunt
+
 extra_css:
   - stylesheets/extra.css
 
-# extra_javascript:
-#     - _static/mathjax.js
-#     - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
-
 extra_javascript:
-  - _static/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 
 plugins:
     - search:
-        separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+        separator: '[\s\-,:!=\[\]()\"/]+|(?!\b)(?=[A-Z][a-z])|\\.(?!\d)|&[lg]t;'
     - gen-files:
         scripts:
             - docs/gen_doc_stubs.py
-    - mkdocs-jupyter:
-        #include_source: True  # Optional: Shows the 'source' of the notebook
-        ignore_h1_titles: True
-        execute: True
-        include_source: False
-        remove_tag_config:
-            remove_input_tags:
-            - remove-input      # The tag you added to hide code but keep output
-            - hide-input        # Optional: tag to just collapse it
-            remove_cell_tags:
-            - remove-cell       # Tag to remove both code AND output
-        theme: dark
     - literate-nav:
         nav_file: SUMMARY.md
     - mkdocstrings:
@@ -99,6 +96,17 @@ plugins:
                     summary: true
 
     - mkdocs_matplotlib
+    - glightbox:
+        touchNavigation: true
+        loop: false
+        effect: zoom
+        width: 100%
+        height: auto
+        zoomable: true
+        draggable: true
+    - minify:
+        minify_html: true
+
 
 markdown_extensions:
     - pymdownx.arithmatex:
@@ -110,7 +118,7 @@ markdown_extensions:
     - admonition
     - toc:
         permalink: "¤"
-        toc_depth: 2
+        toc_depth: 3
     - attr_list
     - footnotes
     - pymdownx.emoji
@@ -129,4 +137,4 @@ hooks:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/cdaunt
+      link: https://github.com/cdaunt/circulax
