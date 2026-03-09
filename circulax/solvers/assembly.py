@@ -151,6 +151,55 @@ def assemble_system_real(
     return total_f, total_q, jnp.concatenate(vals_list)
 
 
+def assemble_gc_real(
+    y_guess: Array,
+    component_groups: dict,
+) -> tuple[Array, Array]:
+    """Return separate G and C COO value arrays at the linearisation point.
+
+    Mirrors :func:`assemble_system_real` but returns ``df/dy`` (conductance) and
+    ``dq/dy`` (capacitance) separately instead of combining them as
+    ``G + C/dt``.  Frequency-domain groups contribute zero-filled blocks so that
+    the returned arrays align with the static COO index arrays produced by
+    ``_build_index_arrays`` (which includes all groups).
+
+    Args:
+        y_guess: Linearisation point (DC operating point), shape ``(num_vars,)``.
+        component_groups: Compiled component groups from :func:`compile_netlist`.
+
+    Returns:
+        A two-tuple ``(G_vals, C_vals)`` of real-valued 1-D JAX arrays.  Both
+        have the same length as the concatenated ``jac_rows``/``jac_cols`` COO
+        index arrays from ``_build_index_arrays``.
+
+    """
+    g_vals_list = []
+    c_vals_list = []
+
+    for k in sorted(component_groups.keys()):
+        group = component_groups[k]
+        n_entries = int(jnp.array(group.jac_rows).reshape(-1).shape[0])
+
+        if group.is_fdomain:
+            # Fdomain groups are re-evaluated per-frequency in ac_sweep.
+            # Emit zero blocks so COO alignment with _build_index_arrays is preserved.
+            g_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
+            c_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
+            continue
+
+        v_locs = y_guess[group.var_indices]
+        physics_at_dc = functools.partial(_real_physics, group=group, t1=0.0)
+
+        (_, _), (df_l, dq_l) = jax.vmap(
+            functools.partial(_primal_and_jac_real, physics_at_dc)
+        )(v_locs, group.params)
+
+        g_vals_list.append(df_l.reshape(-1))
+        c_vals_list.append(dq_l.reshape(-1))
+
+    return jnp.concatenate(g_vals_list), jnp.concatenate(c_vals_list)
+
+
 def assemble_residual_only_real(
     y_guess: Array,
     component_groups: dict,

@@ -3,7 +3,6 @@ import jax.numpy as jnp
 import pytest
 
 from circulax.compiler import compile_netlist
-from circulax.solvers import linear as st
 from circulax.solvers.linear import backends
 from circulax.solvers.transient import VectorizedTransientSolver
 

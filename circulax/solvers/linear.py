@@ -73,6 +73,7 @@ def _build_index_arrays(
 
     Returns:
         (static_rows, static_cols, ground_idxs, sys_size) as numpy arrays.
+
     """
     all_rows, all_cols = [], []
     for k in sorted(component_groups.keys()):
@@ -107,6 +108,7 @@ def _klu_deduplicate(
 
     Returns:
         (u_rows, u_cols, map_idx, n_unique)
+
     """
     leak_diag = np.arange(sys_size, dtype=np.int32)
     full_rows = np.concatenate([static_rows, ground_idxs, leak_diag])

@@ -9,11 +9,9 @@ import jax.numpy as jnp
 import optimistix as optx
 from diffrax import AbstractSolver, ConstantStepSize
 from jax.typing import ArrayLike
-#from klujax import free_numeric
 
+#from klujax import free_numeric
 from circulax.solvers.assembly import (
-    assemble_residual_only_complex,
-    assemble_residual_only_real,
     assemble_system_complex,
     assemble_system_real,
 )
@@ -175,7 +173,7 @@ class VectorizedTransientSolver(AbstractSolver):
 
 #     newton_max_steps: int = 100
 
-#     def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201
+#     def step(self, terms, t0, t1, y0, args, solver_state, options):
 #         component_groups, num_vars = args
 #         dt = t1 - t0
 #         y_prev_step, dt_prev = solver_state
