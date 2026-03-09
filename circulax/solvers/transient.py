@@ -212,7 +212,7 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
             )
             ground_indices = [0]
 
-        numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)  # noqa: SLF001
+        numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
 
         # 4. Newton iterations reusing the frozen Jacobian
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
@@ -230,7 +230,7 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
-            sol = self.linear_solver.solve_with_frozen_jacobian(  # noqa: SLF001
+            sol = self.linear_solver.solve_with_frozen_jacobian(
                 -residual, numeric_handle
             )
             delta = sol.value
@@ -309,7 +309,7 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             _, _, init_vals = assemble_system_real(y_pred, component_groups, t1, dt)
             ground_indices = [0]
 
-        numeric_handle = self.linear_solver.factor_jacobian(init_vals)  # noqa: SLF001
+        numeric_handle = self.linear_solver.factor_jacobian(init_vals)
 
         # 4. Newton loop: refactor J(y_k) in-place each iteration, then solve
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
@@ -318,13 +318,13 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             else:
                 total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, dt)
 
-            refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)  # noqa: SLF001
+            refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
 
             residual = total_f + (total_q - q_prev) / dt
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
-            sol = self.linear_solver.solve_with_frozen_jacobian(  # noqa: SLF001
+            sol = self.linear_solver.solve_with_frozen_jacobian(
                 -residual, refreshed_handle
             )
             delta = sol.value
@@ -358,6 +358,279 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
         )
 
         return y_next, y_error, {"y0": y0, "y1": y_next}, (y0, dt), result
+
+
+# ==============================================================================
+# BDF2 — 2nd-ORDER COMPANION SOLVER
+# ==============================================================================
+
+# Variable-step BDF2 (Gear's Method) companion formulation.
+# At each step the dQ/dt term is replaced by:
+#   (α₀ Q_{n+1} + α₁ Q_n + α₂ Q_{n-1}) / h_n = 0
+# where ω = h_n / h_{n-1} and
+#   α₀ = (1 + 2ω)/(1 + ω),  α₁ = -(1 + ω),  α₂ = ω²/(1 + ω).
+# For uniform steps: α₀ = 3/2, α₁ = -2, α₂ = 1/2.
+# The effective Jacobian is J_eff = dF/dy + (α₀/h_n) dQ/dy.
+# Step 0 falls back to Backward Euler automatically (only Q_n is available).
+
+
+def _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex):
+    """Compute BDF2 coefficients, history charges, predictor, and next solver_state.
+
+    Args:
+        y0: Current state at t0.
+        t0: Current time.
+        h_n: Current step size (t1 - t0).
+        solver_state: 3-tuple ``(y_nm1, h_nm1, step_count)`` where ``y_nm1``
+            is the solution at ``t0 - h_nm1`` and ``step_count`` is 0 on the
+            first step (forces Backward Euler).
+        component_groups: Compiled component groups.
+        num_vars: Number of real state variables (half of flat vector for complex).
+        is_complex: Whether the circuit uses complex arithmetic.
+
+    Returns:
+        Tuple ``(y_pred, alpha, make_residual, new_state)`` where:
+
+        - ``y_pred``: 1st-order extrapolation predictor.
+        - ``alpha``: effective Jacobian scaling (α₀ for BDF2, 1.0 for BE on step 0).
+        - ``make_residual(total_f, total_q)``: returns the discretised residual.
+        - ``new_state``: updated solver_state for the next step.
+
+    """
+    y_nm1, h_nm1, step_count = solver_state
+
+    # Variable-step BDF2 coefficients
+    omega = h_n / (h_nm1 + 1e-30)
+    alpha0 = (1.0 + 2.0 * omega) / (1.0 + omega)
+    alpha1 = -(1.0 + omega)
+    alpha2 = omega**2 / (1.0 + omega)
+
+    # On step 0 fall back to BE (step_count == 0); BDF2 from step 1 onward.
+    alpha = jnp.where(step_count == 0, 1.0, alpha0)
+
+    # History charges: Q(y_n) at t0 and Q(y_{n-1}) at t0 - h_nm1
+    y_c0 = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+    y_c_nm1 = y_nm1[:num_vars] + 1j * y_nm1[num_vars:] if is_complex else y_nm1
+    q_n = _compute_history(component_groups, y_c0, t0, num_vars)
+    q_nm1 = _compute_history(component_groups, y_c_nm1, t0 - h_nm1, num_vars)
+
+    # 1st-order predictor (same as BE)
+    rate = (y0 - y_nm1) / (h_nm1 + 1e-30)
+    y_pred = y0 + rate * h_n
+
+    def make_residual(total_f, total_q):
+        be_r   = total_f + (total_q - q_n) / h_n
+        bdf2_r = total_f + (alpha0 * total_q + alpha1 * q_n + alpha2 * q_nm1) / h_n
+        return jnp.where(step_count == 0, be_r, bdf2_r)
+
+    # Shift history; saturate step_count at 1 (0 = BE, 1+ = BDF2)
+    new_state = (y0, h_n, jnp.minimum(step_count + jnp.int32(1), jnp.int32(1)))
+
+    return y_pred, alpha, make_residual, new_state
+
+
+class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
+    """BDF2 upgrade of :class:`VectorizedTransientSolver`.
+
+    Implements variable-step BDF2 via the companion method.  On the first
+    step Backward Euler is used automatically; from step 2 onward BDF2 is
+    activated.  The Jacobian scaling changes from ``1/h`` (BE) to ``α₀/h``
+    (BDF2) where ``α₀ = (1 + 2ω)/(1 + ω)`` and ``ω = h_n/h_{n-1}``.
+
+    ``solver_state`` is a 3-tuple ``(y_nm1, h_nm1, step_count: int32)``.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 2
+
+    def init(self, terms, t0, t1, y0, args):
+        return (y0, jnp.float64(1.0), jnp.int32(0))
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+
+        y_pred, alpha, make_residual, new_state = _bdf2_preamble(
+            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex
+        )
+
+        def newton_update_step(y, _) -> float:
+            if is_complex:
+                total_f, total_q, all_vals = assemble_system_complex(
+                    y, component_groups, t1, h_n, alpha=alpha
+                )
+                ground_indices = [0, num_vars]
+            else:
+                total_f, total_q, all_vals = assemble_system_real(
+                    y, component_groups, t1, h_n, alpha=alpha
+                )
+                ground_indices = [0]
+
+            residual = make_residual(total_f, total_q)
+            for idx in ground_indices:
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            sol = self.linear_solver._solve_impl(all_vals, -residual)  # noqa: SLF001
+            delta = sol.value
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            return y + delta * damping
+
+        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=20, throw=False)
+
+        y_next = sol.value
+        y_error = y_next - y_pred
+        result = jax.lax.cond(
+            sol.result == optx.RESULTS.successful,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
+
+
+class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
+    """BDF2 upgrade of :class:`FactorizedTransientSolver` (frozen-Jacobian Newton).
+
+    Factors J_eff once at the predictor state and reuses it across all Newton
+    iterations, trading quadratic convergence for cheaper per-iteration cost.
+    The BDF2 Jacobian scaling ``α₀/h`` is used when factoring.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 2
+
+    def init(self, terms, t0, t1, y0, args):
+        return (y0, jnp.float64(1.0), jnp.int32(0))
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+
+        y_pred, alpha, make_residual, new_state = _bdf2_preamble(
+            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex
+        )
+
+        if is_complex:
+            _, _, frozen_jac_vals = assemble_system_complex(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0, num_vars]
+        else:
+            _, _, frozen_jac_vals = assemble_system_real(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0]
+
+        numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
+
+        def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
+            if is_complex:
+                total_f, total_q = assemble_residual_only_complex(y, component_groups, t1, h_n)
+            else:
+                total_f, total_q = assemble_residual_only_real(y, component_groups, t1, h_n)
+
+            residual = make_residual(total_f, total_q)
+            for idx in ground_indices:
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            sol = self.linear_solver.solve_with_frozen_jacobian(-residual, numeric_handle)
+            delta = sol.value
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            return y + delta * damping
+
+        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        sol = optx.fixed_point(
+            newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False
+        )
+        free_numeric(numeric_handle)
+
+        y_next = sol.value
+        y_error = y_next - y_pred
+        result = jax.lax.cond(
+            sol.result == optx.RESULTS.successful,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
+
+
+class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
+    """BDF2 upgrade of :class:`RefactoringTransientSolver` (KLU refactor per iteration).
+
+    Full quadratic Newton convergence via ``klujax.refactor`` at each iteration,
+    combined with BDF2 time discretisation for 2nd-order accuracy.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 2
+
+    def init(self, terms, t0, t1, y0, args):
+        return (y0, jnp.float64(1.0), jnp.int32(0))
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+
+        y_pred, alpha, make_residual, new_state = _bdf2_preamble(
+            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex
+        )
+
+        if is_complex:
+            _, _, init_vals = assemble_system_complex(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0, num_vars]
+        else:
+            _, _, init_vals = assemble_system_real(
+                y_pred, component_groups, t1, h_n, alpha=alpha
+            )
+            ground_indices = [0]
+
+        numeric_handle = self.linear_solver.factor_jacobian(init_vals)
+
+        def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
+            if is_complex:
+                total_f, total_q, all_vals = assemble_system_complex(
+                    y, component_groups, t1, h_n, alpha=alpha
+                )
+            else:
+                total_f, total_q, all_vals = assemble_system_real(
+                    y, component_groups, t1, h_n, alpha=alpha
+                )
+
+            refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
+            residual = make_residual(total_f, total_q)
+            for idx in ground_indices:
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
+            delta = sol.value
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            return y + delta * damping
+
+        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        sol = optx.fixed_point(
+            newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False
+        )
+        free_numeric(numeric_handle)
+
+        y_next = sol.value
+        y_error = y_next - y_pred
+        result = jax.lax.cond(
+            sol.result == optx.RESULTS.successful,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
 
 
 def setup_transient(

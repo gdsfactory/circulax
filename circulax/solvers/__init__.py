@@ -14,6 +14,9 @@ from .linear import (
     split_refactor_available,
 )
 from .transient import (
+    BDF2FactorizedTransientSolver,
+    BDF2RefactoringTransientSolver,
+    BDF2VectorizedTransientSolver,
     FactorizedTransientSolver,
     RefactoringTransientSolver,
     VectorizedTransientSolver,
@@ -21,6 +24,9 @@ from .transient import (
 )
 
 __all__ = [
+    "BDF2FactorizedTransientSolver",
+    "BDF2RefactoringTransientSolver",
+    "BDF2VectorizedTransientSolver",
     "CircuitLinearSolver",
     "DenseSolver",
     "FactorizedTransientSolver",

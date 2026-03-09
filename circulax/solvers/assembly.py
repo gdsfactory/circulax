@@ -92,13 +92,14 @@ def assemble_system_real(
     t1: float,
     dt: float,
     source_scale: float = 1.0,
+    alpha: float = 1.0,
 ) -> tuple[Array, Array, Array]:
     """Assemble the residual vectors and effective Jacobian values for a real system.
 
     For each component group, evaluates the physics at ``t1`` and computes the
     forward-mode Jacobian via ``jax.jacfwd``. The effective Jacobian combines
-    the resistive and reactive contributions as ``J_eff = df/dy + (1/dt) * dq/dy``,
-    consistent with the implicit trapezoidal discretisation used by the solver.
+    the resistive and reactive contributions as ``J_eff = df/dy + (alpha/dt) * dq/dy``,
+    where ``alpha=1`` recovers Backward Euler and ``alpha=3/2`` (uniform step) gives BDF2.
 
     Components are processed in sorted key order to ensure a deterministic
     non-zero layout in the sparse Jacobian, which is required for the
@@ -114,6 +115,9 @@ def assemble_system_real(
             (components whose ``amplitude_param`` is set).  Use ``1.0``
             for a standard evaluation and values in ``(0, 1)`` during
             DC homotopy source stepping.
+        alpha: Jacobian scaling factor for the reactive block.  Use ``1.0``
+            for Backward Euler, the variable-step BDF2 ``α₀`` coefficient for
+            BDF2, or ``1/γ`` for SDIRK3 stages.
 
     Returns:
         A three-tuple ``(total_f, total_q, jac_vals)`` where:
@@ -158,7 +162,7 @@ def assemble_system_real(
 
         total_f = total_f.at[group.eq_indices].add(f_l)
         total_q = total_q.at[group.eq_indices].add(q_l)
-        j_eff = df_l + (dq_l / dt)
+        j_eff = df_l + (alpha / dt) * dq_l
         vals_list.append(j_eff.reshape(-1))
 
     return total_f, total_q, jnp.concatenate(vals_list)
@@ -269,6 +273,7 @@ def assemble_system_complex(
     t1: float,
     dt: float,
     source_scale: float = 1.0,
+    alpha: float = 1.0,
 ) -> tuple[Array, Array, Array]:
     """Assemble the residual vectors and effective Jacobian values for an unrolled complex system.
 
@@ -295,6 +300,9 @@ def assemble_system_complex(
             (components whose ``amplitude_param`` is set).  Use ``1.0``
             for a standard evaluation and values in ``(0, 1)`` during
             DC homotopy source stepping.
+        alpha: Jacobian scaling factor for the reactive blocks.  Use ``1.0``
+            for Backward Euler, the variable-step BDF2 ``α₀`` coefficient for
+            BDF2, or ``1/γ`` for SDIRK3 stages.
 
     Returns:
         A three-tuple ``(total_f, total_q, jac_vals)`` where:
@@ -357,10 +365,10 @@ def assemble_system_complex(
         total_f = total_f.at[idx_r].add(fr).at[idx_i].add(fi)
         total_q = total_q.at[idx_r].add(qr).at[idx_i].add(qi)
 
-        vals_blocks[0].append((dfr_r + dqr_r / dt).reshape(-1))  # RR
-        vals_blocks[1].append((dfr_i + dqr_i / dt).reshape(-1))  # RI
-        vals_blocks[2].append((dfi_r + dqi_r / dt).reshape(-1))  # IR
-        vals_blocks[3].append((dfi_i + dqi_i / dt).reshape(-1))  # II
+        vals_blocks[0].append((dfr_r + (alpha / dt) * dqr_r).reshape(-1))  # RR
+        vals_blocks[1].append((dfr_i + (alpha / dt) * dqr_i).reshape(-1))  # RI
+        vals_blocks[2].append((dfi_r + (alpha / dt) * dqi_r).reshape(-1))  # IR
+        vals_blocks[3].append((dfi_i + (alpha / dt) * dqi_i).reshape(-1))  # II
 
     all_vals = jnp.concatenate([jnp.concatenate(b) for b in vals_blocks])
     return total_f, total_q, all_vals
