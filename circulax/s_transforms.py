@@ -5,7 +5,7 @@ and for wrapping SAX model functions as circulax components.
 """
 
 import inspect
-from typing import Any, ClassVar
+from typing import Any
 
 import jax
 import jax.numpy as jnp

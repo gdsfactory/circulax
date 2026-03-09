@@ -55,7 +55,7 @@ def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
 # ===========================================================================
 
 
-@source(ports=("p1", "p2"), states=("i_src",))
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V")
 def VoltageSource(
     signals: Signals, s: States, t: float, V: float = 0.0, delay: float = 0.0
 ) -> PhysicsReturn:
@@ -65,7 +65,7 @@ def VoltageSource(
     return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",))
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V")
 def SmoothPulse(
     signals: Signals,
     s: States,
@@ -81,7 +81,7 @@ def SmoothPulse(
     return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",))
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V")
 def VoltageSourceAC(
     signals: Signals,
     s: States,
@@ -99,7 +99,7 @@ def VoltageSourceAC(
     return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
 
-@component(ports=("p1", "p2"))
+@component(ports=("p1", "p2"), amplitude_param="I")
 def CurrentSource(signals: Signals, s: States, I: float = 0.0) -> PhysicsReturn:
     """Constant current source."""
     return {"p1": I, "p2": -I}, {}
