@@ -172,7 +172,9 @@ build-wheel      = { cmd = "uv build --wheel", description = "Build wheel only" 
 build-sdist      = { cmd = "uv build --sdist", description = "Build sdist only" }
 build-conda      = { cmd = "pixi build", description = "Build conda package" }
 clean-dist       = { cmd = "rm -rf dist/", description = "Remove build artifacts" }
-bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_vs_ngspice.py"], description = "RC pulse benchmark vs NGSpice" }
+bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_testbench.py"],        description = "RC pulse testbench" }
+bench_cascade    = { cmd = ["python", "benchmarking/diode_cascade_testbench.py"],   description = "Diode cascade testbench" }
+bench_rectifier  = { cmd = ["python", "benchmarking/fullwave_rect_testbench.py"],   description = "Full-wave rectifier testbench" }
 
 # ---------------------------------------------------------------------------
 # Environments
