@@ -142,15 +142,18 @@ def run_one(n_sections: int) -> dict:
     def save_io(t, y, args):
         return y[io_indices]
 
-    saveat_w = diffrax.SaveAt(ts=jnp.array([0.0, float(WARMUP_STEPS * 1e-11)]),
+    saveat_w = diffrax.SaveAt(ts=jnp.array([0.0, float(WARMUP_STEPS * 1e-9)]),
                               fn=save_io)
     saveat   = diffrax.SaveAt(ts=jnp.array([0.0, t_max]), fn=save_io)
 
-    # ── Warmup (2 steps) ─────────────────────────────────────────────────────
+    # ── Warmup ───────────────────────────────────────────────────────────────
+    # Must use the same stepsize_controller so the warmup JIT-compiles the
+    # exact same code path as the timed run.
     t0 = time.perf_counter()
     transient_sim(
-        t0=0.0, t1=float(WARMUP_STEPS * 1e-11), dt0=1e-11, y0=y0,
-        saveat=saveat_w, max_steps=WARMUP_STEPS + 10,
+        t0=0.0, t1=float(WARMUP_STEPS * 1e-9), dt0=1e-11, y0=y0,
+        stepsize_controller=STEP_CONTROLLER,
+        saveat=saveat_w, max_steps=100,
     ).ys.block_until_ready()
     warmup_time = time.perf_counter() - t0
 
