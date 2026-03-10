@@ -139,6 +139,19 @@ circulax = { path = ".", editable = true, extras = ["test"] }
 tqdm = ">=4.67.1,<5"
 uv = ">=0.6"
 
+# Benchmark feature — NGSpice accuracy comparison
+[tool.pixi.feature.benchmark.dependencies]
+scipy = ">=1.13"
+matplotlib = ">=3.9"
+tqdm = ">=4.67"
+
+# NGSpice is linux-64 only (no osx-arm64 conda package)
+[tool.pixi.feature.benchmark.target.linux-64.dependencies]
+ngspice = "*"
+
+[tool.pixi.feature.benchmark.pypi-dependencies]
+circulax = { path = ".", editable = true }
+
 
 # ---------------------------------------------------------------------------
 # Tasks
@@ -159,6 +172,7 @@ build-wheel      = { cmd = "uv build --wheel", description = "Build wheel only" 
 build-sdist      = { cmd = "uv build --sdist", description = "Build sdist only" }
 build-conda      = { cmd = "pixi build", description = "Build conda package" }
 clean-dist       = { cmd = "rm -rf dist/", description = "Remove build artifacts" }
+bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_vs_ngspice.py"], description = "RC pulse benchmark vs NGSpice" }
 
 # ---------------------------------------------------------------------------
 # Environments
@@ -171,6 +185,9 @@ default = { features = ["py313", "dev"], solve-group = "py313" }
 py311 = { features = ["py311", "test"], solve-group = "py311" }
 py312 = { features = ["py312", "test"], solve-group = "py312" }
 py313 = { features = ["py313", "test"], solve-group = "py313" }
+
+# Benchmark environment — includes NGSpice for accuracy comparisons
+benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }
 
 # ---------------------------------------------------------------------------
 # Pytest
