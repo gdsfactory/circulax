@@ -175,6 +175,7 @@ clean-dist       = { cmd = "rm -rf dist/", description = "Remove build artifacts
 bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_testbench.py"],        description = "RC pulse testbench" }
 bench_cascade    = { cmd = ["python", "benchmarking/diode_cascade_testbench.py"],   description = "Diode cascade testbench" }
 bench_rectifier  = { cmd = ["python", "benchmarking/fullwave_rect_testbench.py"],   description = "Full-wave rectifier testbench" }
+bench_lc_ladder  = { cmd = ["python", "benchmarking/lc_ladder_testbench.py"],       description = "LC ladder scalability testbench" }
 
 # ---------------------------------------------------------------------------
 # Environments
