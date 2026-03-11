@@ -371,7 +371,9 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
 #   α₀ = (1 + 2ω)/(1 + ω),  α₁ = -(1 + ω),  α₂ = ω²/(1 + ω).
 # For uniform steps: α₀ = 3/2, α₁ = -2, α₂ = 1/2.
 # The effective Jacobian is J_eff = dF/dy + (α₀/h_n) dQ/dy.
-# Step 0 falls back to Backward Euler automatically (only Q_n is available).
+# Step 0 falls back to Backward Euler automatically: h_nm1 is initialised to
+# +inf so ω = h_n/inf = 0 (IEEE 754), giving α₀=1, α₁=-1, α₂=0, which
+# reduces the BDF2 formula to the BE formula with no branching.
 
 
 def _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex):
@@ -381,9 +383,11 @@ def _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_com
         y0: Current state at t0.
         t0: Current time.
         h_n: Current step size (t1 - t0).
-        solver_state: 3-tuple ``(y_nm1, h_nm1, step_count)`` where ``y_nm1``
-            is the solution at ``t0 - h_nm1`` and ``step_count`` is 0 on the
-            first step (forces Backward Euler).
+        solver_state: 3-tuple ``(y_nm1, h_nm1, q_nm1)`` where ``y_nm1`` is the
+            solution at ``t0 - h_nm1`` and ``q_nm1`` is Q(y_{n-1}) cached from the
+            previous step.  On the first step ``h_nm1 = +inf`` so ``ω = 0``, which
+            makes the coefficients ``(α₀, α₁, α₂) = (1, -1, 0)`` — identical to
+            Backward Euler — with no branching required.
         component_groups: Compiled component groups.
         num_vars: Number of real state variables (half of flat vector for complex).
         is_complex: Whether the circuit uses complex arithmetic.
@@ -392,39 +396,33 @@ def _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_com
         Tuple ``(y_pred, alpha, make_residual, new_state)`` where:
 
         - ``y_pred``: 1st-order extrapolation predictor.
-        - ``alpha``: effective Jacobian scaling (α₀ for BDF2, 1.0 for BE on step 0).
+        - ``alpha``: effective Jacobian scaling α₀ (equals 1.0 on the first step).
         - ``make_residual(total_f, total_q)``: returns the discretised residual.
         - ``new_state``: updated solver_state for the next step.
 
     """
-    y_nm1, h_nm1, step_count = solver_state
+    y_nm1, h_nm1, q_nm1 = solver_state
 
-    # Variable-step BDF2 coefficients
+    # Variable-step BDF2 coefficients; ω→0 when h_nm1=inf (first step) → BE.
     omega = h_n / (h_nm1 + 1e-30)
     alpha0 = (1.0 + 2.0 * omega) / (1.0 + omega)
     alpha1 = -(1.0 + omega)
     alpha2 = omega**2 / (1.0 + omega)
+    alpha = alpha0  # equals 1.0 on the first step
 
-    # On step 0 fall back to BE (step_count == 0); BDF2 from step 1 onward.
-    alpha = jnp.where(step_count == 0, 1.0, alpha0)
-
-    # History charges: Q(y_n) at t0 and Q(y_{n-1}) at t0 - h_nm1
+    # Compute Q(y_n) at t0 — Q(y_{n-1}) is carried in solver_state to avoid recomputation.
     y_c0 = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
-    y_c_nm1 = y_nm1[:num_vars] + 1j * y_nm1[num_vars:] if is_complex else y_nm1
     q_n = _compute_history(component_groups, y_c0, t0, num_vars)
-    q_nm1 = _compute_history(component_groups, y_c_nm1, t0 - h_nm1, num_vars)
 
-    # 1st-order predictor (same as BE)
+    # 1st-order predictor (same as BE; rate=0 on first step when h_nm1=inf)
     rate = (y0 - y_nm1) / (h_nm1 + 1e-30)
     y_pred = y0 + rate * h_n
 
     def make_residual(total_f, total_q):
-        be_r   = total_f + (total_q - q_n) / h_n
-        bdf2_r = total_f + (alpha0 * total_q + alpha1 * q_n + alpha2 * q_nm1) / h_n
-        return jnp.where(step_count == 0, be_r, bdf2_r)
+        return total_f + (alpha0 * total_q + alpha1 * q_n + alpha2 * q_nm1) / h_n
 
-    # Shift history; saturate step_count at 1 (0 = BE, 1+ = BDF2)
-    new_state = (y0, h_n, jnp.minimum(step_count + jnp.int32(1), jnp.int32(1)))
+    # Shift history; cache q_n as q_nm1 for the next step.
+    new_state = (y0, h_n, q_n)
 
     return y_pred, alpha, make_residual, new_state
 
@@ -437,14 +435,21 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
     activated.  The Jacobian scaling changes from ``1/h`` (BE) to ``α₀/h``
     (BDF2) where ``α₀ = (1 + 2ω)/(1 + ω)`` and ``ω = h_n/h_{n-1}``.
 
-    ``solver_state`` is a 3-tuple ``(y_nm1, h_nm1, step_count: int32)``.
+    ``solver_state`` is a 3-tuple ``(y_nm1, h_nm1, q_nm1)``.  ``h_nm1`` is
+    initialised to ``+inf`` so that ``ω = 0`` on the first step, making the
+    BDF2 formula reduce to Backward Euler via IEEE 754 arithmetic (no branching).
+    ``q_nm1`` caches Q(y_{n-1}) to avoid recomputing it each step.
     """
 
     def order(self, terms) -> int:  # noqa: D102
         return 2
 
     def init(self, terms, t0, t1, y0, args):
-        return (y0, jnp.float64(1.0), jnp.int32(0))
+        component_groups, num_vars = args
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+        q0 = _compute_history(component_groups, y_c, t0, num_vars)
+        return (y0, jnp.float64(jnp.inf), q0)
 
     def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
         component_groups, num_vars = args
@@ -503,7 +508,11 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
         return 2
 
     def init(self, terms, t0, t1, y0, args):
-        return (y0, jnp.float64(1.0), jnp.int32(0))
+        component_groups, num_vars = args
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+        q0 = _compute_history(component_groups, y_c, t0, num_vars)
+        return (y0, jnp.float64(jnp.inf), q0)
 
     def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
         component_groups, num_vars = args
@@ -571,7 +580,11 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
         return 2
 
     def init(self, terms, t0, t1, y0, args):
-        return (y0, jnp.float64(1.0), jnp.int32(0))
+        component_groups, num_vars = args
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
+        q0 = _compute_history(component_groups, y_c, t0, num_vars)
+        return (y0, jnp.float64(jnp.inf), q0)
 
     def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
         component_groups, num_vars = args
@@ -978,7 +991,13 @@ def setup_transient(
         raise RuntimeError(msg)
 
     if transient_solver is None:
-        transient_solver = BDF2VectorizedTransientSolver
+        # Pick the best BDF2 variant the linear solver supports.
+        if hasattr(linear_strategy, "refactor_jacobian"):
+            transient_solver = BDF2RefactoringTransientSolver
+        elif hasattr(linear_strategy, "factor_jacobian"):
+            transient_solver = BDF2FactorizedTransientSolver
+        else:
+            transient_solver = BDF2VectorizedTransientSolver
 
     tsolver = transient_solver(linear_solver=linear_strategy)
 

@@ -983,6 +983,8 @@ if split_solver_available:
     # Legacy aliases
     backends["klu_split_factor"] = KLUSplitLinear
     backends["klu_split_refactor"] = KLUSplitQuadratic if split_refactor_available else KLUSplitLinear
+    # Default uses klu_split when the split interface is available
+    backends["default"] = backends["klu_split"]
 else:
     # Silently fall back to KLUSolver when KLUHandleManager is not available
     backends["klu_split"] = KLUSolver
