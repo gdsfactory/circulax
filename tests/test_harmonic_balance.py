@@ -6,7 +6,7 @@ import pytest
 
 from circulax.compiler import compile_netlist
 from circulax.solvers import setup_harmonic_balance
-from circulax.solvers.linear import backends, analyze_circuit
+from circulax.solvers.linear import analyze_circuit, backends
 
 # One canonical backend name per unique solver implementation
 _seen_classes: set = set()

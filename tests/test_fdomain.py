@@ -16,8 +16,7 @@ import pytest
 
 from circulax.compiler import compile_netlist
 from circulax.s_transforms import fdomain_component
-from circulax.solvers import setup_harmonic_balance
-from circulax.solvers import analyze_circuit
+from circulax.solvers import analyze_circuit, setup_harmonic_balance
 
 # ---------------------------------------------------------------------------
 # Shared skin-effect component definition
