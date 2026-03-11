@@ -22,12 +22,12 @@ Assembles the full $N \times N$ Jacobian as a dense array and solves with JAX's 
 **When to use:**
 
 - Small to medium circuits ($N \lesssim 2000$ nodes).
-- Any workflow that uses `jax.vmap` or `jax.grad` through the linear solve — e.g., frequency sweeps with Harmonic Balance or inverse design.
 - GPU execution: dense BLAS routines are highly optimised on GPU.
+- Frequency sweeps with Harmonic Balance where `jax.vmap` over the full solve is desired.
 
 **Trade-offs:**
 
-Memory scales as $O(N^2)$, so large circuits become expensive. The solve is fully differentiable and vmap-compatible.
+Memory scales as $O(N^2)$, so large circuits become expensive.
 
 ---
 
@@ -42,7 +42,6 @@ Solves the sparse system iteratively using JAX's BiCGStab implementation. The sp
 **When to use:**
 
 - Large transient simulations on GPU where $N$ is too large for Dense.
-- Situations where vmap support is still required at large $N$.
 
 **Trade-offs:**
 
@@ -66,7 +65,7 @@ Calls the [KLU](https://github.com/flaport/klujax) direct sparse solver via `klu
 
 **Trade-offs:**
 
-Does not support `jax.vmap` or `jax.grad` through the linear solve. KLU is a CPU-only external library — GPU execution falls back to the Dense path.
+CPU-only external library. GPU execution falls back to the Dense path.
 
 ---
 
@@ -88,17 +87,17 @@ An extended KLU interface that separates symbolic analysis (sparsity pattern, do
 
 **Trade-offs:**
 
-Same vmap/grad limitations as `klu`. Requires the extended `klujax` build.
+Same limitations as `klu`. Requires the extended `klujax` build.
 
 ---
 
 ## Summary
 
-| Backend | Best for | vmap / grad | GPU | Requires |
-|---------|----------|-------------|-----|---------|
-| `dense` | $N < 2000$, sweeps, inverse design | Yes | Yes | — |
-| `sparse` | Large $N$, GPU transient | Yes | Yes | — |
-| `klu` | Large $N$, CPU DC/transient | No | No | `klujax` |
-| `klu_split` | Large $N$, CPU, many Newton steps | No | No | custom `klujax` build |
+| Backend | Best for | GPU | Requires |
+|---------|----------|-----|---------|
+| `dense` | $N < 2000$, GPU, HB frequency sweeps | Yes | — |
+| `sparse` | Large $N$, GPU transient | Yes | — |
+| `klu` | Large $N$, CPU DC/transient | No | `klujax` |
+| `klu_split` | Large $N$, CPU, many Newton steps | No | custom `klujax` build |
 
 If you are unsure, start with `dense`. Switch to `klu` only when memory or runtime becomes a bottleneck on CPU.
