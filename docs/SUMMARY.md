@@ -2,5 +2,15 @@
 * Guide
     * [Writing Components](writing_components.md)
     * [Harmonic Balance](harmonic_balance.md)
-* [Examples](examples/)
+* Examples
+    * [LCR Circuit](examples/LCR.md)
+    * [LC Ladder](examples/LC_ladder.md)
+    * [Diode Clipper](examples/diode_clipper.md)
+    * [Harmonic Balance](examples/harmonic_balance.md)
+    * [AC Sweep](examples/ac_sweep.md)
+    * [MOS Differential Pair](examples/mos_diff_pair.md)
+    * [Resistor Ladder](examples/resistor_ladder.md)
+    * [Mach-Zehnder Modulator](examples/mzm.md)
+    * [Photonics Transient](examples/photonics_transient.md)
+    * [Ring Modulator](examples/ring_modulator.md)
 * [API Reference](references/)
