@@ -49,7 +49,7 @@ from circulax.components.base_component import PhysicsReturn, Signals, States, c
 from circulax.components.electronic import (  # noqa: E402
     Capacitor, Resistor, VoltageSourceAC, _junction_charge,
 )
-from circulax.solvers import analyze_circuit, setup_transient, RefactoringTransientSolver  # noqa: E402
+from circulax.solvers import analyze_circuit, setup_transient, BDF2RefactoringTransientSolver  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # DiodeLimited — clamped Shockley + SPICE junction capacitance
@@ -91,6 +91,13 @@ DT = 10e-9
 N_STEPS = int(T_END / DT)
 WARMUP_STEPS = 2
 WARMUP_T_END = WARMUP_STEPS * DT
+
+STEP_CONTROLLER = diffrax.PIDController(
+    rtol=1e-3, atol=1e-4,
+    pcoeff=0.2, icoeff=0.5, dcoeff=0.0,
+    force_dtmin=True, dtmin=1E-6*DT, dtmax=DT,
+    error_order=2,
+)
 
 HERE        = pathlib.Path(__file__).parent
 CIR_FILE    = HERE / "circuits" / "diode_cascade.cir"
@@ -163,19 +170,22 @@ def solver_circulax(n_save: int = 10_001) -> SolverResult:
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
     linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="klu_split")
     y_op = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
-    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy, transient_solver=RefactoringTransientSolver)
+    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy,
+                                    transient_solver=BDF2RefactoringTransientSolver)
     compile_time = time.perf_counter() - t0
 
     t0 = time.perf_counter()
     saveat_w = diffrax.SaveAt(ts=jnp.linspace(0.0, WARMUP_T_END, 101))
     transient_sim(t0=0.0, t1=WARMUP_T_END, dt0=DT, y0=y_op,
-                  saveat=saveat_w, max_steps=WARMUP_STEPS + 10).ys.block_until_ready()
+                  saveat=saveat_w, max_steps=WARMUP_STEPS + 100,
+                  stepsize_controller=STEP_CONTROLLER).ys.block_until_ready()
     warmup_time = time.perf_counter() - t0
 
     t0 = time.perf_counter()
     saveat = diffrax.SaveAt(ts=jnp.linspace(0.0, T_END, n_save))
     sol = transient_sim(t0=0.0, t1=T_END, dt0=DT, y0=y_op,
-                        saveat=saveat, max_steps=N_STEPS + 10)
+                        saveat=saveat, max_steps=N_STEPS * 10,
+                        stepsize_controller=STEP_CONTROLLER)
     sol.ys.block_until_ready()
     elapsed = time.perf_counter() - t0
 
@@ -189,7 +199,7 @@ def solver_circulax(n_save: int = 10_001) -> SolverResult:
             "v(20)": np.asarray(sol.ys[:, port_map["C4,p2"]]),
         },
         elapsed=elapsed,
-        n_steps=N_STEPS,
+        n_steps=int(sol.stats["num_steps"]),
         compile_time=compile_time,
         warmup_time=warmup_time,
     )
