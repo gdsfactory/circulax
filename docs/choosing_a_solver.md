@@ -37,11 +37,12 @@ Memory scales as $O(N^2)$, so large circuits become expensive.
 backend="sparse"
 ```
 
-Solves the sparse system iteratively using JAX's BiCGStab implementation. The sparsity pattern is pre-computed at setup time; only non-zero values are stored.
+Solves the sparse system iteratively using JAX's BiCGStab implementation. The sparsity pattern is pre-computed at setup time; only non-zero values are stored. Because BiCGStab is implemented entirely in JAX, it runs natively on GPU and TPU.
 
 **When to use:**
 
-- Large transient simulations on GPU where $N$ is too large for Dense.
+- Large circuits ($N \gtrsim 2000$) on GPU or TPU where Dense runs out of memory.
+- Large transient simulations where the sparsity of the circuit can be exploited for speed.
 
 **Trade-offs:**
 
