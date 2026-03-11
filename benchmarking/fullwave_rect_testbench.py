@@ -54,7 +54,7 @@ from circulax.components.base_component import PhysicsReturn, Signals, States, c
 from circulax.components.electronic import (  # noqa: E402
     Capacitor, Resistor, VoltageSourceAC, _junction_charge,
 )
-from circulax.solvers import analyze_circuit, setup_transient  # noqa: E402
+from circulax.solvers import analyze_circuit, setup_transient, RefactoringTransientSolver  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # DiodeLimited — clamped Shockley + SPICE junction capacitance
@@ -165,9 +165,9 @@ def solver_circulax(n_save: int = 10_001) -> SolverResult:
         "diode":     DiodeLimited,
     }
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-    linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="dense")
+    linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="klu_split")
     y_op = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
-    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy)
+    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy, transient_solver=RefactoringTransientSolver)
     compile_time = time.perf_counter() - t0
 
     t0 = time.perf_counter()

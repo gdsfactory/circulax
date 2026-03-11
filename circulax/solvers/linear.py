@@ -965,6 +965,9 @@ class SparseSolver(CircuitLinearSolver):
             g_leak=g_leak,
         )
 
+    def cleanup(self):
+        pass
+
 
 backends: dict[str, type[CircuitLinearSolver]] = {
     "default": KLUSolver,

@@ -80,7 +80,7 @@ MODELS_MAP = {
 }
 
 # Default sweep — override with --sections
-SWEEP_SECTIONS = [100, 1000, 10000, 50000]
+SWEEP_SECTIONS = [100, 1000, 5000]
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ def run_one(n_sections: int) -> dict:
     net_dict = build_netlist(n_sections)
     groups, sys_size, port_map = compile_netlist(net_dict, MODELS_MAP)
     linear_strategy = analyze_circuit(groups, sys_size, is_complex=False,
-                                      backend="klu_split")
+                                      backend="klu_rs_split")
     y0 = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
     transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy)
     compile_time = time.perf_counter() - t0
