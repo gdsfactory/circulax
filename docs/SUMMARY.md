@@ -1,6 +1,7 @@
 * [Home](index.md)
 * Guide
     * [Writing Components](writing_components.md)
+    * [Transient Simulation](transient.md)
     * [Harmonic Balance](harmonic_balance.md)
     * [Choosing a Solver](choosing_a_solver.md)
 * Examples
