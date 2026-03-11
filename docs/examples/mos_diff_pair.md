@@ -153,7 +153,7 @@ plt.show()
     Sweeping DC Operating Point (with Continuation)...
 
 
-    Simulation Time: 0.280s
+    Simulation Time: 0.316s
 
 
 

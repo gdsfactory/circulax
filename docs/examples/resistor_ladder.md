@@ -141,12 +141,14 @@ else:
 ```
 
     1. Compiling Circuit...
+
+
        System Size: 6 variables
 
     2. Solving DC Operating Point...
 
 
-    Time take = 0.1720s
+    Time take = 0.2000s
 
     3. Verification:
        V_REF:    8.0 V
@@ -158,7 +160,7 @@ else:
 
 
 
-![png](resistor_ladder_files/resistor_ladder_5_2.png)
+![png](resistor_ladder_files/resistor_ladder_5_3.png)
 
 
 

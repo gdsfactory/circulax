@@ -59,20 +59,19 @@ print(f"|H(jω₀)|           : {Q:.3f}  (capacitor voltage gain at resonance)")
 
 
 ```python
-with plt.style.context(['default', {"axes.grid": True, "figure.facecolor": "white"}]):
-    with schemdraw.Drawing() as d:
-        d.config(fontsize=13)
-        Vs = d.add(elm.SourceSin().up().label("$V_s$\n1 V", loc="left"))
-        d.add(elm.Line().right(d.unit * 0.5))
-        d.add(elm.Resistor().right().label(f"$R$\n{R_val:.0f} Ω"))
-        d.add(elm.Inductor2().right().label(f"$L$\n{L_val * 1e6:.0f} µH"))
-        d.add(elm.Line().right(d.unit * 0.5))
-        top_right = d.here
-        d.add(elm.Capacitor().down().label(f"$C$\n{C_val * 1e9:.0f} nF", loc="right").label("$V_\\mathrm{out}$", loc="top"))
-        d.add(elm.Line().left().tox(Vs.start))
-        d.add(elm.Ground())
-        d.add(elm.Line().right().tox(Vs.start))
-        d.add(elm.Dot(open=True).at(top_right).label("$V_\\mathrm{out}$", loc="right"))
+with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "white"}]), schemdraw.Drawing() as d:
+    d.config(fontsize=13)
+    Vs = d.add(elm.SourceSin().up().label("$V_s$\n1 V", loc="left"))
+    d.add(elm.Line().right(d.unit * 0.5))
+    d.add(elm.Resistor().right().label(f"$R$\n{R_val:.0f} Ω"))
+    d.add(elm.Inductor2().right().label(f"$L$\n{L_val * 1e6:.0f} µH"))
+    d.add(elm.Line().right(d.unit * 0.5))
+    top_right = d.here
+    d.add(elm.Capacitor().down().label(f"$C$\n{C_val * 1e9:.0f} nF", loc="right").label("$V_\\mathrm{out}$", loc="top"))
+    d.add(elm.Line().left().tox(Vs.start))
+    d.add(elm.Ground())
+    d.add(elm.Line().right().tox(Vs.start))
+    d.add(elm.Dot(open=True).at(top_right).label("$V_\\mathrm{out}$", loc="right"))
 ```
 
 
@@ -114,7 +113,7 @@ print(f"Node map: {net_map}")
 ```
 
     System size: 6 variables
-    Node map: {'L1,p2': 1, 'C1,p1': 1, 'C1,p2': 0, 'Vs,p2': 0, 'GND,p1': 0, 'R1,p2': 2, 'L1,p1': 2, 'Vs,p1': 3, 'R1,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
+    Node map: {'C1,p1': 1, 'L1,p2': 1, 'C1,p2': 0, 'Vs,p2': 0, 'GND,p1': 0, 'R1,p2': 2, 'L1,p1': 2, 'R1,p1': 3, 'Vs,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
 
 
 
@@ -188,7 +187,7 @@ H = 1.0 / (1 - w**2 * L_val * C_val + 1j * w * R_val * C_val)
 fig, ax = plt.subplots(figsize=(8, 3.5))
 ax.semilogx(freqs / 1e6, 20 * np.log10(np.abs(H)), "C0", lw=2, label="Analytical |H(jω)|")
 ax.scatter(
-    [f_drive / 1e6], [20 * np.log10(vout_amp[1] / vin_amp[1])], color="C1", zorder=5, s=80, label=f"HB result at $f_{{drive}}$"
+    [f_drive / 1e6], [20 * np.log10(vout_amp[1] / vin_amp[1])], color="C1", zorder=5, s=80, label="HB result at $f_{drive}$"
 )
 ax.axvline(f_res / 1e6, color="gray", ls="--", lw=1, label=f"$f_0$ = {f_res / 1e6:.2f} MHz")
 ax.set_xlabel("Frequency (MHz)")
@@ -490,18 +489,17 @@ settles; HB finds the periodic state directly.
 
 
 ```python
-with plt.style.context(['default', {"axes.grid": True, "figure.facecolor": "white"}]):
-    with schemdraw.Drawing() as d:
-        d.config(fontsize=13)
-        Vs2 = d.add(elm.SourceSin().up().label("$V_s$\n2 V", loc="left"))
-        d.add(elm.Resistor().right().label("$R$\n1 kΩ"))
-        top_mid = d.here
-        d.add(elm.Diode().right().label("$D_1$"))
-        top_right = d.here
-        d.add(elm.Resistor().down().label("$R_L$\n10 kΩ", loc="right").label("$V_\\mathrm{out}$", loc="top"))
-        d.add(elm.Line().left().tox(Vs2.start))
-        d.add(elm.Ground())
-        d.add(elm.Dot(open=True).at(top_right).label("$V_\\mathrm{out}$", loc="right"))
+with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "white"}]), schemdraw.Drawing() as d:
+    d.config(fontsize=13)
+    Vs2 = d.add(elm.SourceSin().up().label("$V_s$\n2 V", loc="left"))
+    d.add(elm.Resistor().right().label("$R$\n1 kΩ"))
+    top_mid = d.here
+    d.add(elm.Diode().right().label("$D_1$"))
+    top_right = d.here
+    d.add(elm.Resistor().down().label("$R_L$\n10 kΩ", loc="right").label("$V_\\mathrm{out}$", loc="top"))
+    d.add(elm.Line().left().tox(Vs2.start))
+    d.add(elm.Ground())
+    d.add(elm.Dot(open=True).at(top_right).label("$V_\\mathrm{out}$", loc="right"))
 ```
 
 

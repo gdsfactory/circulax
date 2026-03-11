@@ -35,7 +35,7 @@ The `RingModulator` component below carries two internal states:
 | State | $F$-term (residual) | $Q$-term (storage) | Role |
 |-------|---------------------|---------------------|------|
 | `a`   | $j\sqrt{2/\tau_e}\,V_{p1} - j\Delta\omega\,a + a/\tau$ | $a$ | Ring energy ODE |
-| `i_out` | $V_{p2}-(V_{p1}-j\sqrt{2/\tau_e}\,a)$ | \u2014 | Output field constraint |
+| `i_out` | $V_{p2}-(V_{p1}-j\sqrt{2/\tau_e}\,a)$ | -- | Output field constraint |
 
 Port `p1` (input) contributes zero current \u2014 the ring is transparent at the
 input (S11 = 0), so the source drives the input field directly. Port `p2`
@@ -1066,7 +1066,7 @@ for f, a_tr, a_hb, a_an in zip(freqs_GHz[::5], amps_dB[::5], amps_hb_dB[::5], H_
     Freq (GHz)  | Transient (dB) | HB vmap (dB) | Analytic (dB)
     ------------------------------------------------------------
         1.0       |    +0.00        |   +0.00       |  +0.00
-       44.9       |    -0.57        |   -0.35       |  -0.56
+       44.9       |    -0.56        |   -0.35       |  -0.56
 
 
 ---
@@ -1339,7 +1339,7 @@ axes[1].set_ylabel(r"$|E_\mathrm{out}|^2$ (a.u.)")
 axes[1].set_xlabel("Time (ps)")
 axes[1].set_title(
     r"Optical output power — ISI from photon lifetime ($\tau \approx$ "
-    + f"{tau*1e12:.1f} ps, $T_{{\\rm bit}}/\\tau$ = {T_bit_nrz/tau:.1f})"
+     f"{tau*1e12:.1f} ps, $T_{{\\rm bit}}/\\tau$ = {T_bit_nrz/tau:.1f})"
 )
 fig.tight_layout()
 plt.show()

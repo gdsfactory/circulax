@@ -166,11 +166,11 @@ plt.show()
     Solving for single wavelength (and jit compiling)
 
 
-    Compilation and single point simulation Time: 0.605s
+    Compilation and single point simulation Time: 0.854s
     Sweeping DC Operating Point...
 
 
-    Vmap simulation Time: 0.981s
+    Vmap simulation Time: 1.339s
 
 
 

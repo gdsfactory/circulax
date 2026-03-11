@@ -27,6 +27,9 @@ from circulax.components.electronic import Capacitor, Resistor
 jax.config.update("jax_enable_x64", True)
 ```
 
+    KLUJAX_RS DEBUG MODE.
+
+
 ---
 ## Part 1: Parallel RC — Single Port
 
