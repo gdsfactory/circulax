@@ -101,7 +101,7 @@ platforms = ["linux-64","osx-arm64"]
 # pixi-build is still preview-gated
 preview = ["pixi-build"]
 
-[tool.pixi.target.linux-64.activation]
+[tool.pixi.activation]
 scripts = ["scripts/activate.sh"]
 
 # Shared editable install for all environments
