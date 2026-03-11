@@ -89,6 +89,7 @@ class CircuitComponent(eqx.Module):
     states: ClassVar[tuple[str, ...]] = ()
 
     _uses_time: ClassVar[bool] = False
+    _is_fdomain: ClassVar[bool] = False
 
     _VarsType_P: ClassVar[Any] = None
     _VarsType_S: ClassVar[Any] = None
@@ -251,6 +252,7 @@ def _build_component(  # noqa: C901
     states: tuple[str, ...],
     *,
     uses_time: bool,
+    amplitude_param: str = "",
 ) -> type[CircuitComponent]:
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
@@ -271,6 +273,8 @@ def _build_component(  # noqa: C901
         states: Ordered tuple of internal state variable names.
         uses_time: ``True`` when compiling a :func:`source` component whose
             physics function accepts a time argument ``t``.
+        amplitude_param: Name of the parameter representing the source
+            amplitude for DC homotopy stepping.  Empty string for passives.
 
     Returns:
         A new :class:`CircuitComponent` subclass named after ``fn``.
@@ -382,6 +386,7 @@ def _build_component(  # noqa: C901
         "_fast_physics": staticmethod(_fast_physics),
         "_invoke_physics": _invoke_physics,
         "_uses_time": uses_time,
+        "amplitude_param": amplitude_param,
         **defaults,
     }
 
@@ -393,6 +398,7 @@ def _build_component(  # noqa: C901
 def component(
     ports: tuple[str, ...] = (),
     states: tuple[str, ...] = (),
+    amplitude_param: str = "",
 ) -> Any:
     """Decorator for defining a time-independent circuit component.
 
@@ -407,6 +413,10 @@ def component(
         states: Ordered tuple of internal state variable names. State
             variables are appended to the solver's state vector after the
             node voltages.
+        amplitude_param: Name of the parameter that represents the source
+            amplitude (e.g. ``"I"`` for a current source). When non-empty,
+            DC homotopy solvers will scale this parameter during stepping.
+            Leave empty (default) for passive components.
 
     Returns:
         A decorator that accepts a physics function and returns a
@@ -420,12 +430,13 @@ def component(
             return {"p1": i, "p2": -i}, {}
 
     """
-    return lambda fn: _build_component(fn, ports, states, uses_time=False)
+    return lambda fn: _build_component(fn, ports, states, uses_time=False, amplitude_param=amplitude_param)
 
 
 def source(
     ports: tuple[str, ...] = (),
     states: tuple[str, ...] = (),
+    amplitude_param: str = "",
 ) -> Any:
     """Decorator for defining a time-dependent circuit component.
 
@@ -437,6 +448,11 @@ def source(
     Args:
         ports: Ordered tuple of port names.
         states: Ordered tuple of internal state variable names.
+        amplitude_param: Name of the parameter that represents the source
+            amplitude (e.g. ``"V"`` for a voltage source). When non-empty,
+            DC homotopy solvers will scale this parameter during stepping.
+            Leave empty (default) for time-dependent components that are not
+            primary excitation sources.
 
     Returns:
         A decorator that accepts a physics function and returns a
@@ -450,4 +466,4 @@ def source(
             return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
     """
-    return lambda fn: _build_component(fn, ports, states, uses_time=True)
+    return lambda fn: _build_component(fn, ports, states, uses_time=True, amplitude_param=amplitude_param)

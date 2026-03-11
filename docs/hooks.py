@@ -1,7 +1,6 @@
-"""MkDocs hooks for SAX-specific preprocessing."""
+"""MkDocs hooks for circulax-specific preprocessing."""
 
 import hashlib
-import json
 import re
 import shutil
 import subprocess
@@ -9,56 +8,6 @@ import tempfile
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
-
-STYLE_CODE = """
-import matplotlib.pyplot as plt
-plt.rcParams.update({
-    "figure.figsize": (6, 2.5),
-    "axes.grid": True,
-    "lines.color": "grey",
-    "patch.edgecolor": "grey",
-    "text.color": "grey",
-    "axes.facecolor": "ffffff00",
-    "axes.edgecolor": "grey",
-    "axes.labelcolor": "grey",
-    "xtick.color": "grey",
-    "ytick.color": "grey",
-    "grid.color": "grey",
-    "figure.facecolor": "ffffff00",
-    "figure.edgecolor": "ffffff00",
-    "savefig.facecolor": "ffffff00",
-    "savefig.edgecolor": "ffffff00",
-})
-"""
-
-
-def on_page_read_source(page: Any, config: Any, **kwargs: Any) -> str | None:
-    """Inject style settings into notebooks before execution."""
-    # Only act on Jupyter Notebooks
-    if page.file.src_path.endswith(".ipynb"):
-        try:
-            with open(page.file.abs_src_path, encoding="utf-8") as f:
-                nb = json.load(f)
-
-            # Create a new code cell with the style configuration
-            new_cell = {
-                "cell_type": "code",
-                "execution_count": None,
-                # "remove_cell" tag helps some themes hide this setup block
-                "metadata": {"tags": ["remove_cell", "remove_input"]},
-                "outputs": [],
-                "source": [line + "\n" for line in STYLE_CODE.splitlines()],
-            }
-
-            # Insert this cell at the very top of the notebook
-            nb["cells"].insert(0, new_cell)
-
-            return json.dumps(nb)
-        except Exception as e:
-            print(f"Error injecting style into {page.file.src_path}: {e}")
-            return None
-
-    return None
 
 
 def on_startup(command: str, dirty: bool, **kwargs: Any) -> None:
@@ -125,11 +74,6 @@ def on_post_template(
 def on_pre_page(page: Any, config: Any, files: Any, **kwargs: Any) -> Any:
     """Called before a page is processed."""
     return page
-
-
-# def on_page_read_source(page: Any, config: Any, **kwargs: Any) -> str | None:
-#     """Called to read the raw source of a page."""
-#     return None
 
 
 def on_page_markdown(

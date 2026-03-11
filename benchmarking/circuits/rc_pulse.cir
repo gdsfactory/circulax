@@ -1,0 +1,16 @@
+* RC pulse benchmark — matches benchmarking/rc_pulse_vs_ngspice.py
+* PULSE(V1 V2 TD TR TF PW PER): 0→1V, TD=1µs, TR=TF=1µs, PW=1ms, PER=2ms
+vs 1 0 dc 0 pulse 0 1 1u 1u 1u 1m 2m
+r1 1 2 1k
+c1 2 0 1u
+
+.options klu
+
+.control
+  tran 1u 1 0 1u
+  wrdata /tmp/ngspice_rc_pulse.dat v(1) v(2)
+  set noaskquit
+  quit
+.endc
+
+.end

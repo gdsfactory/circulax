@@ -61,6 +61,8 @@ except ImportError:
     KLUHandleManager = object  # type: ignore[assignment,misc]
     KLURSHandleManager = object  # type: ignore[assignment,misc]
 
+split_refactor_available: bool = split_solver_available and hasattr(klujax, "refactor")
+
 # ---------------------------------------------------------------------------
 # Index-building helpers shared across all solver factory classmethods
 # ---------------------------------------------------------------------------
@@ -73,6 +75,7 @@ def _build_index_arrays(
 
     Returns:
         (static_rows, static_cols, ground_idxs, sys_size) as numpy arrays.
+
     """
     all_rows, all_cols = [], []
     for k in sorted(component_groups.keys()):
@@ -107,6 +110,7 @@ def _klu_deduplicate(
 
     Returns:
         (u_rows, u_cols, map_idx, n_unique)
+
     """
     leak_diag = np.arange(sys_size, dtype=np.int32)
     full_rows = np.concatenate([static_rows, ground_idxs, leak_diag])
@@ -182,8 +186,63 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         """Indicate if the solver assumes the operator is full rank."""
         return False
 
+    def _run_newton(
+        self,
+        component_groups: dict[str, Any],
+        y_guess: jax.Array,
+        source_scale: float = 1.0,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
+        max_steps: int = 100,
+    ) -> tuple[jax.Array, jax.Array]:
+        """Inner Newton-Raphson loop, optionally with source scaling.
+
+        Assembles the system at ``source_scale`` (1.0 for a normal solve, < 1.0
+        during source-stepping homotopy), applies ground constraints, and runs
+        ``optx.fixed_point`` to find the DC operating point.  This method is
+        fully JAX-traceable and may be called inside ``jax.lax.scan``.
+
+        Args:
+            component_groups: The circuit components and their parameters.
+            y_guess: Initial guess vector (shape ``[N]`` or ``[2N]``).
+            source_scale: Multiplicative scale applied to source amplitudes
+                (``amplitude_param`` leaf).  ``1.0`` is a plain solve.
+            rtol: Relative tolerance for ``optx.fixed_point``.
+            atol: Absolute tolerance for ``optx.fixed_point``.
+            max_steps: Maximum Newton iterations.
+
+        Returns:
+            ``(y, converged)`` where ``converged`` is a boolean JAX scalar that
+            is ``True`` when ``optx.fixed_point`` reported success.  Both values
+            are JAX arrays and can be used inside ``jax.lax.cond`` / ``scan``.
+
+        """
+        assemble_fn = assemble_system_complex if self.is_complex else assemble_system_real
+
+        def dc_step(y: jax.Array, _: Any) -> jax.Array:
+            total_f, _, all_vals = assemble_fn(
+                y, component_groups, t1=0.0, dt=DC_DT, source_scale=source_scale
+            )
+
+            total_f_grounded = total_f
+            for idx in self.ground_indices:
+                total_f_grounded = total_f_grounded.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            sol = self._solve_impl(all_vals, -total_f_grounded)
+            delta = sol.value
+
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+
+            return y + delta * damping
+
+        solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
+        sol = optx.fixed_point(dc_step, solver, y_guess, max_steps=max_steps, throw=False)
+        return sol.value, sol.result == optx.RESULTS.successful
+
     def solve_dc(
-        self, component_groups: dict[str, Any], y_guess: jax.Array
+        self, component_groups: dict[str, Any], y_guess: jax.Array,
+        rtol: float = 1e-6, atol: float = 1e-6, max_steps: int = 100,
     ) -> jax.Array:
         """Performs a robust DC Operating Point analysis (Newton-Raphson).
 
@@ -202,40 +261,194 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             jax.Array: The converged solution vector (Flat).
 
         """
+        y, _ = self._run_newton(
+            component_groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps
+        )
+        return y
 
-        def dc_step(y: jax.Array, _: Any) -> jax.Array:
-            # 1. Assemble System (DC_DT effectively removes time-dependent terms like C*dv/dt)
-            if self.is_complex:
-                total_f, _, all_vals = assemble_system_complex(
-                    y, component_groups, t1=0.0, dt=DC_DT
-                )
-            else:
-                total_f, _, all_vals = assemble_system_real(
-                    y, component_groups, t1=0.0, dt=DC_DT
-                )
+    def solve_dc_checked(
+        self,
+        component_groups: dict[str, Any],
+        y_guess: jax.Array,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
+        max_steps: int = 100,
+    ) -> tuple[jax.Array, jax.Array]:
+        """DC Operating Point with convergence status.
 
-            # 2. Apply Ground Constraints to Residual
-            #    We add a massive penalty (GROUND_STIFFNESS * V) to the residual at ground nodes.
-            #    This forces the solver to drive V -> 0.
-            total_f_grounded = total_f
-            for idx in self.ground_indices:
-                total_f_grounded = total_f_grounded.at[idx].add(GROUND_STIFFNESS * y[idx])
+        Identical to :meth:`solve_dc` but additionally returns a boolean JAX
+        scalar indicating whether the Newton-Raphson fixed-point iteration
+        reported success.  Because the flag is a JAX array (not a Python bool)
+        it can be consumed inside compiled programs:
 
-            # 3. Solve Linear System (J * delta = -R)
-            sol = self._solve_impl(all_vals, -total_f_grounded)
-            delta = sol.value
+        .. code-block:: python
 
-            # 4. Apply Voltage Limiting (Damping)
-            #    Prevents the solver from taking huge steps that crash exponentials (diodes/transistors).
-            max_change = jnp.max(jnp.abs(delta))
-            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            y, converged = solver.solve_dc_checked(groups, y0)
+            # Outside JIT — inspect in Python:
+            if not converged:
+                y = solver.solve_dc_gmin(groups, y0)
+            # Inside JIT — branch without Python-level control flow:
+            y = jax.lax.cond(converged, lambda: y, lambda: solver.solve_dc_gmin(groups, y0))
 
-            return y + delta * damping
+        Args:
+            component_groups: Compiled circuit components.
+            y_guess: Initial guess vector (shape ``[N]`` or ``[2N]``).
+            rtol: Relative tolerance for ``optx.fixed_point``.
+            atol: Absolute tolerance for ``optx.fixed_point``.
+            max_steps: Maximum Newton iterations.
 
-        # 5. Run Newton Loop (Optimistix)
-        solver = optx.FixedPointIteration(rtol=1e-6, atol=1e-6)
-        sol = optx.fixed_point(dc_step, solver, y_guess, max_steps=100, throw=False)
-        return sol.value
+        Returns:
+            ``(y, converged)`` — solution vector and boolean success flag.
+
+        """
+        return self._run_newton(
+            component_groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps
+        )
+
+    def solve_dc_gmin(
+        self,
+        component_groups: dict[str, Any],
+        y_guess: jax.Array,
+        g_start: float = 1e-2,
+        n_steps: int = 10,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
+        max_steps: int = 100,
+    ) -> jax.Array:
+        """DC Operating Point via GMIN stepping (homotopy rescue).
+
+        Steps the diagonal regularisation conductance ``g_leak`` logarithmically
+        from ``g_start`` down to ``self.g_leak``, using each converged solution
+        as the warm start for the next step.  The large initial ``g_leak``
+        linearises highly nonlinear components (diodes above threshold, lasers)
+        that would otherwise cause Newton to diverge from a flat 0V start.
+
+        Implemented with ``jax.lax.scan`` — fully JIT/grad/vmap-compatible.
+
+        Args:
+            component_groups: Compiled circuit components.
+            y_guess: Initial guess (typically ``jnp.zeros(sys_size)``).
+            g_start: Starting leakage conductance (large value, e.g. ``1e-2``).
+            n_steps: Number of log-uniform steps from ``g_start`` to
+                ``self.g_leak``.
+            rtol: Relative tolerance for each inner Newton solve.
+            atol: Absolute tolerance for each inner Newton solve.
+            max_steps: Max Newton iterations per step.
+
+        Returns:
+            Converged solution vector after the full GMIN schedule.
+
+        """
+        g_values = jnp.logspace(jnp.log10(g_start), jnp.log10(self.g_leak), n_steps)
+
+        def step(y: jax.Array, g_leak_val: jax.Array) -> tuple[jax.Array, None]:
+            stepped_solver = eqx.tree_at(lambda s: s.g_leak, self, g_leak_val)
+            y_new, _ = stepped_solver._run_newton(  # noqa: SLF001
+                component_groups, y, rtol=rtol, atol=atol, max_steps=max_steps
+            )
+            return y_new, None
+
+        y_final, _ = jax.lax.scan(step, y_guess, g_values)
+        return y_final
+
+    def solve_dc_source(
+        self,
+        component_groups: dict[str, Any],
+        y_guess: jax.Array,
+        n_steps: int = 10,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
+        max_steps: int = 100,
+    ) -> jax.Array:
+        """DC Operating Point via source stepping (homotopy rescue).
+
+        Ramps all source amplitudes (components tagged with ``amplitude_param``)
+        from 10 % to 100 % of their netlist values, using each converged
+        solution as the warm start for the next step.  This guides Newton
+        through the nonlinear region without the large initial step from 0V to
+        full excitation.
+
+        Implemented with ``jax.lax.scan`` — fully JIT/grad/vmap-compatible.
+
+        Args:
+            component_groups: Compiled circuit components.
+            y_guess: Initial guess (typically ``jnp.zeros(sys_size)``).
+            n_steps: Number of uniformly-spaced steps from 0.1 to 1.0.
+            rtol: Relative tolerance for each inner Newton solve.
+            atol: Absolute tolerance for each inner Newton solve.
+            max_steps: Max Newton iterations per step.
+
+        Returns:
+            Converged solution vector at full source amplitude.
+
+        """
+        scales = jnp.linspace(0.1, 1.0, n_steps)
+
+        def step(y: jax.Array, scale: jax.Array) -> tuple[jax.Array, None]:
+            y_new, _ = self._run_newton(
+                component_groups, y, source_scale=scale, rtol=rtol, atol=atol, max_steps=max_steps
+            )
+            return y_new, None
+
+        y_final, _ = jax.lax.scan(step, y_guess, scales)
+        return y_final
+
+    def solve_dc_auto(
+        self,
+        component_groups: dict[str, Any],
+        y_guess: jax.Array,
+        g_start: float = 1e-2,
+        n_gmin: int = 10,
+        n_source: int = 10,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
+        max_steps: int = 100,
+    ) -> jax.Array:
+        """DC Operating Point with automatic homotopy fallback.
+
+        Attempts a direct Newton solve first.  If it fails to converge, falls
+        back to GMIN stepping followed by source stepping — all inside a single
+        JIT-compiled kernel via ``jax.lax.cond``.
+
+        Strategy:
+        1.  ``_run_newton`` — plain damped Newton from ``y_guess``.
+        2.  On failure: ``solve_dc_gmin`` (GMIN stepping) starting from
+            ``y_guess``, then ``solve_dc_source`` (source stepping) from the
+            GMIN result.
+
+        Because ``jax.lax.cond`` evaluates both branches at *trace* time but
+        only one at *runtime*, this compiles to a single kernel with no Python-
+        level branching.
+
+        Args:
+            component_groups: Compiled circuit components.
+            y_guess: Initial guess (typically ``jnp.zeros(sys_size)``).
+            g_start: Starting leakage for GMIN stepping (rescue branch).
+            n_gmin: Number of GMIN steps in the rescue branch.
+            n_source: Number of source steps in the rescue branch.
+            rtol: Relative tolerance for each inner Newton solve.
+            atol: Absolute tolerance for each inner Newton solve.
+            max_steps: Max Newton iterations per step.
+
+        Returns:
+            Converged solution vector.
+
+        """
+        y_direct, converged = self._run_newton(
+            component_groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps
+        )
+
+        def rescue(_: None) -> jax.Array:
+            y_gmin = self.solve_dc_gmin(
+                component_groups, y_guess,
+                g_start=g_start, n_steps=n_gmin, rtol=rtol, atol=atol, max_steps=max_steps,
+            )
+            return self.solve_dc_source(
+                component_groups, y_gmin,
+                n_steps=n_source, rtol=rtol, atol=atol, max_steps=max_steps,
+            )
+
+        return jax.lax.cond(converged, lambda _: y_direct, rescue, None)
 
 
 # ==============================================================================
@@ -285,7 +498,7 @@ class DenseSolver(CircuitLinearSolver):
 
     @classmethod
     def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
     ) -> "DenseSolver":
         """Factory method to pre-calculate indices for the dense matrix."""
         rows, cols, ground_idxs, sys_size = _build_index_arrays(
@@ -297,6 +510,7 @@ class DenseSolver(CircuitLinearSolver):
             sys_size=sys_size,
             ground_indices=jnp.array(ground_idxs),
             is_complex=is_complex,
+            g_leak=g_leak,
         )
 
 
@@ -362,7 +576,7 @@ class KLUSplitSolver(CircuitLinearSolver):
 
     @classmethod
     def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
     ) -> "KLUSplitSolver":
         """Factory method to pre-hash indices for sparse coalescence."""
         rows, cols, ground_idxs, sys_size = _build_index_arrays(
@@ -379,6 +593,7 @@ class KLUSplitSolver(CircuitLinearSolver):
             ground_indices=jnp.array(ground_idxs),
             sys_size=sys_size,
             is_complex=is_complex,
+            g_leak=g_leak,
         )
 
 
@@ -431,7 +646,7 @@ class KlursSplitSolver(KLUSplitSolver):
 
     @classmethod
     def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
     ) -> "KlursSplitSolver":
         """Factory method to pre-hash indices for sparse coalescence."""
         rows, cols, ground_idxs, sys_size = _build_index_arrays(
@@ -448,46 +663,29 @@ class KlursSplitSolver(KLUSplitSolver):
             ground_indices=jnp.array(ground_idxs),
             sys_size=sys_size,
             is_complex=is_complex,
+            g_leak=g_leak,
         )
 
 
-class KLUSplitFactorSolver(KLUSplitSolver):
-    """Solves the system using the KLU sparse solver (via `klujax`) with split interface.
+class KLUSplitLinear(KLUSplitSolver):
+    """KLU split solver paired with Modified Newton (frozen-Jacobian) for linear convergence.
 
-    This solver performs symbolic analysis ONCE during initialization and reuses
-    the symbolic handle for subsequent solves, significantly speeding up non-linear
-    simulations (Newton-Raphson iterations). This version of the solver is further enhanced but calculting the numeric
-    part of the KLU solution only once
+    Extends :class:`KLUSplitSolver` with an explicit numeric factorization step so the
+    Jacobian can be **factored once per time step** and reused across all Newton iterations
+    within that step (Modified Newton / frozen-Jacobian scheme).  Use together with
+    :class:`~circulax.solvers.transient.FactorizedTransientSolver`.
 
     Best For:
-        - Large circuits (N > 5000) running on CPU.
-        - DC Operating Points of massive meshes.
-
-    Attributes:
-        Bp, Bi: CSC format indices (fixed structure).
-        csc_map_idx: Mapping from raw value indices to CSC value vector.
-        symbolic_handle: Pointer to the pre-computed KLU symbolic analysis.
+        - Large circuits (N > 5000) running on CPU where the Jacobian changes slowly.
+        - Transient simulations with many Newton iterations per step.
 
     """
-
-    u_rows: jax.Array
-    u_cols: jax.Array
-    map_idx: jax.Array
-
-    n_unique: int = eqx.field(static=True)
-    sys_size: int = eqx.field(static=True)
-
-    # numeric_handle: Optional[jax.Array] = None
-
-    _handle_wrapper: KLUHandleManager = eqx.field(static=True)
-
-    g_leak: float = 1e-9
 
     def cleanup(self) -> None:  # noqa: D102
         del self._handle_wrapper
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        """Regular solve - does full factor + solve."""
+        """Full factor + solve in one call (used by DC solver)."""
         g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
 
@@ -511,10 +709,43 @@ class KLUSplitFactorSolver(KLUSplitSolver):
             stats={},
         )
 
+    def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
+        """Factor the Jacobian and return a numeric handle for repeated solves.
+
+        Args:
+            all_vals: Flattened non-zero Jacobian values (COO format).
+
+        Returns:
+            Opaque numeric handle (``int32`` JAX scalar) to pass to
+            :meth:`solve_with_frozen_jacobian`.  Must be freed with
+            ``klujax.free_numeric`` after use to avoid C++ memory leaks.
+
+        """
+        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
+        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
+
+        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
+        coalesced_vals = jax.ops.segment_sum(
+            raw_vals, self.map_idx, num_segments=self.n_unique
+        )
+
+        return klujax.factor(
+            self.u_rows, self.u_cols, coalesced_vals, self._handle_wrapper.handle
+        )
+
     def solve_with_frozen_jacobian(
         self, residual: jax.Array, numeric: jax.Array
     ) -> lx.Solution:
-        """Solve using pre-computed numeric factorization (for frozen Jacobian Newton)."""
+        """Solve using a pre-computed numeric factorization.
+
+        Args:
+            residual: The right-hand side vector ``-F(y)``.
+            numeric: Handle returned by :meth:`factor_jacobian`.
+
+        Returns:
+            :class:`lineax.Solution` with the Newton step ``δy``.
+
+        """
         solution = klujax.solve_with_numeric(
             numeric, residual, self._handle_wrapper.handle
         )
@@ -525,38 +756,68 @@ class KLUSplitFactorSolver(KLUSplitSolver):
             stats={},
         )
 
-    def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
-        """Factor the Jacobian and return numeric handle."""
+    @classmethod
+    def from_component_groups(
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
+    ) -> "KLUSplitLinear":
+        """Factory — delegates to :meth:`KLUSplitSolver.from_component_groups`."""
+        return super().from_component_groups(  # type: ignore[return-value]
+            component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
+        )
+
+
+KLUSplitFactorSolver = KLUSplitLinear  # backward-compat alias
+
+
+class KLUSplitQuadratic(KLUSplitLinear):
+    """KLU split solver paired with full Newton for quadratic convergence via ``klu_refactor``.
+
+    Extends :class:`KLUSplitLinear` with :meth:`refactor_jacobian`, which updates the numeric
+    LU factorization in-place using ``klujax.refactor``.  The sparsity pattern is fixed for a
+    given circuit topology, so KLU reuses the existing memory allocation and fill-reducing
+    permutation — only the L/U values are recomputed.  This gives full Newton (quadratic)
+    convergence at a fraction of the cost of re-calling ``klu_factor`` at every iteration.
+
+    Use together with :class:`~circulax.solvers.transient.RefactoringTransientSolver`.
+
+    Best For:
+        - Large circuits on CPU with nonlinear devices where quadratic convergence is desired.
+        - Transient simulations where the Jacobian changes significantly between Newton iterates.
+
+    """
+
+    def refactor_jacobian(self, all_vals: jax.Array, numeric: jax.Array) -> jax.Array:
+        """Update the numeric factorization in-place with new Jacobian values.
+
+        Reuses the existing memory allocation and fill-reducing permutation from the
+        symbolic analysis; only the L/U values are recomputed.  Faster than calling
+        :meth:`~KLUSplitLinear.factor_jacobian` from scratch each Newton iteration.
+
+        Args:
+            all_vals: Flattened non-zero Jacobian values (COO format).
+            numeric: Existing handle returned by :meth:`~KLUSplitLinear.factor_jacobian`.
+
+        Returns:
+            Refreshed numeric handle (same underlying C++ object, now connected in the
+            XLA computation graph so the refactor cannot be eliminated as dead code).
+
+        """
         g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(
-            raw_vals, self.map_idx, num_segments=self.n_unique
+        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
+        return klujax.refactor(
+            self.u_rows, self.u_cols, coalesced_vals, numeric, self._handle_wrapper.handle
         )
 
-        return klujax.factor(
-            self.u_rows, self.u_cols, coalesced_vals, self.symbolic_handle
+    @classmethod
+    def from_component_groups(
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
+    ) -> "KLUSplitQuadratic":
+        """Factory — delegates to :meth:`KLUSplitSolver.from_component_groups`."""
+        return super().from_component_groups(  # type: ignore[return-value]
+            component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
         )
-
-    # def __del__(self):
-    #     self.cleanup()
-
-    # def cleanup(self):
-    #     """Free the C++ symbolic handle. Call when done with the solver."""
-    #     # Check if handle exists and is not None
-    #     if hasattr(self, 'symbolic_handle') and self.symbolic_handle is not None:
-    #         # We must be careful not to free Tracers during JIT compilation.
-    #         # Tracers are instances of jax.core.Tracer.
-    #         # If we are inside JIT, calling free_symbolic creates a side-effect node
-    #         # which is fine (it gets DCE'd if unused), but for __del__ we want immediate host cleanup.
-    #         try:
-    #             # Eagerly call free if it's a concrete array
-    #             if isinstance(self.symbolic_handle, jax.Array):
-    #                  klujax.free_symbolic(self.symbolic_handle)
-    #         except Exception:
-    #             # Fallback or silence errors during shutdown
-    #             pass
 
 
 class KLUSolver(CircuitLinearSolver):
@@ -600,7 +861,7 @@ class KLUSolver(CircuitLinearSolver):
 
     @classmethod
     def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
     ) -> "KLUSolver":
         """Factory method to pre-hash indices for sparse coalescence."""
         rows, cols, ground_idxs, sys_size = _build_index_arrays(
@@ -615,6 +876,7 @@ class KLUSolver(CircuitLinearSolver):
             ground_indices=jnp.array(ground_idxs),
             sys_size=sys_size,
             is_complex=is_complex,
+            g_leak=g_leak,
         )
 
 
@@ -687,7 +949,7 @@ class SparseSolver(CircuitLinearSolver):
 
     @classmethod
     def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False
+        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
     ) -> "SparseSolver":
         """Factory method to prepare indices and diagonal mask."""
         rows, cols, ground_idxs, sys_size = _build_index_arrays(
@@ -700,7 +962,11 @@ class SparseSolver(CircuitLinearSolver):
             sys_size=sys_size,
             ground_indices=jnp.array(ground_idxs),
             is_complex=is_complex,
+            g_leak=g_leak,
         )
+
+    def cleanup(self):
+        pass
 
 
 backends: dict[str, type[CircuitLinearSolver]] = {
@@ -711,16 +977,25 @@ backends: dict[str, type[CircuitLinearSolver]] = {
 }
 
 if split_solver_available:
-    backends["klu_split"] = KLUSplitSolver
+    backends["klu_split_linear"] = KLUSplitLinear
+    backends["klu_split"] = KLUSplitQuadratic if split_refactor_available else KLUSplitLinear
     backends["klu_rs_split"] = KlursSplitSolver
+    # Legacy aliases
+    backends["klu_split_factor"] = KLUSplitLinear
+    backends["klu_split_refactor"] = KLUSplitQuadratic if split_refactor_available else KLUSplitLinear
+    # Default uses klu_split when the split interface is available
+    backends["default"] = backends["klu_split"]
 else:
     # Silently fall back to KLUSolver when KLUHandleManager is not available
     backends["klu_split"] = KLUSolver
+    backends["klu_split_linear"] = KLUSolver
+    backends["klu_split_factor"] = KLUSolver
+    backends["klu_split_refactor"] = KLUSolver
     backends["klu_rs_split"] = KLUSolver
 
 
 def analyze_circuit(
-    groups: list, num_vars: int, backend: str = "default", *, is_complex: bool = False
+    groups: list, num_vars: int, backend: str = "default", *, is_complex: bool = False, g_leak: float = 1e-9
 ) -> CircuitLinearSolver:
     """Initializes a linear solver strategy for circuit analysis.
 
@@ -763,6 +1038,6 @@ def analyze_circuit(
             msg
         )
 
-    linear_strategy = solver_class.from_component_groups(groups, num_vars, is_complex=is_complex)
+    linear_strategy = solver_class.from_component_groups(groups, num_vars, is_complex=is_complex, g_leak=g_leak)
 
     return linear_strategy

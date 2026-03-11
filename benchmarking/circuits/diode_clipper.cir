@@ -1,0 +1,25 @@
+* Diode half-wave clipper benchmark
+* Matches benchmarking/diode_clipper_hb_testbench.py
+*
+* Nodes: 0(GND), inp, mid, out
+* inp — source node (after Vs)
+* mid — between Rs and D1 (anode of diode)
+* out — output across RL
+
+.model D1N4007 D IS=76.9p RS=42.0m BV=1.00k IBV=5.00u CJO=26.5p M=0.333 N=1.45
+
+vs inp 0 dc=0 sin 0 2.0 1k
+rs inp mid 1k
+d1 mid out D1N4007
+rl out 0 10k
+
+.options klu method=gear maxord=2
+
+.control
+  tran 1u 20m 0 1u
+  wrdata /tmp/ngspice_diode_clipper.dat v(inp) v(out)
+  set noaskquit
+  quit
+.endc
+
+.end

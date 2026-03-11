@@ -7,7 +7,6 @@ archive/*
 .env
 app/*
 circulax_workspace.code-workspace
-docs/examples/
 docs/references/
 *code-workspace
 site/*

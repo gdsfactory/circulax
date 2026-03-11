@@ -1,9 +1,116 @@
-/* Light mode - black logo */
-[data-md-color-scheme="white"] img[src="images/logo.svg"] {
-    filter: brightness(0);
+
+/* ── Table of contents — hide right-side TOC sidebar globally ────────────── */
+/* The right-hand TOC adds visual noise on short pages and in tabbed layouts.
+   Content reflows to fill the full width. */
+
+.md-sidebar--secondary {
+    display: none;
 }
 
-/* Dark mode - white logo */
-[data-md-color-scheme="slate"] img[src="images/logo.svg"] {
-    filter: brightness(0) invert(1);
+
+/* ── Code blocks ─────────────────────────────────────────────────────────── */
+
+/* Slightly rounded corners on fenced code blocks */
+.highlight,
+.md-typeset pre {
+    border-radius: 6px;
+}
+
+/* Rounded inline code */
+.md-typeset code {
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+}
+
+/* Subtle left-accent border on fenced blocks to visually anchor them */
+.md-typeset .highlight {
+    border-left: 3px solid var(--md-primary-fg-color);
+}
+
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+
+/* Bold, coloured header row */
+.md-typeset table:not([class]) th {
+    background-color: var(--md-primary-fg-color);
+    color: var(--md-primary-bg-color);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Zebra striping on even rows */
+.md-typeset table:not([class]) tr:nth-child(even) td {
+    background-color: var(--md-default-bg-color--light);
+}
+
+/* Tighter cell padding */
+.md-typeset table:not([class]) th,
+.md-typeset table:not([class]) td {
+    padding: 0.5em 0.9em;
+}
+
+
+/* ── Admonitions ─────────────────────────────────────────────────────────── */
+
+.md-typeset .admonition,
+.md-typeset details {
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+    font-weight: 600;
+}
+
+
+/* ── API reference (mkdocstrings) ────────────────────────────────────────── */
+
+/* Separator under each symbol heading */
+.doc-heading {
+    border-bottom: 1px solid var(--md-default-fg-color--lightest);
+    padding-bottom: 0.2em;
+    margin-bottom: 0.6em;
+}
+
+/* Tighter parameter tables */
+.doc-contents table th,
+.doc-contents table td {
+    padding: 0.35em 0.7em;
+    font-size: 0.82rem;
+}
+
+/* Distinguish parameter names */
+.doc-contents table td:first-child code {
+    font-weight: 600;
+}
+
+
+/* ── Jupyter notebook outputs (mkdocs-jupyter) ───────────────────────────── */
+
+/* Accent left-border on cell output areas */
+.jp-OutputArea-output {
+    border-left: 3px solid var(--md-primary-fg-color);
+    padding-left: 0.8em;
+    margin-left: 0;
+}
+
+/* Remove default notebook cell border so Material theme owns the styling */
+.jp-Cell {
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Ensure output text inherits theme colour */
+.jp-OutputArea-output pre {
+    background: transparent;
+    color: var(--md-default-fg-color);
+}
+
+
+/* ── Navigation tabs ─────────────────────────────────────────────────────── */
+
+/* Subtle bottom border on the tab strip */
+.md-tabs {
+    border-bottom: 1px solid var(--md-default-fg-color--lightest);
 }

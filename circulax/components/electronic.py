@@ -55,7 +55,7 @@ def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
 # ===========================================================================
 
 
-@source(ports=("p1", "p2"), states=("i_src",))
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V")
 def VoltageSource(
     signals: Signals, s: States, t: float, V: float = 0.0, delay: float = 0.0
 ) -> PhysicsReturn:
@@ -65,7 +65,7 @@ def VoltageSource(
     return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",))
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V")
 def SmoothPulse(
     signals: Signals,
     s: States,
@@ -81,7 +81,7 @@ def SmoothPulse(
     return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",))
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V")
 def VoltageSourceAC(
     signals: Signals,
     s: States,
@@ -99,7 +99,47 @@ def VoltageSourceAC(
     return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
 
-@component(ports=("p1", "p2"))
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="v2")
+def PulseVoltageSource(
+    signals: Signals,
+    s: States,
+    t: float,
+    v1: float = 0.0,
+    v2: float = 1.0,
+    td: float = 0.0,
+    tr: float = 1e-9,
+    tf: float = 1e-9,
+    pw: float = 1e-3,
+    per: float = 2e-3,
+) -> PhysicsReturn:
+    """SPICE-compatible PULSE voltage source: PULSE(v1 v2 td tr tf pw per).
+
+    Parameters
+    ----------
+    v1  : initial (low) voltage
+    v2  : pulsed (high) voltage
+    td  : delay time before first edge
+    tr  : rise time (v1 → v2)
+    tf  : fall time (v2 → v1)
+    pw  : pulse width (time at v2)
+    per : period (must satisfy per >= td + tr + pw + tf)
+
+    """
+    t_shifted = jnp.where(t >= td, t - td, 0.0)
+    t_in_period = jnp.mod(t_shifted, per)
+    v_rising = v1 + (v2 - v1) * t_in_period / (tr + 1e-30)
+    v_falling = v2 - (v2 - v1) * (t_in_period - tr - pw) / (tf + 1e-30)
+    v_periodic = jnp.where(
+        t_in_period < tr,
+        v_rising,
+        jnp.where(t_in_period < tr + pw, v2, jnp.where(t_in_period < tr + pw + tf, v_falling, v1)),
+    )
+    v_val = jnp.where(t < td, v1, v_periodic)
+    constraint = (signals.p1 - signals.p2) - v_val
+    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+
+
+@component(ports=("p1", "p2"), amplitude_param="I")
 def CurrentSource(signals: Signals, s: States, I: float = 0.0) -> PhysicsReturn:
     """Constant current source."""
     return {"p1": I, "p2": -I}, {}
@@ -347,8 +387,11 @@ def NMOSDynamic(
 def _junction_charge(v, Cj0, Vj, m) -> float:
     """Integrate the SPICE depletion capacitance model to obtain junction charge.
 
-    Uses linear extrapolation beyond ``fc * Vj`` (``fc = 0.5``) to avoid
-    NaN from the power-law term under forward bias.
+    Returns ``Q = integral from 0 to v of Cj(v') dv'``, so ``dQ/dv = +Cj(v) > 0``.
+    Uses linear extrapolation beyond ``fc * Vj`` (``fc = 0.5``) to avoid the
+    power-law singularity as ``v → Vj``.  The anchor at the threshold is a
+    precomputed constant so the diverging ``dq_normal/dv`` cannot leak through
+    ``jnp.where`` into the extrapolation region.
 
     Args:
         v: Junction voltage in volts.
@@ -362,17 +405,18 @@ def _junction_charge(v, Cj0, Vj, m) -> float:
     """
     fc = 0.5
     v_thresh = fc * Vj
-    # Standard SPICE depletion charge model
+    # Standard SPICE depletion charge: Cj0*Vj/(1-m) * [1 - (1 - v/Vj)^(1-m)]
     q_normal = (
-        -Cj0
+        Cj0
         * Vj
         / (1.0 - m)
-        * (1.0 - jnp.power(jnp.maximum(0.0, 1.0 - v / Vj), 1.0 - m) - 1.0)
+        * (1.0 - jnp.power(jnp.maximum(0.0, 1.0 - v / Vj), 1.0 - m))
     )
 
-    # Linear extrapolation beyond threshold to prevent NaN
-    C_linear = Cj0 / jnp.power(1.0 - fc, m)
-    q_high = C_linear * (v - v_thresh) + q_normal
+    # Linear extrapolation beyond threshold: fixed anchor + constant slope C_linear
+    C_linear = Cj0 / jnp.power(1.0 - fc, m)                                    # Cj(v_thresh)
+    q_thresh = Cj0 * Vj / (1.0 - m) * (1.0 - jnp.power(1.0 - fc, 1.0 - m))   # q_normal(v_thresh)
+    q_high = q_thresh + C_linear * (v - v_thresh)
 
     return jnp.where(v < v_thresh, q_normal, q_high)
 

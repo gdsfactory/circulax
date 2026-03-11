@@ -5,12 +5,13 @@ and for wrapping SAX model functions as circulax components.
 """
 
 import inspect
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 from sax import get_ports, sdense
 
-from circulax.components.base_component import Signals, States, component
+from circulax.components.base_component import CircuitComponent, Signals, States, _extract_param, component
 
 
 @jax.jit
@@ -97,3 +98,139 @@ def sax_component(fn: callable) -> callable:
     physics_wrapper.__signature__ = sig
 
     return component(ports=detected_ports)(physics_wrapper)
+
+
+def _build_fdomain_component(
+    fn: callable,
+    ports: tuple[str, ...],
+) -> type[CircuitComponent]:
+    """Compile a frequency-domain admittance function into a :class:`CircuitComponent` subclass.
+
+    The decorated function must have signature ``fn(f, **params) -> jnp.ndarray`` where
+    the return value is a Y-matrix of shape ``(n_ports, n_ports)``.
+
+    Args:
+        fn: Admittance function.  First argument must be ``f`` (frequency in Hz);
+            subsequent keyword arguments are scalar parameters with defaults.
+        ports: Ordered tuple of port names matching the netlist connections.
+
+    Returns:
+        A new :class:`CircuitComponent` subclass named after ``fn`` with
+        ``_is_fdomain = True``.
+
+    Raises:
+        TypeError: If the signature is invalid, a parameter lacks a default, or
+            the dry-run with ``f=0`` raises an exception.
+
+    """
+    sig = inspect.signature(fn)
+    params_list = list(sig.parameters.values())
+
+    if not params_list or params_list[0].name != "f":
+        msg = f"fdomain_component function '{fn.__name__}' must have 'f' as its first argument."
+        raise TypeError(msg)
+
+    param_specs = params_list[1:]  # everything after 'f'
+    for p in param_specs:
+        if p.default is inspect.Parameter.empty:
+            msg = f"Parameter '{p.name}' in '{fn.__name__}' must have a default value."
+            raise TypeError(msg)
+
+    _defaults = {p.name: p.default for p in param_specs}
+    _param_names = tuple(p.name for p in param_specs)
+
+    try:
+        fn(0.0, **_defaults)
+    except Exception as exc:
+        raise TypeError(f"fdomain_component dry-run failed for '{fn.__name__}': {exc}") from exc
+
+    _user_fn = fn
+
+    def _fast_physics(f: float, args: Any) -> jnp.ndarray:
+        """Evaluate admittance matrix at frequency *f*.
+
+        Args:
+            f: Frequency in Hz.
+            args: Parameter container (Equinox module or dict) for this instance.
+
+        Returns:
+            Y-matrix of shape ``(n_ports, n_ports)``, dtype ``complex128``.
+
+        """
+        kw = {name: _extract_param(args, name) for name in _param_names}
+        return _user_fn(f, **kw)
+
+    annotations = {
+        p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any)
+        for p in param_specs
+    }
+
+    namespace: dict[str, Any] = {
+        "__annotations__": annotations,
+        "ports": ports,
+        "states": (),
+        "_is_fdomain": True,
+        "_uses_time": False,
+        "_fast_physics": staticmethod(_fast_physics),
+        **_defaults,
+    }
+
+    @classmethod  # type: ignore[misc]
+    def solver_call(cls, f: float, args: Any) -> jnp.ndarray:  # noqa: ANN001
+        """Evaluate admittance matrix at frequency *f* (solver entry point).
+
+        Args:
+            f: Frequency in Hz.
+            args: Parameter container for this instance.
+
+        Returns:
+            Y-matrix of shape ``(n_ports, n_ports)``.
+
+        """
+        return cls._fast_physics(f, args)
+
+    namespace["solver_call"] = solver_call
+
+    cls = type(fn.__name__, (CircuitComponent,), namespace)
+    cls.__doc__ = fn.__doc__
+    return cls
+
+
+def fdomain_component(ports: tuple[str, ...]) -> Any:
+    """Decorator for frequency-domain (admittance) circuit components.
+
+    Compiles the decorated admittance function into a
+    :class:`~circulax.components.base_component.CircuitComponent` subclass
+    that is evaluated in the frequency domain rather than the time domain.
+    The component:
+
+    - **DC analysis** — evaluated at ``f = 0`` Hz (e.g. skin-effect reduces to
+      ``R₀`` at DC).
+    - **Harmonic Balance** — evaluated at each harmonic frequency ``k · f₀``,
+      contributing ``Y(k · f₀) @ V_k`` directly to the frequency-domain residual.
+    - **Transient simulation** — raises :exc:`RuntimeError` at setup time
+      (time-domain convolution not supported).
+
+    The decorated function must accept ``f`` as its first positional argument
+    (frequency in Hz) followed by any number of keyword parameters with defaults.
+    It must return a square Y-matrix of shape ``(n_ports, n_ports)`` with
+    ``dtype=complex128``.
+
+    Args:
+        ports: Ordered tuple of port names matching the netlist connection keys.
+
+    Returns:
+        A decorator that accepts an admittance function and returns a
+        :class:`~circulax.components.base_component.CircuitComponent` subclass.
+
+    Example::
+
+        @fdomain_component(ports=("p1", "p2"))
+        def SkinEffectResistor(f: float, R0: float = 1.0, a: float = 0.1):
+            \"\"\"Z(f) = R0 + a * sqrt(|f|)\"\"\"
+            Z = R0 + a * jnp.sqrt(jnp.abs(f) + 1e-30)
+            Y = 1.0 / Z
+            return jnp.array([[Y, -Y], [-Y, Y]], dtype=jnp.complex128)
+
+    """
+    return lambda fn: _build_fdomain_component(fn, ports)

@@ -22,6 +22,7 @@ algebra kernels.
 
 import functools
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array
@@ -90,13 +91,15 @@ def assemble_system_real(
     component_groups: dict,
     t1: float,
     dt: float,
+    source_scale: float = 1.0,
+    alpha: float = 1.0,
 ) -> tuple[Array, Array, Array]:
     """Assemble the residual vectors and effective Jacobian values for a real system.
 
     For each component group, evaluates the physics at ``t1`` and computes the
     forward-mode Jacobian via ``jax.jacfwd``. The effective Jacobian combines
-    the resistive and reactive contributions as ``J_eff = df/dy + (1/dt) * dq/dy``,
-    consistent with the implicit trapezoidal discretisation used by the solver.
+    the resistive and reactive contributions as ``J_eff = df/dy + (alpha/dt) * dq/dy``,
+    where ``alpha=1`` recovers Backward Euler and ``alpha=3/2`` (uniform step) gives BDF2.
 
     Components are processed in sorted key order to ensure a deterministic
     non-zero layout in the sparse Jacobian, which is required for the
@@ -108,6 +111,13 @@ def assemble_system_real(
             :func:`compile_netlist`, keyed by group name.
         t1: Time at which the system is being evaluated.
         dt: Timestep duration, used to scale the reactive Jacobian block.
+        source_scale: Multiplicative scale applied to source amplitudes
+            (components whose ``amplitude_param`` is set).  Use ``1.0``
+            for a standard evaluation and values in ``(0, 1)`` during
+            DC homotopy source stepping.
+        alpha: Jacobian scaling factor for the reactive block.  Use ``1.0``
+            for Backward Euler, the variable-step BDF2 ``α₀`` coefficient for
+            BDF2, or ``1/γ`` for SDIRK3 stages.
 
     Returns:
         A three-tuple ``(total_f, total_q, jac_vals)`` where:
@@ -125,20 +135,86 @@ def assemble_system_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain component: evaluate admittance at f=0 (DC).
+            v_locs = y_guess[group.var_indices]
+            Y_mats = jax.vmap(lambda p: group.physics_func(0.0, p))(group.params)
+            Y_real = Y_mats.real  # (N, n_ports, n_ports)
+            f_l = jnp.einsum("nij,nj->ni", Y_real, v_locs)  # (N, n_ports)
+            total_f = total_f.at[group.eq_indices].add(f_l)
+            vals_list.append(Y_real.reshape(-1))  # Jacobian = Y at DC
+            continue
+
         v_locs = y_guess[group.var_indices]
+
+        ap = group.amplitude_param
+        params = (
+            eqx.tree_at(lambda p, _ap=ap: getattr(p, _ap), group.params, getattr(group.params, ap) * source_scale)
+            if ap
+            else group.params
+        )
 
         physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
 
         (f_l, q_l), (df_l, dq_l) = jax.vmap(
             functools.partial(_primal_and_jac_real, physics_at_t1)
-        )(v_locs, group.params)
+        )(v_locs, params)
 
         total_f = total_f.at[group.eq_indices].add(f_l)
         total_q = total_q.at[group.eq_indices].add(q_l)
-        j_eff = df_l + (dq_l / dt)
+        j_eff = df_l + (alpha / dt) * dq_l
         vals_list.append(j_eff.reshape(-1))
 
     return total_f, total_q, jnp.concatenate(vals_list)
+
+
+def assemble_gc_real(
+    y_guess: Array,
+    component_groups: dict,
+) -> tuple[Array, Array]:
+    """Return separate G and C COO value arrays at the linearisation point.
+
+    Mirrors :func:`assemble_system_real` but returns ``df/dy`` (conductance) and
+    ``dq/dy`` (capacitance) separately instead of combining them as
+    ``G + C/dt``.  Frequency-domain groups contribute zero-filled blocks so that
+    the returned arrays align with the static COO index arrays produced by
+    ``_build_index_arrays`` (which includes all groups).
+
+    Args:
+        y_guess: Linearisation point (DC operating point), shape ``(num_vars,)``.
+        component_groups: Compiled component groups from :func:`compile_netlist`.
+
+    Returns:
+        A two-tuple ``(G_vals, C_vals)`` of real-valued 1-D JAX arrays.  Both
+        have the same length as the concatenated ``jac_rows``/``jac_cols`` COO
+        index arrays from ``_build_index_arrays``.
+
+    """
+    g_vals_list = []
+    c_vals_list = []
+
+    for k in sorted(component_groups.keys()):
+        group = component_groups[k]
+        n_entries = int(jnp.array(group.jac_rows).reshape(-1).shape[0])
+
+        if group.is_fdomain:
+            # Fdomain groups are re-evaluated per-frequency in ac_sweep.
+            # Emit zero blocks so COO alignment with _build_index_arrays is preserved.
+            g_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
+            c_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
+            continue
+
+        v_locs = y_guess[group.var_indices]
+        physics_at_dc = functools.partial(_real_physics, group=group, t1=0.0)
+
+        (_, _), (df_l, dq_l) = jax.vmap(
+            functools.partial(_primal_and_jac_real, physics_at_dc)
+        )(v_locs, group.params)
+
+        g_vals_list.append(df_l.reshape(-1))
+        c_vals_list.append(dq_l.reshape(-1))
+
+    return jnp.concatenate(g_vals_list), jnp.concatenate(c_vals_list)
 
 
 def assemble_residual_only_real(
@@ -174,6 +250,11 @@ def assemble_residual_only_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain groups have no time-domain physics; their contribution is
+            # added directly in the frequency domain by the HB solver.
+            continue
+
         v = y_guess[group.var_indices]
 
         physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
@@ -191,6 +272,8 @@ def assemble_system_complex(
     component_groups: dict,
     t1: float,
     dt: float,
+    source_scale: float = 1.0,
+    alpha: float = 1.0,
 ) -> tuple[Array, Array, Array]:
     """Assemble the residual vectors and effective Jacobian values for an unrolled complex system.
 
@@ -213,6 +296,13 @@ def assemble_system_complex(
             :func:`compile_netlist`, keyed by group name.
         t1: Time at which the system is being evaluated.
         dt: Timestep duration, used to scale the reactive Jacobian blocks.
+        source_scale: Multiplicative scale applied to source amplitudes
+            (components whose ``amplitude_param`` is set).  Use ``1.0``
+            for a standard evaluation and values in ``(0, 1)`` during
+            DC homotopy source stepping.
+        alpha: Jacobian scaling factor for the reactive blocks.  Use ``1.0``
+            for Backward Euler, the variable-step BDF2 ``α₀`` coefficient for
+            BDF2, or ``1/γ`` for SDIRK3 stages.
 
     Returns:
         A three-tuple ``(total_f, total_q, jac_vals)`` where:
@@ -236,13 +326,38 @@ def assemble_system_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain component: evaluate admittance at f=0 (DC) — complex circuit path.
+            v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
+            v_c = v_r + 1j * v_i  # (N, n_ports) complex
+            Y_mats = jax.vmap(lambda p: group.physics_func(0.0, p))(group.params)
+            i_c = jnp.einsum("nij,nj->ni", Y_mats, v_c)  # (N, n_ports) complex
+            idx_r, idx_i = group.eq_indices, group.eq_indices + half_size
+            total_f = total_f.at[idx_r].add(i_c.real).at[idx_i].add(i_c.imag)
+            # Jacobian blocks: dI/dVr = Y.real, dI/dVi = -Y.imag (by Cauchy-Riemann)
+            # For general complex Y: dIr/dVr = Yr, dIr/dVi = -Yi, dIi/dVr = Yi, dIi/dVi = Yr
+            Yr = Y_mats.real  # (N, n_ports, n_ports)
+            Yi = Y_mats.imag
+            vals_blocks[0].append(Yr.reshape(-1))   # RR: dIr/dVr
+            vals_blocks[1].append((-Yi).reshape(-1))  # RI: dIr/dVi
+            vals_blocks[2].append(Yi.reshape(-1))    # IR: dIi/dVr
+            vals_blocks[3].append(Yr.reshape(-1))    # II: dIi/dVi
+            continue
+
         v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
+
+        ap = group.amplitude_param
+        params = (
+            eqx.tree_at(lambda p, _ap=ap: getattr(p, _ap), group.params, getattr(group.params, ap) * source_scale)
+            if ap
+            else group.params
+        )
 
         physics_split = functools.partial(_complex_physics, group=group, t1=t1)
 
         (fr, fi, qr, qi), (dfr_r, dfi_r, dqr_r, dqi_r), (dfr_i, dfi_i, dqr_i, dqi_i) = (
             jax.vmap(functools.partial(_primal_and_jac_complex, physics_split))(
-                v_r, v_i, group.params
+                v_r, v_i, params
             )
         )
 
@@ -250,10 +365,10 @@ def assemble_system_complex(
         total_f = total_f.at[idx_r].add(fr).at[idx_i].add(fi)
         total_q = total_q.at[idx_r].add(qr).at[idx_i].add(qi)
 
-        vals_blocks[0].append((dfr_r + dqr_r / dt).reshape(-1))  # RR
-        vals_blocks[1].append((dfr_i + dqr_i / dt).reshape(-1))  # RI
-        vals_blocks[2].append((dfi_r + dqi_r / dt).reshape(-1))  # IR
-        vals_blocks[3].append((dfi_i + dqi_i / dt).reshape(-1))  # II
+        vals_blocks[0].append((dfr_r + (alpha / dt) * dqr_r).reshape(-1))  # RR
+        vals_blocks[1].append((dfr_i + (alpha / dt) * dqr_i).reshape(-1))  # RI
+        vals_blocks[2].append((dfi_r + (alpha / dt) * dqi_r).reshape(-1))  # IR
+        vals_blocks[3].append((dfi_i + (alpha / dt) * dqi_i).reshape(-1))  # II
 
     all_vals = jnp.concatenate([jnp.concatenate(b) for b in vals_blocks])
     return total_f, total_q, all_vals
@@ -294,6 +409,11 @@ def assemble_residual_only_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+        if group.is_fdomain:
+            # F-domain groups have no time-domain physics; their contribution is
+            # added directly in the frequency domain by the HB solver.
+            continue
+
         v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
 
         physics_split = functools.partial(_complex_physics, group=group, t1=t1)

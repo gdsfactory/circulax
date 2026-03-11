@@ -39,10 +39,11 @@ test = [
 ]
 docs = [
     "ipykernel>=6.29.5",
+    "nbconvert",
+    "papermill",
     "hippogriffe==0.2.2",
     "mkdocs==1.6.1",
     "mkdocs-include-exclude-files==0.1.0",
-    "mkdocs-jupyter",
     "mkdocs-material==9.6.7",
     "mkdocstrings==0.28.3",
     "mkdocstrings-python==1.16.8",
@@ -56,6 +57,8 @@ docs = [
     "mkdocs-material>=9.6.0",
     "mkdocs>=1.6.1",
     "mkdocstrings[python]>=0.27.0",
+    "mkdocs-glightbox>=0.4.0",
+    "mkdocs-minify-plugin>=0.8.0",
 ]
 dev = [
     "circulax[test,docs]",
@@ -98,6 +101,9 @@ platforms = ["linux-64","osx-arm64"]
 # pixi-build is still preview-gated
 preview = ["pixi-build"]
 
+[tool.pixi.activation]
+scripts = ["scripts/activate.sh"]
+
 # Shared editable install for all environments
 [tool.pixi.pypi-dependencies]
 circulax = { path = ".", editable = true }
@@ -136,6 +142,19 @@ circulax = { path = ".", editable = true, extras = ["test"] }
 tqdm = ">=4.67.1,<5"
 uv = ">=0.6"
 
+# Benchmark feature — NGSpice accuracy comparison
+[tool.pixi.feature.benchmark.dependencies]
+scipy = ">=1.13"
+matplotlib = ">=3.9"
+tqdm = ">=4.67"
+
+# NGSpice is linux-64 only (no osx-arm64 conda package)
+[tool.pixi.feature.benchmark.target.linux-64.dependencies]
+ngspice = "*"
+
+[tool.pixi.feature.benchmark.pypi-dependencies]
+circulax = { path = ".", editable = true }
+
 
 # ---------------------------------------------------------------------------
 # Tasks
@@ -143,10 +162,11 @@ uv = ">=0.6"
 
 [tool.pixi.tasks]
 copy_readme      = "cp ReadMe.md docs/index.md && sed -i 's|docs/images|images|g' docs/index.md"
-clean_old_docs   = "rm -rf docs/examples/electrical docs/examples/photonic || true"
-copy-examples    = { cmd = ["mkdir", "-p", "docs/examples", "&&", "cp", "-r", "examples/electrical", "examples/photonic", "docs/examples/"], depends-on = ["clean_old_docs"] }
 install_ipkernel = "python -m ipykernel install --user --name circulax"
-docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme", "copy-examples", "install_ipkernel"] }
+nbrun            = { cmd = ["/bin/sh", "-c", "find examples -name '*.ipynb' -not -path '*/.ipynb_checkpoints/*' | xargs -P4 -I NB papermill NB NB -k circulax"], depends-on = ["install_ipkernel"], description = "Execute all notebooks in-place with papermill (parallel)" }
+nbdocs           = { cmd = "rm -rf docs/examples && mkdir -p docs/examples && jupyter nbconvert --config docs/nbconvert_config.py --to markdown", depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
+docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
+docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
 pytest_run       = { cmd = ["pytest", "tests",], depends-on = ["install_ipkernel"] }
 lint_format      = "ruff format"
 lint_check       = "ruff -v check"
@@ -155,6 +175,10 @@ build-wheel      = { cmd = "uv build --wheel", description = "Build wheel only" 
 build-sdist      = { cmd = "uv build --sdist", description = "Build sdist only" }
 build-conda      = { cmd = "pixi build", description = "Build conda package" }
 clean-dist       = { cmd = "rm -rf dist/", description = "Remove build artifacts" }
+bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_testbench.py"],        description = "RC pulse testbench" }
+bench_cascade    = { cmd = ["python", "benchmarking/diode_cascade_testbench.py"],   description = "Diode cascade testbench" }
+bench_rectifier  = { cmd = ["python", "benchmarking/fullwave_rect_testbench.py"],   description = "Full-wave rectifier testbench" }
+bench_lc_ladder  = { cmd = ["python", "benchmarking/lc_ladder_testbench.py"],       description = "LC ladder scalability testbench" }
 
 # ---------------------------------------------------------------------------
 # Environments
@@ -167,6 +191,9 @@ default = { features = ["py313", "dev"], solve-group = "py313" }
 py311 = { features = ["py311", "test"], solve-group = "py311" }
 py312 = { features = ["py312", "test"], solve-group = "py312" }
 py313 = { features = ["py313", "test"], solve-group = "py313" }
+
+# Benchmark environment — includes NGSpice for accuracy comparisons
+benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }
 
 # ---------------------------------------------------------------------------
 # Pytest

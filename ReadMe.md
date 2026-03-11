@@ -1,6 +1,6 @@
 # **Circulax**
 
-<img src="docs/images/logo_white.svg" alt="logo" width="350">
+<img src="docs/images/logo.svg" alt="logo" width="350">
 
 ## **A Differentiable, Functional Circuit Simulator based on JAX**
 Circulax is a differentiable circuit simulation framework built on [JAX](https://docs.jax.dev/en/latest/notebooks/thinking_in_jax.html), [Optimistix](https://github.com/patrick-kidger/optimistix) and [Diffrax](https://docs.kidger.site/diffrax/). It treats circuit netlists as systems of Ordinary Differential Equations (ODEs), leveraging Diffrax's suite of numerical solvers for transient analysis.
@@ -36,7 +36,7 @@ circulax strictly separates Physics, Topology, and Analysis, enabling the interc
 Components are defined as simple Python functions wrapped with the ```@component``` decorator. This functional interface abstracts away the boilerplate, allowing users to define physics using simple voltage/current/field/flux relationships.
 
 ```python
-from circulax.base_component import component, Signals, States
+from circulax.components.base_component import component, Signals, States
 import jax.numpy as jnp
 
 @component(ports=("p1", "p2"))
@@ -78,11 +78,15 @@ netlist = [
 ### **Analysis**
 The solver is a generic DAE engine linking Diffrax (Time-stepping) and Optimistix (Root-finding).
 
-* Transient: Solves $F(y) + \frac{d}{dt}Q(y) = 0$ using Implicit Backward Euler (or any other solver compatible with Diffrax).
+* Transient: Solves $F(y) + \frac{d}{dt}Q(y) = 0$ using implicit time-stepping with adaptive step control.
 
 * DC Operating Point: Solves $F(y) = 0$ (automatically ignoring $Q$).
 
-* Jacobian-Free: The solver builds the system Jacobian on-the-fly using ```jax.jacfwd``` allowing for the simulation of arbitrary user-defined non-linearities without manual derivative derivation.The approach results in a more exact and stable simulation.
+* Harmonic Balance: Finds the periodic steady state directly in the frequency domain — far faster than waiting for transients to decay.
+
+* AC Sweep: Linearises the circuit at the DC operating point and sweeps frequency to return S-parameters.
+
+* Jacobian-Free: The solver builds the system Jacobian on-the-fly using ```jax.jacfwd``` allowing for the simulation of arbitrary user-defined non-linearities without manual derivative derivation. The approach results in a more exact and stable simulation.
 
 ##  **Installation**
 
@@ -95,7 +99,7 @@ pip install circulax
 ```python
 import jax
 import jax.numpy as jnp
-from circulax.components import Resistor, Capacitor, Inductor, VoltageSource
+from circulax.components.electronic import Resistor, Capacitor, Inductor, VoltageSource
 from circulax.compiler import compile_netlist
 import matplotlib.pyplot as plt
 
@@ -144,7 +148,6 @@ sol = transient_sim(
     t0=0.0, t1=t_max, dt0=1e-3*t_max,
     y0=y_op,
     saveat=saveat, max_steps=100000,
-    progress_meter=diffrax.TqdmProgressMeter(refresh_steps=100)
 )
 
 # Post processing and plotting
