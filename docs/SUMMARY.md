@@ -2,6 +2,7 @@
 * Guide
     * [Writing Components](writing_components.md)
     * [Harmonic Balance](harmonic_balance.md)
+    * [Choosing a Solver](choosing_a_solver.md)
 * Examples
     * [LCR Circuit](examples/LCR.md)
     * [LC Ladder](examples/LC_ladder.md)
