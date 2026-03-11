@@ -10,6 +10,8 @@ import optimistix as optx
 from diffrax import AbstractSolver, ConstantStepSize
 from jax.typing import ArrayLike
 
+from circulax.solvers.circuit_diffeq import circuit_diffeqsolve
+
 try:
     from klujax import free_numeric
 except ImportError:
@@ -1023,8 +1025,9 @@ def setup_transient(
         solver = kwargs.pop("solver", tsolver)
         args = kwargs.pop("args", (groups, sys_size))
         stepsize_controller = kwargs.pop("stepsize_controller", ConstantStepSize())
+        checkpoints = kwargs.pop("checkpoints", None)
 
-        sol = diffrax.diffeqsolve(
+        sol = circuit_diffeqsolve(
             terms=term,
             solver=solver,
             t0=t0,
@@ -1036,7 +1039,7 @@ def setup_transient(
             max_steps=max_steps,
             throw=throw,
             stepsize_controller=stepsize_controller,
-            **kwargs,
+            checkpoints=checkpoints,
         )
 
         return sol
