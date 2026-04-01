@@ -35,7 +35,6 @@ if KLUJAX_SRC.exists() and str(KLUJAX_SRC) not in sys.path:
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
@@ -45,7 +44,10 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.electronic import (  # noqa: E402
-    Capacitor, Inductor, Resistor, SmoothPulse,
+    Capacitor,
+    Inductor,
+    Resistor,
+    SmoothPulse,
 )
 from circulax.solvers import analyze_circuit, setup_transient  # noqa: E402
 

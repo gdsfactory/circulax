@@ -8,7 +8,6 @@ Requires bodi to be built against jaxlib 0.7.x.
 """
 
 import sys
-from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np

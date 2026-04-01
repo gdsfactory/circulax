@@ -52,9 +52,12 @@ from bench_utils.runner import SolverFn, SolverResult, run_benchmark  # noqa: E4
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.base_component import PhysicsReturn, Signals, States, component  # noqa: E402
 from circulax.components.electronic import (  # noqa: E402
-    Capacitor, Resistor, VoltageSourceAC, _junction_charge,
+    Capacitor,
+    Resistor,
+    VoltageSourceAC,
+    _junction_charge,
 )
-from circulax.solvers import analyze_circuit, setup_transient, BDF2RefactoringTransientSolver  # noqa: E402
+from circulax.solvers import BDF2RefactoringTransientSolver, analyze_circuit, setup_transient  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # DiodeLimited — clamped Shockley + SPICE junction capacitance

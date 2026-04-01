@@ -104,6 +104,7 @@ def osdi_component(
             default_params={"R": 1000.0, "m": 1.0},
         )
         models = {"res": OsdiResistor, "vsrc": VoltageSource}
+
     """
     model = load_osdi_model(osdi_path)
 
@@ -121,5 +122,5 @@ def osdi_component(
         model=model,
         ports=ports,
         param_names=param_names,
-        default_params=default_params or {n: 0.0 for n in param_names},
+        default_params=default_params or dict.fromkeys(param_names, 0.0),
     )

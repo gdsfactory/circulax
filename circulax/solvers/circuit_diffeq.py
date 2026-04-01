@@ -27,33 +27,29 @@ from __future__ import annotations
 import functools as ft
 from typing import Any
 
+import diffrax
 import equinox as eqx
 import equinox.internal as eqxi
 import jax
-import jax.lax as lax
 import jax.numpy as jnp
 import jax.tree_util as jtu
 import lineax.internal as lxi
-from jaxtyping import Array, ArrayLike, Float, Inexact, PyTree, Real
-
-import diffrax
 from diffrax._custom_types import (
-    BoolScalarLike,
     FloatScalarLike,
     IntScalarLike,
     RealScalarLike,
 )
+from diffrax._integrate import SaveState, _clip_to_end, _save  # reuse helpers
 from diffrax._misc import linear_rescale, static_select  # noqa: F401 (static_select used below)
-from diffrax._saveat import save_y, SaveAt, SubSaveAt
-from diffrax._solution import is_okay, is_successful, RESULTS, Solution
+from diffrax._saveat import SaveAt, SubSaveAt, save_y
+from diffrax._solution import RESULTS, Solution, is_okay, is_successful
 from diffrax._step_size_controller import (
     AbstractAdaptiveStepSizeController,
     AbstractStepSizeController,
     ConstantStepSize,
 )
 from diffrax._term import AbstractTerm, WrapTerm
-from diffrax._integrate import SaveState, _save, _clip_to_end  # reuse helpers
-
+from jaxtyping import Array, ArrayLike, PyTree
 
 # ---------------------------------------------------------------------------
 # Simplified state – no event fields, no dense fields, no progress meter
@@ -131,7 +127,6 @@ def _circuit_loop(
     outer_while_loop,
 ) -> CircuitState:
     """Core integration loop (no events, no dense output, no progress meter)."""
-
     # Pre-compute t1 - 100 ULPs for step clipping
     t1_clip_floor = t1
     for _ in range(100):
@@ -356,7 +351,6 @@ def circuit_diffeqsolve(
     ``checkpoints`` controls the number of binomial checkpoints used by
     ``RecursiveCheckpointAdjoint`` (``None`` = auto from ``max_steps``).
     """
-
     # ------------------------------------------------------------------
     # dtype promotion for times (same logic as diffrax)
     # ------------------------------------------------------------------

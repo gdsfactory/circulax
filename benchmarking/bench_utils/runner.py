@@ -21,8 +21,8 @@ Adding a new solver is a one-liner in the ``SOLVERS`` dict.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import numpy as np
 
@@ -71,6 +71,7 @@ def run_benchmark(
         contain each label as a key.
     title:
         Header text printed above the report.
+
     """
     print(f"\n{'=' * 60}")
     print(title)

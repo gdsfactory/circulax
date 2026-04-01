@@ -48,11 +48,12 @@ def _assemble_osdi_group(
     Returns:
         ``(f_l, q_l, j_eff)`` where ``f_l`` and ``q_l`` are shape ``(N, num_pins)``
         and ``j_eff`` is shape ``(N, num_pins, num_pins)``.
+
     """
     _BODI_SRC = "/home/cdaunt/code/bodi/src"
     if _BODI_SRC not in sys.path:
         sys.path.insert(0, _BODI_SRC)
-    from osdi_jax import osdi_eval  # noqa: PLC0415
+    from osdi_jax import osdi_eval
 
     v_all = y[group.var_indices].astype(jnp.float64)  # (N, num_pins)
     cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)

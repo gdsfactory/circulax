@@ -41,7 +41,7 @@ from bench_utils.runner import SolverFn, SolverResult, run_benchmark  # noqa: E4
 
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.electronic import Capacitor, PulseVoltageSource, Resistor  # noqa: E402
-from circulax.solvers import analyze_circuit, setup_transient, BDF2RefactoringTransientSolver  # noqa: E402
+from circulax.solvers import BDF2RefactoringTransientSolver, analyze_circuit, setup_transient  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Circuit parameters — must match circuits/rc_pulse.cir exactly
