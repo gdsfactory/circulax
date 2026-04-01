@@ -1,0 +1,214 @@
+"""Integration tests for OSDI device model components.
+
+Tests that OpenVAF-compiled .osdi binaries can be loaded, compiled into
+a netlist, and solved at the DC operating point — and that the results
+match the equivalent pure-JAX component implementation.
+
+Requires bodi to be built against jaxlib 0.7.x.
+"""
+
+import sys
+from pathlib import Path
+
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+# Ensure bodi's src is on the path
+_BODI_SRC = "/home/cdaunt/code/bodi/src"
+if _BODI_SRC not in sys.path:
+    sys.path.insert(0, _BODI_SRC)
+
+OSDI_RESISTOR = "/home/cdaunt/code/bodi/tests/resistor_va.osdi"
+
+
+@pytest.fixture
+def osdi_resistor():
+    """Load the OSDI resistor descriptor (ports: A, B; params: R, m)."""
+    from circulax import osdi_component
+    return osdi_component(
+        osdi_path=OSDI_RESISTOR,
+        ports=("A", "B"),
+        param_names=("R", "m"),
+        default_params={"R": 1000.0, "m": 1.0},
+    )
+
+
+def test_osdi_component_loads(osdi_resistor):
+    """osdi_component() should load the binary and report correct metadata."""
+    assert osdi_resistor.model.num_pins == 2
+    assert osdi_resistor.model.num_params == 2
+    assert osdi_resistor.model.num_states == 0
+    assert osdi_resistor.ports == ("A", "B")
+    assert osdi_resistor.param_names == ("R", "m")
+
+
+def test_osdi_compile_netlist(osdi_resistor):
+    """compile_netlist should produce an OsdiComponentGroup for OSDI instances."""
+    from circulax import compile_netlist
+    from circulax.components.electronic import VoltageSource
+    from circulax.components.osdi import OsdiComponentGroup
+
+    net = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "Vs": {"component": "vsrc", "settings": {"V": 1.0}},
+            "R1": {"component": "res", "settings": {"R": 100.0, "m": 1.0}},
+        },
+        "connections": {
+            "Vs,p1": "R1,A",
+            "Vs,p2": "GND,p1",
+            "R1,B": "GND,p1",
+        },
+        "ports": {"out": "R1,A"},
+    }
+    models = {"vsrc": VoltageSource, "res": osdi_resistor}
+    groups, sys_size, _ = compile_netlist(net, models)
+
+    assert "res" in groups
+    assert isinstance(groups["res"], OsdiComponentGroup)
+    assert groups["res"].num_pins == 2
+    assert groups["res"].params.shape == (1, 2)   # N=1, num_params=2
+    assert float(groups["res"].params[0, 0]) == pytest.approx(100.0)
+
+
+def test_osdi_dc_single_resistor(osdi_resistor):
+    """DC operating point of a single OSDI resistor should match Ohm's law.
+
+    Circuit: Vs=1V --- R1=100Ω --- GND
+    Expected: node voltage = 1V, current = 10mA
+    """
+    from circulax import compile_netlist
+    from circulax.components.electronic import VoltageSource
+    from circulax.solvers import analyze_circuit
+
+    net = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "Vs": {"component": "vsrc", "settings": {"V": 1.0}},
+            "R1": {"component": "res", "settings": {"R": 100.0, "m": 1.0}},
+        },
+        "connections": {
+            "Vs,p1": "R1,A",
+            "Vs,p2": "GND,p1",
+            "R1,B": "GND,p1",
+        },
+        "ports": {"out": "R1,A"},
+    }
+    models = {"vsrc": VoltageSource, "res": osdi_resistor}
+    groups, sys_size, port_map = compile_netlist(net, models)
+
+    y0 = jnp.zeros(sys_size)
+    solver = analyze_circuit(groups, sys_size)
+    y = solver.solve_dc(groups, y0)
+
+    node_out = port_map["R1,A"]
+    v_out = float(y[node_out])
+    assert v_out == pytest.approx(1.0, rel=1e-4)
+
+
+def test_osdi_dc_resistor_ladder_matches_jax(osdi_resistor):
+    """OSDI resistor ladder DC solution must match the pure-JAX Resistor.
+
+    3-node voltage divider: Vs=4V --- R1 --- R2 --- R3 --- GND
+    With equal R=1kΩ the node voltages should be 3V, 2V, 1V.
+    """
+    from circulax import compile_netlist
+    from circulax.components.electronic import Resistor, VoltageSource
+    from circulax.solvers import analyze_circuit
+
+    R_val = 1000.0
+
+    def _make_ladder_netlist(res_component_name):
+        return {
+            "instances": {
+                "GND": {"component": "ground"},
+                "Vs": {"component": "vsrc", "settings": {"V": 4.0}},
+                "R1": {"component": res_component_name, "settings": {"R": R_val, "m": 1.0}},
+                "R2": {"component": res_component_name, "settings": {"R": R_val, "m": 1.0}},
+                "R3": {"component": res_component_name, "settings": {"R": R_val, "m": 1.0}},
+            },
+            "connections": {
+                "Vs,p1": "R1,A",
+                "Vs,p2": "GND,p1",
+                "R1,B": "R2,A",
+                "R2,B": "R3,A",
+                "R3,B": "GND,p1",
+            },
+            "ports": {"n1": "R1,A", "n2": "R1,B", "n3": "R2,B"},
+        }
+
+    # --- OSDI solver ---
+    osdi_net = _make_ladder_netlist("osdi_res")
+    osdi_models = {"vsrc": VoltageSource, "osdi_res": osdi_resistor}
+    osdi_groups, osdi_size, osdi_pmap = compile_netlist(osdi_net, osdi_models)
+    osdi_solver = analyze_circuit(osdi_groups, osdi_size)
+    y_osdi = osdi_solver.solve_dc(osdi_groups, jnp.zeros(osdi_size))
+
+    v_osdi = [float(y_osdi[osdi_pmap[k]]) for k in ("R1,A", "R1,B", "R2,B")]
+
+    # --- Pure-JAX Resistor solver (uses p1/p2 port names) ---
+    jax_net = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "Vs": {"component": "vsrc", "settings": {"V": 4.0}},
+            "R1": {"component": "jres", "settings": {"R": R_val}},
+            "R2": {"component": "jres", "settings": {"R": R_val}},
+            "R3": {"component": "jres", "settings": {"R": R_val}},
+        },
+        "connections": {
+            "Vs,p1": "R1,p1",
+            "Vs,p2": "GND,p1",
+            "R1,p2": "R2,p1",
+            "R2,p2": "R3,p1",
+            "R3,p2": "GND,p1",
+        },
+        "ports": {"n1": "R1,p1", "n2": "R1,p2", "n3": "R2,p2"},
+    }
+    jax_models = {"vsrc": VoltageSource, "jres": Resistor}
+    jax_groups, jax_size, jax_pmap = compile_netlist(jax_net, jax_models)
+    jax_solver = analyze_circuit(jax_groups, jax_size)
+    y_jax = jax_solver.solve_dc(jax_groups, jnp.zeros(jax_size))
+
+    v_jax = [float(y_jax[jax_pmap[k]]) for k in ("R1,p1", "R1,p2", "R2,p2")]
+
+    # R1,A = source node = 4V; divider nodes are 4*(2/3) and 4*(1/3)
+    np.testing.assert_allclose(v_osdi, [4.0, 8.0 / 3.0, 4.0 / 3.0], rtol=1e-4, err_msg="OSDI ladder node voltages wrong")
+    np.testing.assert_allclose(v_osdi, v_jax, rtol=1e-4, err_msg="OSDI and JAX ladder solutions differ")
+
+
+def test_osdi_batched_instances(osdi_resistor):
+    """Multiple OSDI instances in one group should be batched into a single osdi_eval call."""
+    from circulax import compile_netlist
+    from circulax.components.electronic import VoltageSource
+    from circulax.components.osdi import OsdiComponentGroup
+    from circulax.solvers import analyze_circuit
+
+    net = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "Vs": {"component": "vsrc", "settings": {"V": 2.0}},
+            "R1": {"component": "res", "settings": {"R": 100.0, "m": 1.0}},
+            "R2": {"component": "res", "settings": {"R": 200.0, "m": 1.0}},
+        },
+        "connections": {
+            "Vs,p1": "R1,A",
+            "R1,B": "R2,A",
+            "R2,B": "GND,p1",
+            "Vs,p2": "GND,p1",
+        },
+        "ports": {"mid": "R1,B"},
+    }
+    models = {"vsrc": VoltageSource, "res": osdi_resistor}
+    groups, sys_size, port_map = compile_netlist(net, models)
+
+    # Both resistors should be batched into one OsdiComponentGroup of N=2
+    assert isinstance(groups["res"], OsdiComponentGroup)
+    assert groups["res"].params.shape == (2, 2)
+
+    solver = analyze_circuit(groups, sys_size)
+    y = solver.solve_dc(groups, jnp.zeros(sys_size))
+
+    # Voltage divider: 2V * 200/(100+200) = 4/3 V at midpoint
+    v_mid = float(y[port_map["R1,B"]])
+    assert v_mid == pytest.approx(4.0 / 3.0, rel=1e-4)
