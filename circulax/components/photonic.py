@@ -198,3 +198,64 @@ def OpticalSourcePulse(
     constraint = (signals.p1 - signals.p2) - v_val
 
     return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+
+
+# ===========================================================================
+# Tunable Active Components
+# ===========================================================================
+
+
+@component(ports=("p1", "p2", "p3", "p4"), states=("i_top", "i_bot"))
+def TunableBeamSplitter(
+    signals: Signals,
+    s: States,
+    theta: float = jnp.pi / 4,
+) -> PhysicsReturn:
+    """Ideal lossless 2×2 directional coupler with a variable coupling angle.
+
+    Implements a tunable beam splitter using a Modified Nodal Analysis (MNA)
+    voltage-controlled voltage source (VCVS) stamp, which avoids the
+    near-singular ``(I + S)`` matrix that arises when applying ``s_to_y`` to
+    a lossless transmission-only S-matrix.
+
+    The transmission relations enforced are::
+
+        E_p3 = cos(theta) * E_p1 + j * sin(theta) * E_p2
+        E_p4 = j * sin(theta) * E_p1 + cos(theta) * E_p2
+
+    Special cases:
+
+    * ``theta = 0``       — bar state: ``p1 → p3``, ``p2 → p4`` (no coupling).
+    * ``theta = pi/4``    — 50/50 beamsplitter (default).
+    * ``theta = pi/2``    — cross state: ``p1 → p4``, ``p2 → p3`` (full coupling).
+
+    Two internal state variables ``i_top`` and ``i_bot`` carry the branch
+    currents at the output ports ``p3`` and ``p4`` respectively.  The input
+    ports ``p1`` and ``p2`` contribute no self-stamp; they must be driven by
+    connected sources or loads to avoid floating nodes.
+
+    Gradient flow is exact via ``jax.grad`` for all values of ``theta``
+    when using the ``"dense"`` solver backend.
+
+    Args:
+        signals: Field amplitudes at all four ports.
+        s: Branch current state variables ``i_top`` and ``i_bot``.
+        theta: Coupling angle in radians.  Controls the power split ratio:
+            ``P_cross / P_total = sin²(theta)``.  Defaults to ``pi/4`` (50/50).
+
+    """
+    c = jnp.cos(theta).astype(jnp.complex128)
+    js = (1j * jnp.sin(theta)).astype(jnp.complex128)
+
+    # Voltage constraints (VCVS): enforce transmission relations
+    eq_top = signals.p3 - c * signals.p1 - js * signals.p2
+    eq_bot = signals.p4 - js * signals.p1 - c * signals.p2
+
+    return {
+        "p1": 0.0,        # no self-stamp on input ports
+        "p2": 0.0,
+        "p3": s.i_top,    # VCVS branch current injected at output p3
+        "p4": s.i_bot,    # VCVS branch current injected at output p4
+        "i_top": eq_top,  # constraint: E_p3 = cos(θ)·E_p1 + j·sin(θ)·E_p2
+        "i_bot": eq_bot,  # constraint: E_p4 = j·sin(θ)·E_p1 + cos(θ)·E_p2
+    }, {}
