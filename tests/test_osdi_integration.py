@@ -19,6 +19,19 @@ if _BODI_SRC not in sys.path:
     sys.path.insert(0, _BODI_SRC)
 
 OSDI_RESISTOR = "/home/cdaunt/code/bodi/tests/resistor_va.osdi"
+OSDI_CAPACITOR = "/home/cdaunt/code/bodi/tests/capacitor_va.osdi"
+
+
+@pytest.fixture
+def osdi_capacitor():
+    """Load the OSDI capacitor descriptor (ports: P, N; params: C, m, tnom)."""
+    from circulax import osdi_component
+    return osdi_component(
+        osdi_path=OSDI_CAPACITOR,
+        ports=("P", "N"),
+        param_names=("C", "m", "tnom"),
+        default_params={"C": 1e-9, "m": 1.0, "tnom": 27.0},
+    )
 
 
 @pytest.fixture
@@ -211,3 +224,119 @@ def test_osdi_batched_instances(osdi_resistor):
     # Voltage divider: 2V * 200/(100+200) = 4/3 V at midpoint
     v_mid = float(y[port_map["R1,B"]])
     assert v_mid == pytest.approx(4.0 / 3.0, rel=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# Capacitor tests
+# ---------------------------------------------------------------------------
+
+
+def test_osdi_capacitor_loads(osdi_capacitor):
+    """osdi_component() should load the capacitor binary and report correct metadata."""
+    assert osdi_capacitor.model.num_pins == 2
+    assert osdi_capacitor.model.num_params == 3  # C, m, tnom
+    assert osdi_capacitor.model.num_states == 0
+    assert osdi_capacitor.ports == ("P", "N")
+    assert osdi_capacitor.param_names == ("C", "m", "tnom")
+
+
+def test_osdi_capacitor_dc_open_circuit(osdi_capacitor):
+    """A capacitor is open circuit at DC: node voltage equals source voltage.
+
+    Circuit: Vs=2V --- R=1kΩ --- C --- GND
+    At DC steady state the capacitor carries no current, so there is no
+    voltage drop across the resistor and V_cap = Vs = 2V.
+    """
+    from circulax import compile_netlist
+    from circulax.components.electronic import Resistor, VoltageSource
+    from circulax.solvers import analyze_circuit
+
+    net = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "Vs": {"component": "vsrc", "settings": {"V": 2.0}},
+            "R1": {"component": "res", "settings": {"R": 1000.0}},
+            "C1": {"component": "cap", "settings": {"C": 1e-6, "m": 1.0, "tnom": 27.0}},
+        },
+        "connections": {
+            "Vs,p1": "R1,p1",
+            "Vs,p2": "GND,p1",
+            "R1,p2": "C1,P",
+            "C1,N": "GND,p1",
+        },
+        "ports": {"cap_top": "C1,P"},
+    }
+    models = {"vsrc": VoltageSource, "res": Resistor, "cap": osdi_capacitor}
+    groups, sys_size, port_map = compile_netlist(net, models)
+
+    y0 = jnp.zeros(sys_size)
+    solver = analyze_circuit(groups, sys_size)
+    y = solver.solve_dc(groups, y0)
+
+    v_cap = float(y[port_map["C1,P"]])
+    assert v_cap == pytest.approx(2.0, rel=1e-4)
+
+
+def test_osdi_capacitor_transient_rc_matches_jax(osdi_capacitor):
+    """OSDI capacitor transient RC charging should match the pure-JAX Capacitor.
+
+    Circuit: Vs=1V, R=1kΩ, C=1µF  →  RC = 1ms.
+    Starting from y0=0 (uncharged), voltage follows V(t) = Vs*(1 - exp(-t/RC)).
+    Verified at t=RC and t=3RC against both the analytical formula and the
+    pure-JAX Capacitor.
+    """
+    import diffrax
+
+    from circulax import compile_netlist
+    from circulax.components.electronic import Capacitor, Resistor, VoltageSource
+    from circulax.solvers import analyze_circuit, setup_transient
+
+    R_val = 1000.0
+    C_val = 1e-6
+    Vs_val = 1.0
+    RC = R_val * C_val  # 1e-3 s
+
+    def _run_rc(cap_component_name, cap_port_p, cap_port_n, models, cap_settings):
+        net = {
+            "instances": {
+                "GND": {"component": "ground"},
+                "Vs": {"component": "vsrc", "settings": {"V": Vs_val}},
+                "R1": {"component": "res", "settings": {"R": R_val}},
+                "C1": {"component": cap_component_name, "settings": cap_settings},
+            },
+            "connections": {
+                "Vs,p1": "R1,p1",
+                "Vs,p2": "GND,p1",
+                f"R1,p2": f"C1,{cap_port_p}",
+                f"C1,{cap_port_n}": "GND,p1",
+            },
+            "ports": {"cap_top": f"C1,{cap_port_p}"},
+        }
+        groups, sys_size, port_map = compile_netlist(net, models)
+        linear_strat = analyze_circuit(groups, sys_size)
+
+        t_end = 3.0 * RC
+        ts = jnp.array([RC, 3.0 * RC])
+        run = setup_transient(groups, linear_strat)
+        sol = run(t0=0.0, t1=t_end, dt0=RC * 1e-3, y0=jnp.zeros(sys_size),
+                  saveat=diffrax.SaveAt(ts=ts), max_steps=100_000)
+
+        cap_node = port_map[f"C1,{cap_port_p}"]
+        return sol.ys[:, cap_node]
+
+    # OSDI capacitor
+    osdi_models = {"vsrc": VoltageSource, "res": Resistor, "cap": osdi_capacitor}
+    v_osdi = _run_rc("cap", "P", "N", osdi_models, {"C": C_val, "m": 1.0, "tnom": 27.0})
+
+    # Pure-JAX capacitor
+    jax_models = {"vsrc": VoltageSource, "res": Resistor, "cap": Capacitor}
+    v_jax = _run_rc("cap", "p1", "p2", jax_models, {"C": C_val})
+
+    # Analytical: V(t) = Vs * (1 - exp(-t/RC))
+    v_analytical = jnp.array([Vs_val * (1.0 - jnp.exp(-1.0)),   # t = RC
+                               Vs_val * (1.0 - jnp.exp(-3.0))])  # t = 3RC
+
+    np.testing.assert_allclose(v_osdi, v_analytical, rtol=1e-3,
+                               err_msg="OSDI RC charging does not match analytical")
+    np.testing.assert_allclose(v_osdi, v_jax, rtol=1e-3,
+                               err_msg="OSDI and JAX-Capacitor RC trajectories differ")
