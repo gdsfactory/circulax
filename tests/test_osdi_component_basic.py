@@ -20,7 +20,7 @@ class TestOsdiComponentFactory:
     def test_osdi_component_creation(self):
         """Test that osdi_component() factory creates a valid class."""
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
             param_names=("R", "m"),
             param_defaults={"R": 1e3, "m": 1.0},
@@ -36,7 +36,7 @@ class TestOsdiComponentFactory:
     def test_osdi_component_metadata(self):
         """Test that OSDI model metadata is correctly extracted."""
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
             param_names=("R", "m"),
         )
@@ -50,7 +50,7 @@ class TestOsdiComponentFactory:
     def test_osdi_component_instantiation(self):
         """Test that OSDI component can be instantiated with parameters."""
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
             param_names=("R", "m"),
             param_defaults={"R": 1e3, "m": 1.0},
@@ -68,7 +68,7 @@ class TestOsdiComponentFactory:
     def test_osdi_component_default_port_names(self):
         """Test that default port names are generated correctly."""
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             param_names=("R", "m"),
         )
 
@@ -78,7 +78,7 @@ class TestOsdiComponentFactory:
     def test_osdi_component_default_param_names(self):
         """Test that default parameter names are generated correctly."""
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
         )
 
@@ -88,7 +88,7 @@ class TestOsdiComponentFactory:
     def test_osdi_component_default_param_values(self):
         """Test that default parameter values default to 1.0."""
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
         )
 
@@ -100,7 +100,7 @@ class TestOsdiComponentFactory:
         """Test that port count mismatch raises ValueError."""
         with pytest.raises(ValueError, match="Port count mismatch"):
             osdi_component(
-                "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+                "tests/resistor_va.osdi",
                 port_names=("p1",),  # Only 1 port, but OSDI has 2
                 param_names=("R", "m"),
             )
@@ -109,7 +109,7 @@ class TestOsdiComponentFactory:
         """Test that parameter count mismatch raises ValueError."""
         with pytest.raises(ValueError, match="Parameter count mismatch"):
             osdi_component(
-                "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+                "tests/resistor_va.osdi",
                 port_names=("p1", "p2"),
                 param_names=("R",),  # Only 1 param, but OSDI has 2
             )
@@ -130,7 +130,7 @@ class TestOsdiComponentIntegration:
         from circulax.components.base_component import CircuitComponent
 
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
             param_names=("R", "m"),
         )
@@ -140,7 +140,7 @@ class TestOsdiComponentIntegration:
     def test_osdi_component_has_solver_call(self):
         """Test that OSDI component has solver_call classmethod."""
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
             param_names=("R", "m"),
         )
@@ -153,7 +153,7 @@ class TestOsdiComponentIntegration:
         from circulax.components.osdi_component import _extract_param
 
         OsdiResistor = osdi_component(
-            "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+            "tests/resistor_va.osdi",
             port_names=("p1", "p2"),
             param_names=("R", "m"),
             param_defaults={"R": 500.0, "m": 1.0},

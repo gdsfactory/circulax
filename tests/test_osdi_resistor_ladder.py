@@ -97,7 +97,7 @@ def osdi_resistor_ladder_netlist():
 def osdi_resistor_class():
     """Create and cache the OSDI resistor component class."""
     return osdi_component(
-        "/home/cdaunt/code/bodi/tests/resistor_va.osdi",
+        "tests/resistor_va.osdi",
         port_names=("p1", "p2"),
         param_names=("R", "m"),
         param_defaults={"R": 1e3, "m": 1.0},
