@@ -62,13 +62,15 @@ from bench_utils.runner import SolverFn, SolverResult, run_benchmark  # noqa: E4
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.base_component import PhysicsReturn, Signals, States, component  # noqa: E402
 from circulax.components.electronic import (  # noqa: E402
-    Resistor, VoltageSourceAC, _junction_charge,
+    Resistor,
+    VoltageSourceAC,
+    _junction_charge,
 )
 from circulax.solvers import (  # noqa: E402
+    BDF2RefactoringTransientSolver,
     analyze_circuit,
     setup_harmonic_balance,
     setup_transient,
-    BDF2RefactoringTransientSolver,
 )
 
 # ---------------------------------------------------------------------------
@@ -320,6 +322,7 @@ def extract_harmonics_fft(
     -------
     amps : np.ndarray, shape (n_harmonics+1,)
         Two-sided amplitudes at DC, f0, 2f0, ..., n_harmonics*f0.
+
     """
     T = 1.0 / freq
     t_start = time_arr[-1] - n_cycles * T
@@ -516,7 +519,7 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
     # ------------------------------------------------------------------
     # Summary
     # ------------------------------------------------------------------
-    print(f"\n── Sweep Timing ─────────────────────────────────────────────────")
+    print("\n── Sweep Timing ─────────────────────────────────────────────────")
     print(f"  ngspice (serial)    {ng_elapsed:.3f}s  ({ng_elapsed/n_freq*1e3:.1f} ms/freq)")
     print(f"  circulax-hb (vmap)  compile={hb_compile:.3f}s  timed={hb_elapsed:.3f}s  "
           f"({hb_elapsed/n_freq*1e3:.2f} ms/freq)")
@@ -527,10 +530,10 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
     print(f"  speedup (incl compile): {total_speedup:.1f}×")
 
     rms_err = np.sqrt(np.mean((ng_amps_out - hb_amps_out) ** 2)) * 1e3
-    print(f"\n── Sweep Accuracy vs NGSpice ────────────────────────────────────")
+    print("\n── Sweep Accuracy vs NGSpice ────────────────────────────────────")
     print(f"  V(out) fundamental RMS error over sweep: {rms_err:.2f} mV")
 
-    print(f"\n── V(out) Fundamental Amplitude (selected points) ───────────────")
+    print("\n── V(out) Fundamental Amplitude (selected points) ───────────────")
     print(f"  {'freq (Hz)':>12s}  {'NGSpice (V)':>12s}  {'HB (V)':>10s}  {'err (mV)':>10s}")
     print(f"  {'-'*12}  {'-'*12}  {'-'*10}  {'-'*10}")
     indices = np.round(np.linspace(0, n_freq - 1, 12)).astype(int)

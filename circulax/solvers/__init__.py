@@ -1,8 +1,8 @@
 """Root finding and transient solvers."""
 
 from .ac_sweep import setup_ac_sweep
-from .circuit_diffeq import circuit_diffeqsolve
 from .assembly import assemble_system_complex, assemble_system_real
+from .circuit_diffeq import circuit_diffeqsolve
 from .harmonic_balance import setup_harmonic_balance
 from .linear import (
     CircuitLinearSolver,
@@ -29,7 +29,6 @@ from .transient import (
 
 __all__ = [
     "BDF2FactorizedTransientSolver",
-    "circuit_diffeqsolve",
     "BDF2RefactoringTransientSolver",
     "BDF2VectorizedTransientSolver",
     "CircuitLinearSolver",
@@ -47,6 +46,7 @@ __all__ = [
     "analyze_circuit",
     "assemble_system_complex",
     "assemble_system_real",
+    "circuit_diffeqsolve",
     "setup_ac_sweep",
     "setup_harmonic_balance",
     "setup_transient",
