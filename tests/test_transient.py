@@ -118,16 +118,26 @@ def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  #
     sol_full = diffrax.diffeqsolve(
         term,
         VectorizedTransientSolver(linear_solver=strat_full),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
     sol_factor = diffrax.diffeqsolve(
         term,
         FactorizedTransientSolver(linear_solver=strat_factor),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_factor.ys.shape == sol_full.ys.shape
@@ -157,15 +167,25 @@ def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:  
     sol_full = diffrax.diffeqsolve(
         term,
         VectorizedTransientSolver(linear_solver=strat),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     sol_refactor = diffrax.diffeqsolve(
         term,
         RefactoringTransientSolver(linear_solver=strat),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_refactor.ys.shape == sol_full.ys.shape
@@ -257,16 +277,26 @@ def test_bdf2_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     sol_vec = diffrax.diffeqsolve(
         term,
         BDF2VectorizedTransientSolver(linear_solver=strat_full),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
     sol_factor = diffrax.diffeqsolve(
         term,
         BDF2FactorizedTransientSolver(linear_solver=strat_factor),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_factor.ys.shape == sol_vec.ys.shape
@@ -324,16 +354,26 @@ def test_sdirk3_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     sol_vec = diffrax.diffeqsolve(
         term,
         SDIRK3VectorizedTransientSolver(linear_solver=strat_full),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
     sol_factor = diffrax.diffeqsolve(
         term,
         SDIRK3FactorizedTransientSolver(linear_solver=strat_factor),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_factor.ys.shape == sol_vec.ys.shape

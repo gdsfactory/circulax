@@ -40,10 +40,6 @@ import sys
 import tempfile
 import time
 
-KLUJAX_SRC = pathlib.Path("/home/chris/code/klujax/klujax")
-if KLUJAX_SRC.exists() and str(KLUJAX_SRC) not in sys.path:
-    sys.path.insert(0, str(KLUJAX_SRC))
-
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -82,9 +78,14 @@ EXP_CAP = 40.0
 
 @component(ports=("p1", "p2"))
 def DiodeLimited(
-    signals: Signals, s: States,
-    Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85e-3,
-    Cj0: float = 0.0, Vj: float = 1.0, m: float = 0.5,
+    signals: Signals,
+    s: States,
+    Is: float = 1e-12,
+    n: float = 1.0,
+    Vt: float = 25.85e-3,
+    Cj0: float = 0.0,
+    Vj: float = 1.0,
+    m: float = 0.5,
 ) -> PhysicsReturn:
     """Shockley diode with clamped exponent and SPICE junction capacitance."""
     vd = signals.p1 - signals.p2
@@ -98,34 +99,39 @@ def DiodeLimited(
 # Circuit parameters — must match circuits/diode_clipper.cir exactly
 # ---------------------------------------------------------------------------
 
-F_SRC = 1e3       # 1 kHz drive frequency
-V_AMP = 2.0       # V peak
-R_SER = 1e3       # Ω  series resistor
-R_LOAD = 10e3     # Ω  load resistor
+F_SRC = 1e3  # 1 kHz drive frequency
+V_AMP = 2.0  # V peak
+R_SER = 1e3  # Ω  series resistor
+R_LOAD = 10e3  # Ω  load resistor
 
 # D1N4007 SPICE parameters (same as diode_cascade_testbench)
-IS_D  = 76.9e-12
-N_D   = 1.45
-VT_D  = 25.85e-3
+IS_D = 76.9e-12
+N_D = 1.45
+VT_D = 25.85e-3
 CJ0_D = 26.5e-12
-VJ_D  = 1.0
-M_D   = 0.333
+VJ_D = 1.0
+M_D = 0.333
 
-N_CYCLES = 20               # cycles NGSpice (and Circulax transient) simulate
-T_END = N_CYCLES / F_SRC    # 20 ms
-DT = 1e-6                   # 1 µs time step
-N_HARMONICS = 10            # HB harmonics
+N_CYCLES = 20  # cycles NGSpice (and Circulax transient) simulate
+T_END = N_CYCLES / F_SRC  # 20 ms
+DT = 1e-6  # 1 µs time step
+N_HARMONICS = 10  # HB harmonics
 
 STEP_CONTROLLER = diffrax.PIDController(
-    rtol=1e-3, atol=1e-4,
-    pcoeff=0.2, icoeff=0.5, dcoeff=0.0,
-    force_dtmin=True, dtmin=1e-6 * DT, dtmax=DT,
+    rtol=1e-3,
+    atol=1e-4,
+    pcoeff=0.2,
+    icoeff=0.5,
+    dcoeff=0.0,
+    force_dtmin=True,
+    dtmin=1e-6 * DT,
+    dtmax=DT,
     error_order=2,
 )
 
-HERE        = pathlib.Path(__file__).parent
-CIR_FILE    = HERE / "circuits" / "diode_clipper.cir"
-NG_OUTPUT   = pathlib.Path("/tmp/ngspice_diode_clipper.dat")
+HERE = pathlib.Path(__file__).parent
+CIR_FILE = HERE / "circuits" / "diode_clipper.cir"
+NG_OUTPUT = pathlib.Path("/tmp/ngspice_diode_clipper.dat")
 PLOT_OUTPUT = HERE / "diode_clipper_hb_comparison.png"
 
 NODES = ["v(inp)", "v(out)"]
@@ -135,27 +141,28 @@ NODES = ["v(inp)", "v(out)"]
 # Shared netlist builder
 # ---------------------------------------------------------------------------
 
+
 def _build_netlist():
     d_settings = {"Is": IS_D, "n": N_D, "Vt": VT_D, "Cj0": CJ0_D, "Vj": VJ_D, "m": M_D}
     net_dict = {
         "instances": {
-            "Vs":  {"component": "ac_source", "settings": {"V": V_AMP, "freq": F_SRC}},
-            "Rs":  {"component": "resistor",  "settings": {"R": R_SER}},
-            "D1":  {"component": "diode",     "settings": d_settings},
-            "RL":  {"component": "resistor",  "settings": {"R": R_LOAD}},
+            "Vs": {"component": "ac_source", "settings": {"V": V_AMP, "freq": F_SRC}},
+            "Rs": {"component": "resistor", "settings": {"R": R_SER}},
+            "D1": {"component": "diode", "settings": d_settings},
+            "RL": {"component": "resistor", "settings": {"R": R_LOAD}},
         },
         "connections": {
-            "Vs,p1":  "Rs,p1",
-            "Rs,p2":  "D1,p1",
-            "D1,p2":  "RL,p1",
-            "RL,p2":  "GND,p1",
-            "Vs,p2":  "GND,p1",
+            "Vs,p1": "Rs,p1",
+            "Rs,p2": "D1,p1",
+            "D1,p2": "RL,p1",
+            "RL,p2": "GND,p1",
+            "Vs,p2": "GND,p1",
         },
     }
     models_map = {
         "ac_source": VoltageSourceAC,
-        "resistor":  Resistor,
-        "diode":     DiodeLimited,
+        "resistor": Resistor,
+        "diode": DiodeLimited,
     }
     return net_dict, models_map
 
@@ -177,6 +184,7 @@ def _last_cycle(time_arr: np.ndarray, signals: dict[str, np.ndarray]) -> tuple[n
 # ---------------------------------------------------------------------------
 # Solvers
 # ---------------------------------------------------------------------------
+
 
 def solver_ngspice() -> SolverResult:
     run_ngspice(CIR_FILE, NODES, output_path=NG_OUTPUT)  # warmup
@@ -247,7 +255,8 @@ def solver_circulax_transient(n_save: int = 2001) -> SolverResult:
     linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="klu_split")
     y_op = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
     transient_sim = setup_transient(
-        groups=groups, linear_strategy=linear_strategy,
+        groups=groups,
+        linear_strategy=linear_strategy,
         transient_solver=BDF2RefactoringTransientSolver,
     )
     compile_time = time.perf_counter() - t0
@@ -256,7 +265,10 @@ def solver_circulax_transient(n_save: int = 2001) -> SolverResult:
     warmup_t_end = 2 * DT
     t0 = time.perf_counter()
     transient_sim(
-        t0=0.0, t1=warmup_t_end, dt0=DT, y0=y_op,
+        t0=0.0,
+        t1=warmup_t_end,
+        dt0=DT,
+        y0=y_op,
         saveat=diffrax.SaveAt(ts=jnp.linspace(0.0, warmup_t_end, 11)),
         max_steps=100,
         stepsize_controller=STEP_CONTROLLER,
@@ -267,8 +279,12 @@ def solver_circulax_transient(n_save: int = 2001) -> SolverResult:
     t0 = time.perf_counter()
     saveat = diffrax.SaveAt(ts=jnp.linspace(0.0, T_END, n_save))
     sol = transient_sim(
-        t0=0.0, t1=T_END, dt0=DT, y0=y_op,
-        saveat=saveat, max_steps=int(T_END / DT) * 10,
+        t0=0.0,
+        t1=T_END,
+        dt0=DT,
+        y0=y_op,
+        saveat=saveat,
+        max_steps=int(T_END / DT) * 10,
         stepsize_controller=STEP_CONTROLLER,
     )
     sol.ys.block_until_ready()
@@ -296,6 +312,7 @@ def solver_circulax_transient(n_save: int = 2001) -> SolverResult:
 # ---------------------------------------------------------------------------
 # Harmonic extraction from a transient waveform (FFT of the last M cycles)
 # ---------------------------------------------------------------------------
+
 
 def extract_harmonics_fft(
     time_arr: np.ndarray,
@@ -341,7 +358,7 @@ def extract_harmonics_fft(
     for k in range(n_harmonics + 1):
         f_k = k * freq
         i_k = int(np.argmin(np.abs(fft_freqs - f_k)))
-        scale = 1.0 if k == 0 else 2.0       # fold negative-frequency twin
+        scale = 1.0 if k == 0 else 2.0  # fold negative-frequency twin
         amps[k] = scale * np.abs(fft_vals[i_k])
     return amps
 
@@ -358,8 +375,8 @@ def print_harmonic_comparison(
 
     # HB amplitudes: 2*|y_freq[k]| for k>=1
     scale = np.where(np.arange(n_harmonics + 1) == 0, 1.0, 2.0)
-    hb_vout = scale * np.abs(np.asarray(hb_y_freq[:n_harmonics + 1, vout_idx]))
-    hb_vinp = scale * np.abs(np.asarray(hb_y_freq[:n_harmonics + 1, vinp_idx]))
+    hb_vout = scale * np.abs(np.asarray(hb_y_freq[: n_harmonics + 1, vout_idx]))
+    hb_vinp = scale * np.abs(np.asarray(hb_y_freq[: n_harmonics + 1, vinp_idx]))
 
     # Transient FFT amplitudes (last 5 cycles, dense SaveAt)
     t_arr = np.asarray(transient_sol.ts)
@@ -370,7 +387,7 @@ def print_harmonic_comparison(
 
     print("\n── Harmonic spectrum comparison (V_out) ─────────────────────────")
     print(f"  {'Harmonic':>12s}  {'HB (V)':>10s}  {'Trans FFT (V)':>14s}  {'|Δ| (mV)':>10s}")
-    print(f"  {'-'*12}  {'-'*10}  {'-'*14}  {'-'*10}")
+    print(f"  {'-' * 12}  {'-' * 10}  {'-' * 14}  {'-' * 10}")
     for k in range(n_harmonics + 1):
         label = "DC" if k == 0 else f"{k}f₀"
         diff_mv = abs(hb_vout[k] - fft_vout[k]) * 1e3
@@ -378,7 +395,7 @@ def print_harmonic_comparison(
 
     print("\n── Harmonic spectrum comparison (V_inp) ─────────────────────────")
     print(f"  {'Harmonic':>12s}  {'HB (V)':>10s}  {'Trans FFT (V)':>14s}  {'|Δ| (mV)':>10s}")
-    print(f"  {'-'*12}  {'-'*10}  {'-'*14}  {'-'*10}")
+    print(f"  {'-' * 12}  {'-' * 10}  {'-' * 14}  {'-' * 10}")
     for k in range(n_harmonics + 1):
         label = "DC" if k == 0 else f"{k}f₀"
         diff_mv = abs(hb_vinp[k] - fft_vinp[k]) * 1e3
@@ -390,8 +407,8 @@ def print_harmonic_comparison(
 # ---------------------------------------------------------------------------
 
 N_SWEEP = 100
-SWEEP_FREQS = np.geomspace(100.0, 100e3, N_SWEEP)    # 100 Hz → 100 kHz
-N_CYCLES_SWEEP = 20                                   # cycles per frequency
+SWEEP_FREQS = np.geomspace(100.0, 100e3, N_SWEEP)  # 100 Hz → 100 kHz
+N_CYCLES_SWEEP = 20  # cycles per frequency
 
 # NGSpice .cir template — frequency and timing are injected per run
 _CIR_SWEEP_TEMPLATE = """\
@@ -415,21 +432,23 @@ rl out 0 {r_load}
 def _ngspice_one_freq(freq: float) -> tuple[float, float]:
     """Run NGSpice at one frequency; return (fund amp of v(inp), v(out))."""
     t_end = N_CYCLES_SWEEP / freq
-    dt_save = t_end / (N_CYCLES_SWEEP * 100)        # 100 pts/cycle
+    dt_save = t_end / (N_CYCLES_SWEEP * 100)  # 100 pts/cycle
     output_path = f"/tmp/ngspice_clipper_sweep_{freq:.2f}.dat"
 
     cir_text = _CIR_SWEEP_TEMPLATE.format(
-        v_amp=V_AMP, freq=f"{freq:.6g}",
-        r_ser=R_SER, r_load=R_LOAD,
-        dt_save=f"{dt_save:.6e}", t_end=f"{t_end:.6e}",
+        v_amp=V_AMP,
+        freq=f"{freq:.6g}",
+        r_ser=R_SER,
+        r_load=R_LOAD,
+        dt_save=f"{dt_save:.6e}",
+        t_end=f"{t_end:.6e}",
         output_path=output_path,
     )
     with tempfile.NamedTemporaryFile("w", suffix=".cir", delete=False) as f:
         f.write(cir_text)
         cir_path = f.name
     try:
-        ng_time, ng_v = run_ngspice(cir_path, ["v(inp)", "v(out)"],
-                                    output_path=output_path)
+        ng_time, ng_v = run_ngspice(cir_path, ["v(inp)", "v(out)"], output_path=output_path)
     finally:
         os.unlink(cir_path)
 
@@ -446,9 +465,9 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
     at every frequency point.
     """
     n_freq = len(sweep_freqs)
-    print(f"\n{'='*68}")
-    print(f"Frequency Sweep  ({n_freq} points, {sweep_freqs[0]:.0f} Hz – {sweep_freqs[-1]/1e3:.0f} kHz)")
-    print(f"{'='*68}")
+    print(f"\n{'=' * 68}")
+    print(f"Frequency Sweep  ({n_freq} points, {sweep_freqs[0]:.0f} Hz – {sweep_freqs[-1] / 1e3:.0f} kHz)")
+    print(f"{'=' * 68}")
 
     # ------------------------------------------------------------------
     # NGSpice — serial run per frequency
@@ -464,7 +483,7 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
     for i, f in enumerate(sweep_freqs):
         ng_amps_inp[i], ng_amps_out[i] = _ngspice_one_freq(float(f))
     ng_elapsed = time.perf_counter() - t0
-    print(f"done  {ng_elapsed:.3f}s  ({ng_elapsed/n_freq*1e3:.1f} ms/freq)")
+    print(f"done  {ng_elapsed:.3f}s  ({ng_elapsed / n_freq * 1e3:.1f} ms/freq)")
 
     # ------------------------------------------------------------------
     # Circulax HB — vmapped over all frequencies simultaneously
@@ -488,9 +507,7 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
             groups,
             jnp.asarray([sweep_freq]),
         )
-        run_hb = setup_harmonic_balance(
-            updated_groups, sys_size, freq=sweep_freq, num_harmonics=n_harmonics
-        )
+        run_hb = setup_harmonic_balance(updated_groups, sys_size, freq=sweep_freq, num_harmonics=n_harmonics)
         _, y_freq = run_hb(y_dc)
         # Two-sided fundamental amplitude at k=1
         amp_inp = 2.0 * jnp.abs(y_freq[1, vinp_idx])
@@ -513,8 +530,7 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
 
     hb_amps_inp = np.asarray(hb_amps_inp)
     hb_amps_out = np.asarray(hb_amps_out)
-    print(f"done  compile={hb_compile:.3f}s  timed={hb_elapsed:.3f}s  "
-          f"({hb_elapsed/n_freq*1e3:.2f} ms/freq)")
+    print(f"done  compile={hb_compile:.3f}s  timed={hb_elapsed:.3f}s  ({hb_elapsed / n_freq * 1e3:.2f} ms/freq)")
 
     # ------------------------------------------------------------------
     # Summary
@@ -535,12 +551,11 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
 
     print("\n── V(out) Fundamental Amplitude (selected points) ───────────────")
     print(f"  {'freq (Hz)':>12s}  {'NGSpice (V)':>12s}  {'HB (V)':>10s}  {'err (mV)':>10s}")
-    print(f"  {'-'*12}  {'-'*12}  {'-'*10}  {'-'*10}")
+    print(f"  {'-' * 12}  {'-' * 12}  {'-' * 10}  {'-' * 10}")
     indices = np.round(np.linspace(0, n_freq - 1, 12)).astype(int)
     for i in indices:
         err_mv = (hb_amps_out[i] - ng_amps_out[i]) * 1e3
-        print(f"  {sweep_freqs[i]:>12.1f}  {ng_amps_out[i]:>12.4f}  "
-              f"{hb_amps_out[i]:>10.4f}  {err_mv:>+10.3f}")
+        print(f"  {sweep_freqs[i]:>12.1f}  {ng_amps_out[i]:>12.4f}  {hb_amps_out[i]:>10.4f}  {err_mv:>+10.3f}")
 
     return ng_elapsed, hb_elapsed, hb_compile, sweep_freqs, ng_amps_out, hb_amps_out
 
@@ -550,8 +565,8 @@ def run_sweep_benchmark(sweep_freqs: np.ndarray, n_harmonics: int = N_HARMONICS)
 # ---------------------------------------------------------------------------
 
 SOLVERS: dict[str, SolverFn] = {
-    "ngspice":            solver_ngspice,
-    "circulax-hb":        solver_circulax_hb,
+    "ngspice": solver_ngspice,
+    "circulax-hb": solver_circulax_hb,
     "circulax-transient": solver_circulax_transient,
 }
 REFERENCE = "ngspice"
@@ -561,18 +576,15 @@ REFERENCE = "ngspice"
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Diode clipper HB testbench")
-    parser.add_argument("--plot",         action="store_true")
-    parser.add_argument("--sweep",        action="store_true",
-                        help="Run 100-frequency sweep benchmark instead of single-freq")
-    parser.add_argument("--n-harmonics",  type=int,  default=N_HARMONICS)
-    parser.add_argument("--n-save",       type=int,  default=2001,
-                        help="SaveAt points for Circulax transient (default 2001)")
-    parser.add_argument("--no-transient", action="store_true",
-                        help="Skip Circulax transient solver in single-freq mode")
-    parser.add_argument("--n-sweep",      type=int,  default=N_SWEEP,
-                        help="Number of frequency points in sweep (default 100)")
+    parser.add_argument("--plot", action="store_true")
+    parser.add_argument("--sweep", action="store_true", help="Run 100-frequency sweep benchmark instead of single-freq")
+    parser.add_argument("--n-harmonics", type=int, default=N_HARMONICS)
+    parser.add_argument("--n-save", type=int, default=2001, help="SaveAt points for Circulax transient (default 2001)")
+    parser.add_argument("--no-transient", action="store_true", help="Skip Circulax transient solver in single-freq mode")
+    parser.add_argument("--n-sweep", type=int, default=N_SWEEP, help="Number of frequency points in sweep (default 100)")
     args = parser.parse_args()
 
     # ------------------------------------------------------------------
@@ -592,7 +604,7 @@ def main() -> None:
             fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
 
             ax = axes[0]
-            ax.semilogx(freqs, ng_amps, "C0-",  lw=2, label="NGSpice (serial)")
+            ax.semilogx(freqs, ng_amps, "C0-", lw=2, label="NGSpice (serial)")
             ax.semilogx(freqs, hb_amps, "C1--", lw=2, label=f"Circulax HB vmap ({args.n_harmonics} harmonics)")
             ax.set_xlabel("Frequency (Hz)")
             ax.set_ylabel("V(out) fundamental amplitude (V)")
@@ -625,7 +637,7 @@ def main() -> None:
     # ------------------------------------------------------------------
 
     # Dense transient for harmonic FFT (more points per cycle than default)
-    n_save_harmonics = max(args.n_save, N_CYCLES * 200 + 1)   # ≥200 pts/cycle
+    n_save_harmonics = max(args.n_save, N_CYCLES * 200 + 1)  # ≥200 pts/cycle
 
     solvers = dict(SOLVERS)
     solvers["circulax-hb"] = lambda: solver_circulax_hb(n_harmonics=args.n_harmonics)
@@ -639,8 +651,8 @@ def main() -> None:
         nodes=NODES,
         title=(
             f"Diode Clipper — HB vs Transient  "
-            f"VS={V_AMP}V {F_SRC/1e3:.0f}kHz  "
-            f"Rs={R_SER/1e3:.0f}kΩ  RL={R_LOAD/1e3:.0f}kΩ  "
+            f"VS={V_AMP}V {F_SRC / 1e3:.0f}kHz  "
+            f"Rs={R_SER / 1e3:.0f}kΩ  RL={R_LOAD / 1e3:.0f}kΩ  "
             f"HB harmonics={args.n_harmonics}  "
             f"NGSpice/CX-transient: {N_CYCLES} cycles"
         ),
@@ -662,14 +674,22 @@ def main() -> None:
     print(f"\n[transient-dense] running (n_save={n_save_harmonics} for FFT) ...", end=" ", flush=True)
     linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="klu_split")
     y_op = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
-    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy,
-                                    transient_solver=BDF2RefactoringTransientSolver)
+    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy, transient_solver=BDF2RefactoringTransientSolver)
     # warmup
-    transient_sim(t0=0.0, t1=2*DT, dt0=DT, y0=y_op,
-                  saveat=diffrax.SaveAt(ts=jnp.linspace(0.0, 2*DT, 11)),
-                  max_steps=100, stepsize_controller=STEP_CONTROLLER).ys.block_until_ready()
+    transient_sim(
+        t0=0.0,
+        t1=2 * DT,
+        dt0=DT,
+        y0=y_op,
+        saveat=diffrax.SaveAt(ts=jnp.linspace(0.0, 2 * DT, 11)),
+        max_steps=100,
+        stepsize_controller=STEP_CONTROLLER,
+    ).ys.block_until_ready()
     dense_sol = transient_sim(
-        t0=0.0, t1=T_END, dt0=DT, y0=y_op,
+        t0=0.0,
+        t1=T_END,
+        dt0=DT,
+        y0=y_op,
         saveat=diffrax.SaveAt(ts=jnp.linspace(0.0, T_END, n_save_harmonics)),
         max_steps=int(T_END / DT) * 10,
         stepsize_controller=STEP_CONTROLLER,
@@ -690,27 +710,29 @@ def main() -> None:
         for node, title in [("v(inp)", "Input V(inp)"), ("v(out)", "Output V(out) — clipped")]:
             panel = {
                 "title": title,
-                "ref_time":    ref.time,
-                "ref_signal":  ref.signals[node],
+                "ref_time": ref.time,
+                "ref_signal": ref.signals[node],
             }
             for name, res in results.items():
                 if name == REFERENCE:
                     continue
-                panel["test_time"]   = res.time
+                panel["test_time"] = res.time
                 panel["test_signal"] = res.signals[node]
             panels.append(panel)
 
         for name in [k for k in results if k != REFERENCE]:
             res = results[name]
             err = res.signals["v(out)"] - np.interp(res.time, ref.time, ref.signals["v(out)"])
-            panels.append({
-                "title":       f"V(out) error — {name} − NGSpice",
-                "ref_time":    res.time,
-                "ref_signal":  err,
-                "test_time":   res.time,
-                "test_signal": err,
-                "show_error":  True,
-            })
+            panels.append(
+                {
+                    "title": f"V(out) error — {name} − NGSpice",
+                    "ref_time": res.time,
+                    "ref_signal": err,
+                    "test_time": res.time,
+                    "test_signal": err,
+                    "show_error": True,
+                }
+            )
 
         plot_comparison(
             ref_label="NGSpice (last cycle)",

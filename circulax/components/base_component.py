@@ -18,6 +18,7 @@ Example::
         i = (signals.p1 - signals.p2) / R
         return {"p1": i, "p2": -i}, {}
 
+
     r = Resistor(R=100.0)
     f, q = r(p1=1.0, p2=0.0)
 """
@@ -32,6 +33,8 @@ import jax.numpy as jnp
 from jax import Array
 
 PhysicsReturn = tuple[dict[str, Array], dict[str, Array]]
+
+
 # ---------------------------------------------------------------------------
 # Protocols
 # ---------------------------------------------------------------------------
@@ -103,7 +106,7 @@ class CircuitComponent(eqx.Module):
         if cls.ports:
             cls._VarsType_P = namedtuple("Ports", cls.ports)  # noqa: PYI024
         if cls.states:
-            cls._VarsType_S = namedtuple("States", cls.states) # noqa: PYI024
+            cls._VarsType_S = namedtuple("States", cls.states)  # noqa: PYI024
         cls._n_ports = len(cls.ports)
 
     def __call__(
@@ -137,9 +140,7 @@ class CircuitComponent(eqx.Module):
 
         """
         if y is None and not kwargs:
-            is_scalar = isinstance(t, (int, float)) or (
-                hasattr(t, "shape") and t.shape == ()
-            )
+            is_scalar = isinstance(t, (int, float)) or (hasattr(t, "shape") and t.shape == ())
             if not is_scalar:
                 y = t
                 t = 0.0
@@ -153,9 +154,7 @@ class CircuitComponent(eqx.Module):
             def _get_args(names: tuple[str, ...]) -> list[Any]:
                 return [kwargs.get(name, 0.0) for name in names]
 
-            signals = (
-                self._VarsType_P(*_get_args(self.ports)) if self._VarsType_P else ()
-            )
+            signals = self._VarsType_P(*_get_args(self.ports)) if self._VarsType_P else ()
             s = self._VarsType_S(*_get_args(self.states)) if self._VarsType_S else ()
 
         return self._invoke_physics(signals, s, t, self)
@@ -293,15 +292,13 @@ def _build_component(  # noqa: C901
 
     if len(params) < len(reserved):
         msg = f"Function '{fn.__name__}' must start with arguments {reserved}"
-        raise TypeError(
-            msg
-        )
+        raise TypeError(msg)
     for i, expected in enumerate(reserved):
         if params[i].name != expected:
             msg = f"Arg #{i + 1} must be '{expected}'"
             raise TypeError(msg)
 
-    param_specs = params[len(reserved):]
+    param_specs = params[len(reserved) :]
 
     if not uses_time:
         for p in param_specs:
@@ -314,7 +311,7 @@ def _build_component(  # noqa: C901
             msg = f"Parameter '{p.name}' must have a default."
             raise TypeError(msg)
 
-    _dummy_P = namedtuple("Ports", ports)(*([0.0] * len(ports))) if ports else () # noqa: PYI024
+    _dummy_P = namedtuple("Ports", ports)(*([0.0] * len(ports))) if ports else ()  # noqa: PYI024
     _dummy_S = namedtuple("States", states)(*([0.0] * len(states))) if states else ()  # noqa: PYI024
     _defaults = {p.name: p.default for p in param_specs}
 
@@ -330,12 +327,13 @@ def _build_component(  # noqa: C901
     full_keys = ports + states
     _param_names = tuple(p.name for p in param_specs)
     _user_fn = fn
-    _PortsType = namedtuple("Ports", ports) if ports else None # noqa: PYI024
-    _StatesType = namedtuple("States", states) if states else None # noqa: PYI024
+    _PortsType = namedtuple("Ports", ports) if ports else None  # noqa: PYI024
+    _StatesType = namedtuple("States", states) if states else None  # noqa: PYI024
 
     if len(full_keys) == 0:
         _fast_physics = lambda v, p, t: (jnp.zeros(0), jnp.zeros(0))  # noqa: E731
     else:
+
         def _fast_physics(
             vars_vec: jax.Array,
             params: Any,
@@ -353,6 +351,7 @@ def _build_component(  # noqa: C901
             return jnp.array(f_vals), jnp.array(q_vals)
 
     if uses_time:
+
         def _invoke_physics(
             self: CircuitComponent,
             signals: Any,
@@ -363,6 +362,7 @@ def _build_component(  # noqa: C901
             kw = {name: _extract_param(params, name) for name in _param_names}
             return _user_fn(signals, s, t, **kw)
     else:
+
         def _invoke_physics(
             self: CircuitComponent,
             signals: Any,
@@ -373,10 +373,7 @@ def _build_component(  # noqa: C901
             kw = {name: _extract_param(params, name) for name in _param_names}
             return _user_fn(signals, s, **kw)
 
-    annotations = {
-        p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any)
-        for p in param_specs
-    }
+    annotations = {p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any) for p in param_specs}
     defaults = {p.name: p.default for p in param_specs}
 
     namespace = {

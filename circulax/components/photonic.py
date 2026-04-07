@@ -77,7 +77,7 @@ def Grating(
     peak_loss_dB: float = 0.0,
     bandwidth_1dB: float = 20.0,
     wavelength_nm: float = 1310.0,
-)-> PhysicsReturn:
+) -> PhysicsReturn:
     """Grating coupler with Gaussian wavelength-dependent insertion loss.
 
     Loss increases quadratically with detuning from ``center_wavelength_nm``,
@@ -111,7 +111,7 @@ def Grating(
 
 
 @component(ports=("p1", "p2", "p3"))
-def Splitter(signals: Signals, s: States, split_ratio: float = 0.5)-> PhysicsReturn:
+def Splitter(signals: Signals, s: States, split_ratio: float = 0.5) -> PhysicsReturn:
     """Lossless asymmetric optical splitter (Y-junction) with a configurable power split ratio.
 
     The S-matrix is constructed to be unitary, with the cross-port coupling
@@ -129,9 +129,7 @@ def Splitter(signals: Signals, s: States, split_ratio: float = 0.5)-> PhysicsRet
     r = jnp.sqrt(split_ratio)
     tc = jnp.sqrt(1.0 - split_ratio)
 
-    S = jnp.array(
-        [[0.0, r, 1j * tc], [r, 0.0, 0.0], [1j * tc, 0.0, 0.0]], dtype=jnp.complex128
-    )
+    S = jnp.array([[0.0, r, 1j * tc], [r, 0.0, 0.0], [1j * tc, 0.0, 0.0]], dtype=jnp.complex128)
 
     Y = s_to_y(S)
 
@@ -147,7 +145,7 @@ def Splitter(signals: Signals, s: States, split_ratio: float = 0.5)-> PhysicsRet
 
 
 @component(ports=("p1", "p2"), states=("i_src",))
-def OpticalSource(signals: Signals, s: States, power: float = 1.0, phase: float = 0.0)-> PhysicsReturn:
+def OpticalSource(signals: Signals, s: States, power: float = 1.0, phase: float = 0.0) -> PhysicsReturn:
     """Ideal CW optical source for DC and small-signal AC analysis.
 
     Enforces a fixed complex field amplitude ``sqrt(power) * exp(j * phase)``
@@ -175,7 +173,7 @@ def OpticalSourcePulse(
     phase: float = 0.0,
     delay: float = 0.2e-9,
     rise: float = 0.05e-9,
-)-> PhysicsReturn:
+) -> PhysicsReturn:
     """Time-dependent optical source with a sigmoid turn-on profile.
 
     Field amplitude ramps smoothly from zero to ``sqrt(power)`` around

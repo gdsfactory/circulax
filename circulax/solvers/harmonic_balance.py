@@ -82,9 +82,7 @@ def _hb_residual(
     # Evaluate (f, q) at all K time points simultaneously.
     # The dt argument is unused for residual-only assembly.
     assemble_fn = assemble_residual_only_complex if is_complex else assemble_residual_only_real
-    f_time, q_time = jax.vmap(
-        lambda y_t, t: assemble_fn(y_t, component_groups, t, 1.0)
-    )(y_time, t_points)
+    f_time, q_time = jax.vmap(lambda y_t, t: assemble_fn(y_t, component_groups, t, 1.0))(y_time, t_points)
     # f_time, q_time: shape (K, sys_size)
 
     # Transform to frequency domain.
@@ -209,9 +207,7 @@ def setup_harmonic_balance(
 
         def residual_fn(y_flat: Array) -> Array:
             y_time = y_flat.reshape(K, sys_size)
-            return _hb_residual(
-                y_time, groups, t_points, omega, ground_indices, is_complex=is_complex
-            ).flatten()
+            return _hb_residual(y_time, groups, t_points, omega, ground_indices, is_complex=is_complex).flatten()
 
         def newton_step(y_flat: Array, _: Any) -> Array:
             r = residual_fn(y_flat)

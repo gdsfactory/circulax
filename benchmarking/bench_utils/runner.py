@@ -5,7 +5,7 @@ Usage in a testbench
 ::
 
     SOLVERS: dict[str, SolverFn] = {
-        "ngspice":  solver_ngspice,
+        "ngspice": solver_ngspice,
         "circulax": solver_circulax,
     }
 
@@ -34,12 +34,12 @@ class SolverResult:
     """All outputs produced by one solver for a single benchmark run."""
 
     name: str
-    time: np.ndarray                    # shape (N,)  time points (s)
-    signals: dict[str, np.ndarray]      # node_label → voltage array (N,)
-    elapsed: float                      # timed-run wall time (s)
-    n_steps: int                        # number of integration steps
-    compile_time: float = 0.0           # netlist compile / setup time (s)
-    warmup_time: float | None = None    # JIT/tracing warmup time (s), if any
+    time: np.ndarray  # shape (N,)  time points (s)
+    signals: dict[str, np.ndarray]  # node_label → voltage array (N,)
+    elapsed: float  # timed-run wall time (s)
+    n_steps: int  # number of integration steps
+    compile_time: float = 0.0  # netlist compile / setup time (s)
+    warmup_time: float | None = None  # JIT/tracing warmup time (s), if any
     metadata: dict = field(default_factory=dict)  # solver-specific extras
 
 
@@ -109,8 +109,10 @@ def run_benchmark(
         print(f"  [{name}]")
         for node in nodes:
             cmp = compare_waveforms(
-                ref.time, ref.signals[node],
-                r.time, r.signals[node],
+                ref.time,
+                ref.signals[node],
+                r.time,
+                r.signals[node],
                 node=node,
             )
             cmp.print()

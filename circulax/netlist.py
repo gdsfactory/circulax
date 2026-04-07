@@ -4,7 +4,6 @@ SAX netlists will be used as much as possible in circulax;
 however, connections for node based simulators need to be handled slightly differently.
 """
 
-
 from __future__ import annotations
 
 from typing import Annotated, NotRequired, TypeAlias
@@ -22,9 +21,7 @@ from sax.saxtypes.settings import Settings
 from sax.saxtypes.singlemode import InstancePort
 from typing_extensions import TypedDict
 
-Connections: TypeAlias = dict[
-    InstancePort, InstancePort | tuple[InstancePort, ...]
-]
+Connections: TypeAlias = dict[InstancePort, InstancePort | tuple[InstancePort, ...]]
 
 circulaxNetlist = Annotated[
     TypedDict(
@@ -139,7 +136,7 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
         The :class:`matplotlib.figure.Figure` containing the rendered graph.
 
     """
-    port_map, _= build_net_map(netlist)
+    port_map, _ = build_net_map(netlist)
 
     G = nx.Graph()
 
@@ -150,7 +147,6 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
         else:
             G.add_node(name, color="red", size=2000, label=name)
 
-
     net_groups = {}
 
     for port_str, net_idx in port_map.items():
@@ -159,9 +155,7 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
 
         inst_name, pin_name = port_str.split(",", 1)
 
-        G.add_node(
-            port_str, color="skyblue", size=300, label=pin_name, parent=inst_name
-        )
+        G.add_node(port_str, color="skyblue", size=300, label=pin_name, parent=inst_name)
 
         if inst_name in G.nodes:
             G.add_edge(inst_name, port_str, weight=10, type="internal")
@@ -182,9 +176,7 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
     def make_initial_pos(seed: int) -> dict:
         rng = np.random.default_rng(seed)
         pos = {}
-        instance_nodes = [
-            n for n, d in G.nodes(data=True) if d.get("color") in ["red", "black"]
-        ]
+        instance_nodes = [n for n, d in G.nodes(data=True) if d.get("color") in ["red", "black"]]
 
         # Place instances on a rough grid / random spread
         for name in instance_nodes:
@@ -202,9 +194,7 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
 
     def count_crossings(pos: dict[str, np.ndarray]) -> int:
 
-        def segments_intersect(
-            p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.ndarray
-        ) -> bool:
+        def segments_intersect(p1: np.ndarray, p2: np.ndarray, p3: np.ndarray, p4: np.ndarray) -> bool:
 
             def cross(o: np.ndarray, a: np.ndarray, b: np.ndarray) -> float:
                 return float((a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]))
@@ -214,8 +204,7 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
             d3 = cross(p1, p2, p3)
             d4 = cross(p1, p2, p4)
 
-            return bool(((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0))
-                        and ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)))
+            return bool(((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)))
 
         edges = list(G.edges())
         crossings = 0
@@ -256,9 +245,7 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
 
     fig = plt.figure(figsize=(10, 8))
 
-    instance_nodes = [
-        n for n, d in G.nodes(data=True) if d.get("color") in ["red", "black"]
-    ]
+    instance_nodes = [n for n, d in G.nodes(data=True) if d.get("color") in ["red", "black"]]
     port_nodes = [n for n, d in G.nodes(data=True) if d.get("color") == "skyblue"]
 
     nx.draw_networkx_nodes(
@@ -277,24 +264,16 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
         font_weight="bold",
     )
 
-    nx.draw_networkx_nodes(
-        G, pos, nodelist=port_nodes, node_color="skyblue", node_size=300
-    )
+    nx.draw_networkx_nodes(G, pos, nodelist=port_nodes, node_color="skyblue", node_size=300)
 
     port_labels = {n: G.nodes[n]["label"] for n in port_nodes}
     nx.draw_networkx_labels(G, pos, labels=port_labels, font_size=8, font_color="black")
 
-    internal_edges = [
-        (u, v) for u, v, d in G.edges(data=True) if d.get("type") == "internal"
-    ]
+    internal_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("type") == "internal"]
     nx.draw_networkx_edges(G, pos, edgelist=internal_edges, width=2.0, alpha=0.5)
 
-    external_edges = [
-        (u, v) for u, v, d in G.edges(data=True) if d.get("type") == "external"
-    ]
-    nx.draw_networkx_edges(
-        G, pos, edgelist=external_edges, width=1.5, style="dashed", edge_color="gray"
-    )
+    external_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get("type") == "external"]
+    nx.draw_networkx_edges(G, pos, edgelist=external_edges, width=1.5, style="dashed", edge_color="gray")
 
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="blue")
 

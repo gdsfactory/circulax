@@ -15,9 +15,11 @@ from circulax.solvers.circuit_diffeq import circuit_diffeqsolve
 try:
     from klujax import free_numeric
 except ImportError:
+
     def free_numeric(handle):  # type: ignore[misc]  # noqa: ANN001, ANN201
         """No-op fallback when klujax split interface is unavailable."""
         return handle
+
 
 from circulax.solvers.assembly import (
     assemble_residual_only_complex,
@@ -43,9 +45,7 @@ def _compute_history(component_groups, y_c, t, num_vars) -> ArrayLike:
 
     for group in component_groups.values():
         v_locs = y_c[group.var_indices]
-        _, q_l = jax.vmap(lambda v, p: group.physics_func(y=v, args=p, t=t))(
-            v_locs, group.params
-        )
+        _, q_l = jax.vmap(lambda v, p: group.physics_func(y=v, args=p, t=t))(v_locs, group.params)
 
         if is_complex:
             total_q = total_q.at[group.eq_indices].add(q_l.real)
@@ -109,14 +109,10 @@ class VectorizedTransientSolver(AbstractSolver):
 
         def newton_update_step(y, _) -> float:
             if is_complex:
-                total_f, total_q, all_vals = assemble_system_complex(
-                    y, component_groups, t1, dt
-                )
+                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, dt)
                 ground_indices = [0, num_vars]  # Real and Imag ground nodes
             else:
-                total_f, total_q, all_vals = assemble_system_real(
-                    y, component_groups, t1, dt
-                )
+                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, dt)
                 ground_indices = [0]
 
             # B. Transient Residual: I + dQ/dt
@@ -139,9 +135,7 @@ class VectorizedTransientSolver(AbstractSolver):
 
         # 4. Run Newton Loop (On Flat Vectors)
         solver = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
-        sol = optx.fixed_point(
-            newton_update_step, solver, y_pred, max_steps=20, throw=False
-        )
+        sol = optx.fixed_point(newton_update_step, solver, y_pred, max_steps=20, throw=False)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -204,14 +198,10 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
 
         # 3. Assemble and Factor ONCE at the predicted state
         if is_complex:
-            _, _, frozen_jac_vals = assemble_system_complex(
-                y_pred, component_groups, t1, dt
-            )
+            _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, dt)
             ground_indices = [0, num_vars]
         else:
-            _, _, frozen_jac_vals = assemble_system_real(
-                y_pred, component_groups, t1, dt
-            )
+            _, _, frozen_jac_vals = assemble_system_real(y_pred, component_groups, t1, dt)
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
@@ -219,22 +209,16 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
         # 4. Newton iterations reusing the frozen Jacobian
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
             if is_complex:
-                total_f, total_q = assemble_residual_only_complex(
-                    y, component_groups, t1, dt
-                )
+                total_f, total_q = assemble_residual_only_complex(y, component_groups, t1, dt)
             else:
-                total_f, total_q = assemble_residual_only_real(
-                    y, component_groups, t1, dt
-                )
+                total_f, total_q = assemble_residual_only_real(y, component_groups, t1, dt)
 
             residual = total_f + (total_q - q_prev) / dt
 
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
-            sol = self.linear_solver.solve_with_frozen_jacobian(
-                -residual, numeric_handle
-            )
+            sol = self.linear_solver.solve_with_frozen_jacobian(-residual, numeric_handle)
             delta = sol.value
 
             max_change = jnp.max(jnp.abs(delta))
@@ -326,9 +310,7 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
-            sol = self.linear_solver.solve_with_frozen_jacobian(
-                -residual, refreshed_handle
-            )
+            sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
             delta = sol.value
 
             max_change = jnp.max(jnp.abs(delta))
@@ -458,20 +440,14 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
         h_n = t1 - t0
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        y_pred, alpha, make_residual, new_state = _bdf2_preamble(
-            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex
-        )
+        y_pred, alpha, make_residual, new_state = _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex)
 
         def newton_update_step(y, _) -> float:
             if is_complex:
-                total_f, total_q, all_vals = assemble_system_complex(
-                    y, component_groups, t1, h_n, alpha=alpha
-                )
+                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha)
                 ground_indices = [0, num_vars]
             else:
-                total_f, total_q, all_vals = assemble_system_real(
-                    y, component_groups, t1, h_n, alpha=alpha
-                )
+                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha)
                 ground_indices = [0]
 
             residual = make_residual(total_f, total_q)
@@ -521,19 +497,13 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
         h_n = t1 - t0
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        y_pred, alpha, make_residual, new_state = _bdf2_preamble(
-            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex
-        )
+        y_pred, alpha, make_residual, new_state = _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex)
 
         if is_complex:
-            _, _, frozen_jac_vals = assemble_system_complex(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0, num_vars]
         else:
-            _, _, frozen_jac_vals = assemble_system_real(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, frozen_jac_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
@@ -555,9 +525,7 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
             return y + delta * damping
 
         fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
-        sol = optx.fixed_point(
-            newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False
-        )
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
         free_numeric(numeric_handle)
 
         y_next = sol.value
@@ -593,32 +561,22 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
         h_n = t1 - t0
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        y_pred, alpha, make_residual, new_state = _bdf2_preamble(
-            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex
-        )
+        y_pred, alpha, make_residual, new_state = _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex)
 
         if is_complex:
-            _, _, init_vals = assemble_system_complex(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, init_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0, num_vars]
         else:
-            _, _, init_vals = assemble_system_real(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, init_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(init_vals)
 
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
             if is_complex:
-                total_f, total_q, all_vals = assemble_system_complex(
-                    y, component_groups, t1, h_n, alpha=alpha
-                )
+                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha)
             else:
-                total_f, total_q, all_vals = assemble_system_real(
-                    y, component_groups, t1, h_n, alpha=alpha
-                )
+                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha)
 
             refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
             residual = make_residual(total_f, total_q)
@@ -632,9 +590,7 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
             return y + delta * damping
 
         fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
-        sol = optx.fixed_point(
-            newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False
-        )
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
         free_numeric(numeric_handle)
 
         y_next = sol.value
@@ -714,13 +670,9 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
         def _run_stage(y_init, q_hist, t_stage):
             def newton_update_step(y, _) -> float:
                 if is_complex:
-                    total_f, total_q, all_vals = assemble_system_complex(
-                        y, component_groups, t_stage, h_n, alpha=alpha
-                    )
+                    total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t_stage, h_n, alpha=alpha)
                 else:
-                    total_f, total_q, all_vals = assemble_system_real(
-                        y, component_groups, t_stage, h_n, alpha=alpha
-                    )
+                    total_f, total_q, all_vals = assemble_system_real(y, component_groups, t_stage, h_n, alpha=alpha)
                 residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
                 for idx in ground_indices:
                     residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
@@ -789,14 +741,10 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
 
         # Factor J_eff ONCE at predictor — reused for all stages and iterations
         if is_complex:
-            _, _, frozen_jac_vals = assemble_system_complex(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0, num_vars]
         else:
-            _, _, frozen_jac_vals = assemble_system_real(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, frozen_jac_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
@@ -820,9 +768,7 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
                 return y + delta * damping
 
             fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
-            stage_sol = optx.fixed_point(
-                newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False
-            )
+            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
             return stage_sol.value, stage_sol.result
 
         t_s1 = t0 + _SDIRK3_G * h_n
@@ -874,14 +820,10 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
         alpha = _SDIRK3_INV_G
 
         if is_complex:
-            _, _, init_vals = assemble_system_complex(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, init_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0, num_vars]
         else:
-            _, _, init_vals = assemble_system_real(
-                y_pred, component_groups, t1, h_n, alpha=alpha
-            )
+            _, _, init_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha)
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(init_vals)
@@ -892,13 +834,9 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
         def _run_stage(y_init, q_hist, t_stage):
             def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
                 if is_complex:
-                    total_f, total_q, all_vals = assemble_system_complex(
-                        y, component_groups, t_stage, h_n, alpha=alpha
-                    )
+                    total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t_stage, h_n, alpha=alpha)
                 else:
-                    total_f, total_q, all_vals = assemble_system_real(
-                        y, component_groups, t_stage, h_n, alpha=alpha
-                    )
+                    total_f, total_q, all_vals = assemble_system_real(y, component_groups, t_stage, h_n, alpha=alpha)
                 refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
                 residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
                 for idx in ground_indices:
@@ -910,9 +848,7 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
                 return y + delta * damping
 
             fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
-            stage_sol = optx.fixed_point(
-                newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False
-            )
+            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
             return stage_sol.value, stage_sol.result
 
         t_s1 = t0 + _SDIRK3_G * h_n
@@ -943,9 +879,7 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
 
 
 def setup_transient(
-    groups: list,
-    linear_strategy: CircuitLinearSolver,
-    transient_solver:AbstractSolver=None
+    groups: list, linear_strategy: CircuitLinearSolver, transient_solver: AbstractSolver = None
 ) -> Callable[..., diffrax.Solution]:
     """Configures and returns a function for executing transient analysis.
 
@@ -1003,11 +937,7 @@ def setup_transient(
 
     tsolver = transient_solver(linear_solver=linear_strategy)
 
-    sys_size = (
-        linear_strategy.sys_size // 2
-        if linear_strategy.is_complex
-        else linear_strategy.sys_size
-    )
+    sys_size = linear_strategy.sys_size // 2 if linear_strategy.is_complex else linear_strategy.sys_size
 
     def _execute_transient(
         *,

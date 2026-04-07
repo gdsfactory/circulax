@@ -222,11 +222,7 @@ def _circuit_loop(
                 return ss
 
             def _cond(_ss):
-                return (
-                    keep_step
-                    & (subsaveat.ts[_ss.saveat_ts_index] <= state.tnext)
-                    & (_ss.saveat_ts_index < len(subsaveat.ts))
-                )
+                return keep_step & (subsaveat.ts[_ss.saveat_ts_index] <= state.tnext) & (_ss.saveat_ts_index < len(subsaveat.ts))
 
             def _body(_ss):
                 _t = subsaveat.ts[_ss.saveat_ts_index]
@@ -272,9 +268,7 @@ def _circuit_loop(
     # Run the while-loop
     # ------------------------------------------------------------------
 
-    final_state: CircuitState = outer_while_loop(
-        cond_fun, body_fun, init_state, max_steps=max_steps, buffers=_outer_buffers
-    )
+    final_state: CircuitState = outer_while_loop(cond_fun, body_fun, init_state, max_steps=max_steps, buffers=_outer_buffers)
 
     # ------------------------------------------------------------------
     # Save at t1 (the very end)
@@ -354,9 +348,7 @@ def circuit_diffeqsolve(
     # ------------------------------------------------------------------
     # dtype promotion for times (same logic as diffrax)
     # ------------------------------------------------------------------
-    timelikes = [t0, t1, dt0] + [
-        s.ts for s in jtu.tree_leaves(saveat.subs, is_leaf=_is_subsaveat) if s.ts is not None
-    ]
+    timelikes = [t0, t1, dt0] + [s.ts for s in jtu.tree_leaves(saveat.subs, is_leaf=_is_subsaveat) if s.ts is not None]
     with jax.numpy_dtype_promotion("standard"):
         time_dtype = jnp.result_type(*timelikes)
     if jnp.issubdtype(time_dtype, jnp.integer):
@@ -371,9 +363,7 @@ def circuit_diffeqsolve(
         out = [s.ts for s in jtu.tree_leaves(saveat.subs, is_leaf=_is_subsaveat)]
         return [x for x in out if x is not None]
 
-    saveat = eqx.tree_at(
-        _cast_ts, saveat, replace_fn=lambda ts: ts.astype(time_dtype)
-    )
+    saveat = eqx.tree_at(_cast_ts, saveat, replace_fn=lambda ts: ts.astype(time_dtype))
 
     # Promote y0 dtype to be consistent with time (avoids weak-dtype issues)
     def _promote(yi):
@@ -443,9 +433,7 @@ def circuit_diffeqsolve(
     # ------------------------------------------------------------------
     tprev = t0
     error_order = solver.error_order(terms)
-    tnext, controller_state = stepsize_controller.init(
-        terms, t0, t1, y0, dt0, args, solver.func, error_order
-    )
+    tnext, controller_state = stepsize_controller.init(terms, t0, t1, y0, dt0, args, solver.func, error_order)
     tnext = jnp.minimum(tnext, t1)
     solver_state = solver.init(terms, t0, tnext, y0, args)
 
@@ -462,9 +450,7 @@ def circuit_diffeqsolve(
             out_size += 1
         struct = eqx.filter_eval_shape(subsaveat.fn, t0, y0, args)
         ts = jnp.full(out_size, jnp.inf, dtype=time_dtype)
-        ys = jtu.tree_map(
-            lambda y: jnp.full((out_size,) + y.shape, jnp.inf, dtype=y.dtype), struct
-        )
+        ys = jtu.tree_map(lambda y: jnp.full((out_size,) + y.shape, jnp.inf, dtype=y.dtype), struct)
         return SaveState(ts=ts, ys=ys, save_index=0, saveat_ts_index=0)
 
     save_state = jtu.tree_map(_allocate, saveat.subs, is_leaf=_is_subsaveat)
@@ -493,9 +479,7 @@ def circuit_diffeqsolve(
         outer_while_loop = ft.partial(_outer_loop, kind="lax")
     else:
         inner_while_loop = ft.partial(_inner_loop, kind="checkpointed")
-        outer_while_loop = ft.partial(
-            _outer_loop, kind="checkpointed", checkpoints=checkpoints
-        )
+        outer_while_loop = ft.partial(_outer_loop, kind="checkpointed", checkpoints=checkpoints)
 
     # ------------------------------------------------------------------
     # Run the integration

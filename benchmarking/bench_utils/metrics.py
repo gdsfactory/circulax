@@ -12,13 +12,15 @@ class WaveformComparison:
     """Accuracy metrics between a reference waveform and a test waveform."""
 
     node: str
-    max_abs_error: float    # V
-    rms_error: float        # V
-    rel_rms_pct: float      # % of signal swing
+    max_abs_error: float  # V
+    rms_error: float  # V
+    rel_rms_pct: float  # % of signal swing
 
     def print(self) -> None:
-        print(f"  [{self.node}]  max|err|={self.max_abs_error*1e3:.4f} mV  "
-              f"RMS={self.rms_error*1e3:.4f} mV  rel={self.rel_rms_pct:.4f}%")
+        print(
+            f"  [{self.node}]  max|err|={self.max_abs_error * 1e3:.4f} mV  "
+            f"RMS={self.rms_error * 1e3:.4f} mV  rel={self.rel_rms_pct:.4f}%"
+        )
 
 
 def compare_waveforms(

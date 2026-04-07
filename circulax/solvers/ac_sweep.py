@@ -31,8 +31,8 @@ Example::
     port_nodes = [pmap["R1,p1"]]
     run_ac = setup_ac_sweep(groups, num_vars, port_nodes, z0=50.0)
 
-    freqs = jnp.logspace(6, 10, 100)          # 1 MHz to 10 GHz
-    S = run_ac(y_dc, freqs)                    # shape (100, 1, 1) complex
+    freqs = jnp.logspace(6, 10, 100)  # 1 MHz to 10 GHz
+    S = run_ac(y_dc, freqs)  # shape (100, 1, 1) complex
 
     # JIT for repeated sweeps:
     S = jax.jit(run_ac)(y_dc, freqs)
@@ -108,9 +108,7 @@ def setup_ac_sweep(
         raise ValueError(msg)
 
     # --- Pre-compute static COO index arrays (captured in closure) -----------
-    static_rows, static_cols, ground_idxs, _ = _build_index_arrays(
-        groups, num_vars, is_complex=False
-    )
+    static_rows, static_cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
     static_rows_jax = jnp.array(static_rows)
     static_cols_jax = jnp.array(static_cols)
     ground_indices = jnp.array(ground_idxs)
