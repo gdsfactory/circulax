@@ -50,23 +50,17 @@ def on_post_build(config: Any, **kwargs: Any) -> None:
     """Called after the build is complete."""
 
 
-def on_pre_template(
-    template: Any, template_name: str, config: Any, **kwargs: Any
-) -> Any:
+def on_pre_template(template: Any, template_name: str, config: Any, **kwargs: Any) -> Any:
     """Called before a template is rendered."""
     return template
 
 
-def on_template_context(
-    context: Any, template_name: str, config: Any, **kwargs: Any
-) -> Any:
+def on_template_context(context: Any, template_name: str, config: Any, **kwargs: Any) -> Any:
     """Called after template context is created."""
     return context
 
 
-def on_post_template(
-    output: str, template_name: str, config: Any, **kwargs: Any
-) -> str:
+def on_post_template(output: str, template_name: str, config: Any, **kwargs: Any) -> str:
     """Called after template is rendered."""
     return output
 
@@ -76,9 +70,7 @@ def on_pre_page(page: Any, config: Any, files: Any, **kwargs: Any) -> Any:
     return page
 
 
-def on_page_markdown(
-    markdown: str, page: Any, config: Any, files: Any, **kwargs: Any
-) -> str:
+def on_page_markdown(markdown: str, page: Any, config: Any, files: Any, **kwargs: Any) -> str:
     """Process markdown content before it's converted to HTML."""
     blocks = markdown.split("```")
 
@@ -140,9 +132,7 @@ def on_page_content(  # noqa: C901
     return "".join(rendered_parts)
 
 
-def on_page_context(
-    context: Any, page: Any, config: Any, nav: Any, **kwargs: Any
-) -> Any:
+def on_page_context(context: Any, page: Any, config: Any, nav: Any, **kwargs: Any) -> Any:
     """Called after page context is created."""
     return context
 
@@ -215,14 +205,9 @@ def _svgbob_svg(source: str) -> str | None:
         temp_path.unlink()
 
 
-def _svgbob_source(
-    rendered_lines: list[str], source_parts: list[list[str]]
-) -> str | None:
+def _svgbob_source(rendered_lines: list[str], source_parts: list[list[str]]) -> str | None:
     for source_lines in source_parts:
-        if all(
-            sl.strip() in rl
-            for sl, rl in zip(source_lines, rendered_lines, strict=False)
-        ):
+        if all(sl.strip() in rl for sl, rl in zip(source_lines, rendered_lines, strict=False)):
             return "\n".join(source_lines)
     return None
 

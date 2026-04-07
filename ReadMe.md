@@ -1,6 +1,9 @@
 # **Circulax**
 
-<img src="docs/images/logo.svg" alt="logo" width="350">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-white.svg">
+  <img src="docs/images/logo.svg" alt="logo" width="350">
+</picture>
 
 ## **A Differentiable, Functional Circuit Simulator based on JAX**
 Circulax is a differentiable circuit simulation framework built on [JAX](https://docs.jax.dev/en/latest/notebooks/thinking_in_jax.html), [Optimistix](https://github.com/patrick-kidger/optimistix) and [Diffrax](https://docs.kidger.site/diffrax/). It treats circuit netlists as systems of Ordinary Differential Equations (ODEs), leveraging Diffrax's suite of numerical solvers for transient analysis.
@@ -97,11 +100,12 @@ pip install circulax
 ## **Simulation Example**
 
 ```python
+import diffrax
 import jax
 import jax.numpy as jnp
-from circulax.components.electronic import Resistor, Capacitor, Inductor, VoltageSource
-from circulax.compiler import compile_netlist
 import matplotlib.pyplot as plt
+from circulax import compile_circuit, setup_transient
+from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
 
 jax.config.update("jax_enable_x64", True)
 
@@ -129,17 +133,12 @@ models_map = {
     'ground': lambda: 0
 }
 
-# Analyze Circuit
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-linear_strat = analyze_circuit(groups, sys_size, is_complex=False)
+# Compile and solve DC operating point
+circuit = compile_circuit(net_dict, models_map)
+y_op = circuit()
 
-# Solve DC
-y_guess = jnp.zeros(sys_size)
-y_op = linear_strat.solve_dc(groups,y_guess)
-
-# Setup Sim
-transient_sim = setup_transient(groups=groups, linear_strategy=linear_strat)
-term = diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y))
+# Setup transient solver
+transient_sim = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
 
 # Run simulation
 t_max = 3E-9
@@ -152,9 +151,9 @@ sol = transient_sim(
 
 # Post processing and plotting
 ts = sol.ts
-v_src = sol.ys[:, port_map["V1,p1"]]
-v_cap = sol.ys[:, port_map["C1,p1"]]
-i_ind = sol.ys[:, 5]
+v_src = circuit.get_port_field(sol.ys, "V1,p1")
+v_cap = circuit.get_port_field(sol.ys, "C1,p1")
+i_ind = sol.ys[:, 5]  # raw index for inductor internal current
 
 fig, ax1 = plt.subplots(figsize=(8, 5))
 ax1.plot(ts, v_src, 'k--', label='Source V')

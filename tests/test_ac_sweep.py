@@ -11,8 +11,8 @@ from circulax.solvers import analyze_circuit, setup_ac_sweep
 # Test fixtures
 # ---------------------------------------------------------------------------
 
-_R = 50.0   # series resistor (ohms)
-_C = 1e-9   # shunt capacitor (farads)
+_R = 50.0  # series resistor (ohms)
+_C = 1e-9  # shunt capacitor (farads)
 _Z0 = 50.0  # reference impedance
 
 
@@ -40,7 +40,7 @@ def rc_netlist():
             "C1": {"component": "capacitor", "settings": {"C": _C}},
         },
         "connections": {
-            "R1,p1": "C1,p1",   # port node: R1,p1 == C1,p1
+            "R1,p1": "C1,p1",  # port node: R1,p1 == C1,p1
             "R1,p2": "GND,p1",
             "C1,p2": "GND,p1",
         },
@@ -101,9 +101,7 @@ def test_ac_sweep_s11_analytical(rc_setup):
     S = run_ac(y_dc, _FREQS)
     S11 = S[:, 0, 0]
     S11_ref = _analytical_s11(_FREQS)
-    assert jnp.allclose(S11, S11_ref, atol=1e-6), (
-        f"Max error: {jnp.max(jnp.abs(S11 - S11_ref)):.2e}"
-    )
+    assert jnp.allclose(S11, S11_ref, atol=1e-6), f"Max error: {jnp.max(jnp.abs(S11 - S11_ref)):.2e}"
 
 
 def test_ac_sweep_passivity(rc_setup):
@@ -116,6 +114,7 @@ def test_ac_sweep_passivity(rc_setup):
 # ---------------------------------------------------------------------------
 # Limiting cases
 # ---------------------------------------------------------------------------
+
 
 def test_ac_sweep_dc_limit(rc_netlist):
     """At f→0, S11 → (R_parallel - Z0)/(R_parallel + Z0) (capacitor becomes open).
@@ -152,7 +151,7 @@ def test_ac_sweep_matched_load():
             "R2": {"component": "resistor", "settings": {"R": R_each}},
         },
         "connections": {
-            "R1,p1": "R2,p1",   # port node shared between R1 and R2
+            "R1,p1": "R2,p1",  # port node shared between R1 and R2
             "R1,p2": "GND,p1",
             "R2,p2": "GND,p1",
         },
@@ -221,6 +220,7 @@ def test_ac_sweep_fdomain():
 
     R0, a = 25.0, 1e-5
     from circulax.components.electronic import Resistor
+
     models_map = {"skin_r": SkinResistor, "resistor": Resistor, "ground": lambda: 0}
     net_dict = {
         "instances": {
@@ -249,9 +249,7 @@ def test_ac_sweep_fdomain():
     Y_total = 1.0 / _Z0 + 1.0 / Z_circuit
     S11_ref = (2.0 / _Z0) / Y_total - 1.0
 
-    assert jnp.allclose(S11, S11_ref, atol=1e-6), (
-        f"Max fdomain error: {jnp.max(jnp.abs(S11 - S11_ref)):.2e}"
-    )
+    assert jnp.allclose(S11, S11_ref, atol=1e-6), f"Max fdomain error: {jnp.max(jnp.abs(S11 - S11_ref)):.2e}"
 
 
 # ---------------------------------------------------------------------------

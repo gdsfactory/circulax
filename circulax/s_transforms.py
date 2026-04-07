@@ -72,8 +72,7 @@ def sax_component(fn: callable) -> callable:
     """
     sig = inspect.signature(fn)
     defaults = {
-        param.name: param.default if param.default is not inspect.Parameter.empty else 1.0
-        for param in sig.parameters.values()
+        param.name: param.default if param.default is not inspect.Parameter.empty else 1.0 for param in sig.parameters.values()
     }
 
     try:
@@ -87,9 +86,7 @@ def sax_component(fn: callable) -> callable:
         s_dict = fn(**kwargs)
         s_matrix, _ = sdense(s_dict)
         y_matrix = s_to_y(s_matrix)
-        v_vec = jnp.array(
-            [getattr(signals, p) for p in detected_ports], dtype=jnp.complex128
-        )
+        v_vec = jnp.array([getattr(signals, p) for p in detected_ports], dtype=jnp.complex128)
         i_vec = y_matrix @ v_vec
         return {p: i_vec[i] for i, p in enumerate(detected_ports)}, {}
 
@@ -160,10 +157,7 @@ def _build_fdomain_component(
         kw = {name: _extract_param(args, name) for name in _param_names}
         return _user_fn(f, **kw)
 
-    annotations = {
-        p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any)
-        for p in param_specs
-    }
+    annotations = {p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any) for p in param_specs}
 
     namespace: dict[str, Any] = {
         "__annotations__": annotations,

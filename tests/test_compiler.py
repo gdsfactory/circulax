@@ -18,7 +18,7 @@ def test_compile_netlist_basic(simple_lrc_netlist):
     all_port_keys = set()
     for src, targets in net_dict["connections"].items():
         all_port_keys.add(src)
-        for t in (targets if isinstance(targets, (list, tuple)) else [targets]):
+        for t in targets if isinstance(targets, (list, tuple)) else [targets]:
             all_port_keys.add(t)
     num_nets = len({port_map[k] for k in all_port_keys if k in port_map})
     assert sys_size == num_nets + 2

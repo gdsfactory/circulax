@@ -56,9 +56,7 @@ def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
 
 
 @source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V")
-def VoltageSource(
-    signals: Signals, s: States, t: float, V: float = 0.0, delay: float = 0.0
-) -> PhysicsReturn:
+def VoltageSource(signals: Signals, s: States, t: float, V: float = 0.0, delay: float = 0.0) -> PhysicsReturn:
     """Step voltage source."""
     v_val = jnp.where(t >= delay, V, 0.0)
     constraint = (signals.p1 - signals.p2) - v_val
@@ -151,9 +149,7 @@ def CurrentSource(signals: Signals, s: States, I: float = 0.0) -> PhysicsReturn:
 
 
 @component(ports=("p1", "p2"))
-def Diode(
-    signals: Signals, s: States, Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85e-3
-) -> PhysicsReturn:
+def Diode(signals: Signals, s: States, Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85e-3) -> PhysicsReturn:
     """Ideal diode using the Shockley equation ``I = Is * (exp(Vd / n*Vt) - 1)``.
 
     Junction voltage is clipped to ``[-5, 5]`` V for numerical stability.
@@ -209,14 +205,7 @@ def ZenerDiode(
 # ===========================================================================
 
 
-def _nmos_current(v_d:float,
-                  v_g:float,
-                  v_s:float,
-                  Kp:float,
-                  W:float,
-                  L:float,
-                  Vth:float,
-                  lam:float ) -> float:
+def _nmos_current(v_d: float, v_g: float, v_s: float, Kp: float, W: float, L: float, Vth: float, lam: float) -> float:
     """Compute NMOS drain current for cutoff, linear, and saturation regions.
 
     Args:
@@ -242,9 +231,7 @@ def _nmos_current(v_d:float,
     linear_current = beta * (v_over * vds - 0.5 * vds**2) * (1 + lam * vds)
     sat_current = (beta / 2.0) * (v_over**2) * (1 + lam * vds)
 
-    return jnp.where(
-        vgs <= Vth, 0.0, jnp.where(vds < v_over, linear_current, sat_current)
-    )
+    return jnp.where(vgs <= Vth, 0.0, jnp.where(vds < v_over, linear_current, sat_current))
 
 
 @component(ports=("d", "g", "s"))
@@ -309,9 +296,7 @@ def PMOS(
     linear_current = beta * (v_over * vsd - 0.5 * vsd**2) * (1 + lam * vsd)
     sat_current = (beta / 2.0) * (v_over**2) * (1 + lam * vsd)
 
-    i_sd = jnp.where(
-        vsg <= vth_abs, 0.0, jnp.where(vsd < v_over, linear_current, sat_current)
-    )
+    i_sd = jnp.where(vsg <= vth_abs, 0.0, jnp.where(vsd < v_over, linear_current, sat_current))
 
     return {"d": -i_sd, "g": 0.0, "s": i_sd}, {}
 
@@ -406,16 +391,11 @@ def _junction_charge(v, Cj0, Vj, m) -> float:
     fc = 0.5
     v_thresh = fc * Vj
     # Standard SPICE depletion charge: Cj0*Vj/(1-m) * [1 - (1 - v/Vj)^(1-m)]
-    q_normal = (
-        Cj0
-        * Vj
-        / (1.0 - m)
-        * (1.0 - jnp.power(jnp.maximum(0.0, 1.0 - v / Vj), 1.0 - m))
-    )
+    q_normal = Cj0 * Vj / (1.0 - m) * (1.0 - jnp.power(jnp.maximum(0.0, 1.0 - v / Vj), 1.0 - m))
 
     # Linear extrapolation beyond threshold: fixed anchor + constant slope C_linear
-    C_linear = Cj0 / jnp.power(1.0 - fc, m)                                    # Cj(v_thresh)
-    q_thresh = Cj0 * Vj / (1.0 - m) * (1.0 - jnp.power(1.0 - fc, 1.0 - m))   # q_normal(v_thresh)
+    C_linear = Cj0 / jnp.power(1.0 - fc, m)  # Cj(v_thresh)
+    q_thresh = Cj0 * Vj / (1.0 - m) * (1.0 - jnp.power(1.0 - fc, 1.0 - m))  # q_normal(v_thresh)
     q_high = q_thresh + C_linear * (v - v_thresh)
 
     return jnp.where(v < v_thresh, q_normal, q_high)
@@ -596,9 +576,7 @@ def IdealOpAmp(signals: Signals, s: States, A: float = 1e6) -> PhysicsReturn:
 
 
 @component(ports=("p1", "p2", "cp", "cm"))
-def VoltageControlledSwitch(
-    signals: Signals, s: States, Ron: float = 1.0, Roff: float = 1e6, Vt: float = 0.0
-) -> PhysicsReturn:
+def VoltageControlledSwitch(signals: Signals, s: States, Ron: float = 1.0, Roff: float = 1e6, Vt: float = 0.0) -> PhysicsReturn:
     """Voltage Controlled Switch."""
     v_ctrl = signals.cp - signals.cm
     k = 10.0

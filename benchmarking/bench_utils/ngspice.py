@@ -76,8 +76,7 @@ def run_ngspice(
 
     if not output_path.exists():
         raise FileNotFoundError(
-            f"NGSpice did not produce output at {output_path}.\n"
-            f"Check that the .cir wrdata path matches.\nstderr:\n{result.stderr}"
+            f"NGSpice did not produce output at {output_path}.\nCheck that the .cir wrdata path matches.\nstderr:\n{result.stderr}"
         )
 
     # NGSpice wrdata format: each variable gets its OWN time column, so N variables

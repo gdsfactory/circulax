@@ -128,6 +128,7 @@ def test_fdomain_admittance_at_freq():
 def test_fdomain_bad_signature_raises():
     """Decorating a function whose first arg is not 'f' raises TypeError."""
     with pytest.raises(TypeError, match="'f'"):
+
         @fdomain_component(ports=("p1", "p2"))
         def BadComponent(x: float, R: float = 1.0):
             return jnp.eye(2, dtype=jnp.complex128)
@@ -136,6 +137,7 @@ def test_fdomain_bad_signature_raises():
 def test_fdomain_missing_default_raises():
     """Decorating a function with a parameter lacking a default raises TypeError."""
     with pytest.raises(TypeError, match="default"):
+
         @fdomain_component(ports=("p1",))
         def BadComponent2(f: float, R: float):
             return jnp.eye(1, dtype=jnp.complex128)
