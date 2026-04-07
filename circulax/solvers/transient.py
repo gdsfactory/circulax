@@ -13,12 +13,23 @@ from jax.typing import ArrayLike
 from circulax.solvers.circuit_diffeq import circuit_diffeqsolve
 
 try:
-    from klujax import free_numeric
+    from klujax import free_numeric as _klujax_free_numeric
 except ImportError:
+    _klujax_free_numeric = None
 
-    def free_numeric(handle):  # type: ignore[misc]  # noqa: ANN001, ANN201
-        """No-op fallback when klujax split interface is unavailable."""
-        return handle
+
+def free_numeric(handle, dependency=None):  # noqa: ANN001, ANN201, ARG001
+    """Dispatch free to the correct backend based on handle type.
+
+    Both ``klujax.KLUHandleManager`` and ``klujax_rs.KLUHandleManager`` expose ``.close()``,
+    which calls their respective backend's FFI free function.  Duck-typing is used so that
+    handles from either backend are freed correctly without cross-module ``isinstance`` checks.
+    """
+    if hasattr(handle, "close"):
+        handle.close()
+        return
+    if _klujax_free_numeric is not None:
+        _klujax_free_numeric(handle)
 
 
 from circulax.solvers.assembly import (
@@ -67,6 +78,8 @@ class VectorizedTransientSolver(AbstractSolver):
     """
 
     linear_solver: CircuitLinearSolver
+    newton_rtol: float = 1e-5
+    newton_atol: float = 1e-5
 
     term_structure = diffrax.AbstractTerm
     interpolation_cls = diffrax.LocalLinearInterpolation
@@ -134,7 +147,7 @@ class VectorizedTransientSolver(AbstractSolver):
             return y + delta * damping
 
         # 4. Run Newton Loop (On Flat Vectors)
-        solver = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        solver = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, solver, y_pred, max_steps=20, throw=False)
 
         y_next = sol.value
@@ -227,7 +240,7 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
             return y + delta * damping
 
         # 5. Run Newton Loop
-        solver = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        solver = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(
             newton_update_step,
             solver,
@@ -304,13 +317,15 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             else:
                 total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, dt)
 
-            refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
-
             residual = total_f + (total_q - q_prev) / dt
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
-            sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
+            if hasattr(self.linear_solver, "refactor_and_solve_jacobian"):
+                sol, _ = self.linear_solver.refactor_and_solve_jacobian(all_vals, -residual, numeric_handle)
+            else:
+                refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
+                sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
             delta = sol.value
 
             max_change = jnp.max(jnp.abs(delta))
@@ -319,7 +334,7 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             return y + delta * damping
 
         # 5. Run Newton loop
-        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(
             newton_update_step,
             fpi,
@@ -460,7 +475,7 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
             return y + delta * damping
 
-        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=20, throw=False)
 
         y_next = sol.value
@@ -524,7 +539,7 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
             return y + delta * damping
 
-        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
         free_numeric(numeric_handle)
 
@@ -578,18 +593,21 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
             else:
                 total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha)
 
-            refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
             residual = make_residual(total_f, total_q)
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
-            sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
+            if hasattr(self.linear_solver, "refactor_and_solve_jacobian"):
+                sol, _ = self.linear_solver.refactor_and_solve_jacobian(all_vals, -residual, numeric_handle)
+            else:
+                refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
+                sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
             return y + delta * damping
 
-        fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
         free_numeric(numeric_handle)
 
@@ -682,7 +700,7 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
                 damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
                 return y + delta * damping
 
-            fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+            fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
             stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=20, throw=False)
             return stage_sol.value, stage_sol.result
 
@@ -767,7 +785,7 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
                 damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
                 return y + delta * damping
 
-            fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+            fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
             stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
             return stage_sol.value, stage_sol.result
 
@@ -837,17 +855,20 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
                     total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t_stage, h_n, alpha=alpha)
                 else:
                     total_f, total_q, all_vals = assemble_system_real(y, component_groups, t_stage, h_n, alpha=alpha)
-                refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
                 residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
                 for idx in ground_indices:
                     residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
-                sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
+                if hasattr(self.linear_solver, "refactor_and_solve_jacobian"):
+                    sol, _ = self.linear_solver.refactor_and_solve_jacobian(all_vals, -residual, numeric_handle)
+                else:
+                    refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
+                    sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
                 delta = sol.value
                 max_change = jnp.max(jnp.abs(delta))
                 damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
                 return y + delta * damping
 
-            fpi = optx.FixedPointIteration(rtol=1e-5, atol=1e-5)
+            fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
             stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
             return stage_sol.value, stage_sol.result
 
@@ -935,7 +956,8 @@ def setup_transient(
         else:
             transient_solver = BDF2VectorizedTransientSolver
 
-    tsolver = transient_solver(linear_solver=linear_strategy)
+    import inspect
+    tsolver = transient_solver(linear_solver=linear_strategy) if inspect.isclass(transient_solver) else transient_solver
 
     sys_size = linear_strategy.sys_size // 2 if linear_strategy.is_complex else linear_strategy.sys_size
 

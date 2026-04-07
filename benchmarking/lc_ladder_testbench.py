@@ -10,7 +10,8 @@ Circuit
 
 Sweep
 -----
-  N_SECTIONS ∈ SWEEP_SECTIONS  (default: 100, 1000, 10000, 50000)
+  N_SECTIONS ∈ SWEEP_SECTIONS  (default: 100, 500, 2000)
+  BACKENDS    ∈ BACKENDS_TO_COMPARE  (all five split-solver variants)
 
 This is a scalability benchmark — no reference solver, just Circulax timing
 vs system size.  SaveAt uses only [t0, T_MAX] with a 2-node projection
@@ -20,6 +21,8 @@ Usage
 -----
   pixi run -e benchmark python benchmarking/lc_ladder_testbench.py
   pixi run -e benchmark python benchmarking/lc_ladder_testbench.py --sections 100 1000
+  pixi run -e benchmark python benchmarking/lc_ladder_testbench.py \
+      --sections 100 --backends klu_split_refactor klu_rs_split_refactor
 """
 
 from __future__ import annotations
@@ -86,8 +89,16 @@ MODELS_MAP = {
     "inductor": Inductor,
 }
 
-# Default sweep — override with --sections
-SWEEP_SECTIONS = [100, 1000, 5000]
+# Default sweep — override with --sections / --backends
+SWEEP_SECTIONS = [100, 500, 2000]
+BACKENDS_TO_COMPARE = [
+    "klu_rs_split_refactor",
+    "klu_rs_split_factor",
+    "klu_rs_split",
+    "klu_split_factor",
+    "klu_split_refactor",
+    "klu_split"
+]
 
 
 # ---------------------------------------------------------------------------
@@ -123,12 +134,12 @@ def build_netlist(n_sections: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Per-size solver
+# Per-size, per-backend runner
 # ---------------------------------------------------------------------------
 
 
-def run_one(n_sections: int) -> dict:
-    """Compile, warm up, and time one LC ladder of *n_sections* sections."""
+def run_one(n_sections: int, backend: str) -> dict:
+    """Compile, warm up, and time one LC ladder of *n_sections* sections with *backend*."""
     t_max = float(3 * n_sections * 0.5e-9)
     max_steps = max(1_000_000, int(t_max / 1e-10))
 
@@ -136,7 +147,7 @@ def run_one(n_sections: int) -> dict:
     t0 = time.perf_counter()
     net_dict = build_netlist(n_sections)
     groups, sys_size, port_map = compile_netlist(net_dict, MODELS_MAP)
-    linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="klu_split")
+    linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend=backend)
     y0 = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
     transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy)
     compile_time = time.perf_counter() - t0
@@ -192,6 +203,7 @@ def run_one(n_sections: int) -> dict:
     linear_strategy.cleanup()
 
     return {
+        "backend": backend,
         "n_sections": n_sections,
         "sys_size": sys_size,
         "t_max_ns": t_max * 1e9,
@@ -212,7 +224,85 @@ def run_one(n_sections: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _run_all(sections: list[int], backends: list[str]) -> dict[str, dict[int, dict]]:
+    """Run all backend/section combinations and return nested results dict."""
+    results: dict[str, dict[int, dict]] = {b: {} for b in backends}
+    for backend in backends:
+        print(f"\n{'─' * 60}")  # noqa: T201
+        print(f"  Backend: {backend}")  # noqa: T201
+        print(f"{'─' * 60}")  # noqa: T201
+        for n in sections:
+            print(f"  [N={n:>6}]  sys_size≈{2 * n + 2}  T_MAX={3 * n * 0.5:.1f}ns  running...")  # noqa: T201
+            try:
+                r = run_one(n, backend)
+                results[backend][n] = r
+                status = "✓" if r["converged"] else "✗ FAILED"
+                print(  # noqa: T201
+                    f"           compile={r['compile_time']:.3f}s  "
+                    f"warmup={r['warmup_time']:.3f}s  "
+                    f"sim={r['elapsed']:.3f}s  "
+                    f"steps={r['n_steps']:,}  "
+                    f"{r['us_per_step']:.2f}µs/step  {status}"
+                )
+            except Exception as exc:  # noqa: BLE001
+                results[backend][n] = {"error": str(exc), "converged": False, "us_per_step": float("nan")}
+                print(f"           ERROR: {exc}")  # noqa: T201
+    return results
+
+
+def _print_comparison_table(results: dict[str, dict[int, dict]], sections: list[int], backends: list[str]) -> None:
+    """Print µs/step side-by-side comparison across backends."""
+    col_w = 14
+    print(f"\n{'═' * 70}")  # noqa: T201
+    print("  µs/step comparison")  # noqa: T201
+    print(f"{'═' * 70}")  # noqa: T201
+    hdr = f"  {'N':>7}  {'sys_size':>9}" + "".join(f"  {b:>{col_w}}" for b in backends)
+    print(hdr)  # noqa: T201
+    print("  " + "─" * (len(hdr) - 2))  # noqa: T201
+    for n in sections:
+        sys_size = next((results[b][n]["sys_size"] for b in backends if "sys_size" in results[b].get(n, {})), 2 * n + 2)
+        row = f"  {n:>7,}  {sys_size:>9,}"
+        for b in backends:
+            r = results[b].get(n, {})
+            if "error" in r:
+                cell = "ERROR"
+            elif not r.get("converged", False):
+                cell = "FAILED"
+            else:
+                cell = f"{r['us_per_step']:.2f}µs"
+            row += f"  {cell:>{col_w}}"
+        print(row)  # noqa: T201
+
+
+def _print_backend_summaries(results: dict[str, dict[int, dict]], sections: list[int], backends: list[str]) -> None:
+    """Print per-backend scaling tables."""
+    hdr_cols = f"  {'N':>7}  {'sys_size':>9}  {'compile':>8}  {'warmup':>7}"
+    hdr_cols += f"  {'sim':>7}  {'steps':>7}  {'µs/step':>9}  {'V_out@T_MAX':>12}"
+    for backend in backends:
+        print(f"\n── {backend} ──────────────────────────────────────────────────────")  # noqa: T201
+        print(hdr_cols)  # noqa: T201
+        print("  " + "─" * (len(hdr_cols) - 2))  # noqa: T201
+        for n in sections:
+            r = results[backend].get(n, {})
+            if "error" in r:
+                print(f"  {n:>7,}  ERROR: {r['error']}")  # noqa: T201
+                continue
+            status = "" if r.get("converged") else "  FAILED"
+            print(  # noqa: T201
+                f"  {r['n_sections']:>7,}  "
+                f"{r['sys_size']:>9,}  "
+                f"{r['compile_time']:>7.3f}s  "
+                f"{r['warmup_time']:>6.3f}s  "
+                f"{r['elapsed']:>6.2f}s  "
+                f"{r['n_steps']:>7,}  "
+                f"{r['us_per_step']:>8.2f}µs  "
+                f"{r['v_out_final']:>11.4f}V"
+                f"{status}"
+            )
+
+
 def main() -> None:
+    """Parse CLI arguments and run the multi-backend LC ladder benchmark."""
     parser = argparse.ArgumentParser(description="LC ladder scalability testbench")
     parser.add_argument(
         "--sections",
@@ -220,51 +310,31 @@ def main() -> None:
         nargs="+",
         default=SWEEP_SECTIONS,
         metavar="N",
-        help="Number of LC sections to sweep (default: 100 1000 10000 50000)",
+        help="Number of LC sections to sweep (default: 100 500 2000)",
+    )
+    parser.add_argument(
+        "--backends",
+        type=str,
+        nargs="+",
+        default=BACKENDS_TO_COMPARE,
+        metavar="BACKEND",
+        help=f"Backends to compare (default: {' '.join(BACKENDS_TO_COMPARE)})",
     )
     args = parser.parse_args()
 
     sections = sorted(set(args.sections))
+    backends = args.backends
 
-    print("=" * 70)
-    print("LC Ladder Scalability Testbench  (klu_split backend)")
-    print(f"  L={L_VAL * 1e9:.0f}nH  C={C_VAL * 1e12:.0f}pF  Z₀=50Ω  τ/stage=200ps")
-    print(f"  Sections to sweep: {sections}")
-    print("=" * 70)
+    print("=" * 70)  # noqa: T201
+    print("LC Ladder Scalability Testbench — Multi-Backend Comparison")  # noqa: T201
+    print(f"  L={L_VAL * 1e9:.0f}nH  C={C_VAL * 1e12:.0f}pF  Z₀=50Ω  τ/stage=200ps")  # noqa: T201
+    print(f"  Sections: {sections}")  # noqa: T201
+    print(f"  Backends: {backends}")  # noqa: T201
+    print("=" * 70)  # noqa: T201
 
-    rows = []
-    for n in sections:
-        print(f"\n[N={n:>6}]  sys_size≈{2 * n + 2}  T_MAX={3 * n * 0.5:.1f}ns  running...")
-        r = run_one(n)
-        rows.append(r)
-        status = "✓" if r["converged"] else "✗ FAILED"
-        print(
-            f"          compile={r['compile_time']:.3f}s  "
-            f"warmup={r['warmup_time']:.3f}s  "
-            f"sim={r['elapsed']:.3f}s  "
-            f"steps={r['n_steps']:,}  "
-            f"{r['us_per_step']:.2f}µs/step  {status}"
-        )
-
-    print("\n── Scaling Summary ──────────────────────────────────────────────────")
-    hdr = (
-        f"  {'N':>7}  {'sys_size':>9}  {'compile':>8}  {'warmup':>7}  {'sim':>7}  {'steps':>7}  {'µs/step':>9}  {'V_out@T_MAX':>12}"
-    )
-    print(hdr)
-    print("  " + "-" * (len(hdr) - 2))
-    for r in rows:
-        status = "" if r["converged"] else "  FAILED"
-        print(
-            f"  {r['n_sections']:>7,}  "
-            f"{r['sys_size']:>9,}  "
-            f"{r['compile_time']:>7.3f}s  "
-            f"{r['warmup_time']:>6.3f}s  "
-            f"{r['elapsed']:>6.2f}s  "
-            f"{r['n_steps']:>7,}  "
-            f"{r['us_per_step']:>8.2f}µs  "
-            f"{r['v_out_final']:>11.4f}V"
-            f"{status}"
-        )
+    results = _run_all(sections, backends)
+    _print_comparison_table(results, sections, backends)
+    _print_backend_summaries(results, sections, backends)
 
 
 if __name__ == "__main__":
