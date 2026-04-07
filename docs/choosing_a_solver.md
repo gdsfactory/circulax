@@ -1,10 +1,10 @@
 # Choosing a Solver
 
 Circulax separates the **linear algebra backend** from the simulation algorithm.
-The backend is selected when calling `analyze_circuit`:
+The backend is selected when calling `compile_circuit`:
 
 ```python
-linear_strat = analyze_circuit(groups, num_vars, backend="klu")
+circuit = compile_circuit(net_dict, models_map, backend="klu")
 ```
 
 Four backends are available. All expose the same interface — you can swap them without changing the rest of your simulation code.
@@ -14,7 +14,7 @@ Four backends are available. All expose the same interface — you can swap them
 ## KLU *(default)*
 
 ```python
-backend="klu"
+circuit = compile_circuit(net_dict, models_map, backend="klu")
 ```
 
 KLU is the **gold standard for circuit simulation** and is the default backend. It is the same direct sparse solver used by industry-standard tools such as SPICE, Spectre, and HSPICE. KLU performs a fill-reducing permutation (AMD ordering) followed by symbolic and numeric LU factorisation, making it highly efficient for the sparse, irregular matrices that arise in circuit simulation.

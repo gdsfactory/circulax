@@ -103,21 +103,20 @@ The workflow mirrors the DC/transient pattern:
 
 ```python
 import jax.numpy as jnp
-from circulax import compile_netlist, analyze_circuit, setup_harmonic_balance
+from circulax import compile_circuit, setup_harmonic_balance
 from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSourceAC
 
 # 1. Define and compile the netlist
 net = { ... }   # SAX-format netlist dict
 models = {"R": Resistor, "L": Inductor, "C": Capacitor, "Vs": VoltageSourceAC}
-groups, num_vars, net_map = compile_netlist(net, models)
+circuit = compile_circuit(net, models, backend="dense")
 
 # 2. Find the DC operating point (used as the initial guess for HB)
-dc_solver = analyze_circuit(groups, num_vars, backend="dense")
-y_dc = dc_solver.solve_dc(groups, jnp.zeros(num_vars))
+y_dc = circuit()
 
 # 3. Set up and run the Harmonic Balance solver
 f_drive = 1e6   # Hz — must match the frequency in VoltageSourceAC settings
-run_hb = setup_harmonic_balance(groups, num_vars, freq=f_drive, num_harmonics=5)
+run_hb = setup_harmonic_balance(circuit.groups, circuit.sys_size, freq=f_drive, num_harmonics=5)
 y_time, y_freq = run_hb(y_dc)
 
 # The solver is also compatible with jax.jit for repeated calls:
@@ -128,8 +127,8 @@ y_time, y_freq = run_hb(y_dc)
 
 | Parameter | Default | Description |
 |---|---|---|
-| `groups` | — | Compiled component groups from `compile_netlist` |
-| `num_vars` | — | System size (second return value of `compile_netlist`) |
+| `groups` | — | Compiled component groups (from `circuit.groups`) |
+| `num_vars` | — | System size (from `circuit.sys_size`) |
 | `freq` | — | Fundamental frequency in Hz |
 | `num_harmonics` | `5` | Number of harmonics $N$; solver uses $K = 2N+1$ time points |
 
@@ -182,27 +181,22 @@ A common use case is sweeping the drive frequency across a band — for example,
 The key requirement: the `VoltageSourceAC` component bakes its frequency into the compiled parameters.  When sweeping, you must update that parameter to match each sweep frequency — otherwise the source still drives at the original compile-time frequency regardless of what `setup_harmonic_balance` sees.  Use `equinox.tree_at` to override the param at trace time:
 
 ```python
-import equinox as eqx
 import jax
 import jax.numpy as jnp
-from circulax import compile_netlist, analyze_circuit, setup_harmonic_balance
+from circulax import compile_circuit, setup_harmonic_balance
+from circulax.utils import update_group_params
 
-groups, num_vars, net_map = compile_netlist(net, models)
-dc_solver = analyze_circuit(groups, num_vars, backend="dense")
-y_dc = dc_solver.solve_dc(groups, jnp.zeros(num_vars))
+circuit = compile_circuit(net, models, backend="dense")
+y_dc = circuit()
 
-node_idx = net_map["RL,p1"]   # output node index
+node_idx = circuit.port_map["RL,p1"]   # output node index
 
 def hb_solve_freq(sweep_freq):
     # Update the source's freq param so it drives at sweep_freq.
     # The group key matches the component key used in models_map.
-    updated_groups = eqx.tree_at(
-        lambda g: g["Vs"].params.freq,
-        groups,
-        jnp.asarray([sweep_freq]),
-    )
+    updated_groups = update_group_params(circuit.groups, "Vs", "freq", sweep_freq)
     run_hb = setup_harmonic_balance(
-        updated_groups, num_vars, freq=sweep_freq, num_harmonics=10
+        updated_groups, circuit.sys_size, freq=sweep_freq, num_harmonics=10
     )
     _, y_freq = run_hb(y_dc)
     return 2.0 * jnp.abs(y_freq[1, node_idx])   # fundamental amplitude
