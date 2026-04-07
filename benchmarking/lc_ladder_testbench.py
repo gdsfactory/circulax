@@ -303,6 +303,30 @@ def _print_backend_summaries(results: dict[str, dict[int, dict]], sections: list
 
 def main() -> None:
     """Parse CLI arguments and run the multi-backend LC ladder benchmark."""
+        print(f"\n── {backend} ──────────────────────────────────────────────────────")  # noqa: T201
+        print(hdr_cols)  # noqa: T201
+        print("  " + "─" * (len(hdr_cols) - 2))  # noqa: T201
+        for n in sections:
+            r = results[backend].get(n, {})
+            if "error" in r:
+                print(f"  {n:>7,}  ERROR: {r['error']}")  # noqa: T201
+                continue
+            status = "" if r.get("converged") else "  FAILED"
+            print(  # noqa: T201
+                f"  {r['n_sections']:>7,}  "
+                f"{r['sys_size']:>9,}  "
+                f"{r['compile_time']:>7.3f}s  "
+                f"{r['warmup_time']:>6.3f}s  "
+                f"{r['elapsed']:>6.2f}s  "
+                f"{r['n_steps']:>7,}  "
+                f"{r['us_per_step']:>8.2f}µs  "
+                f"{r['v_out_final']:>11.4f}V"
+                f"{status}"
+            )
+
+
+def main() -> None:
+    """Parse CLI arguments and run the multi-backend LC ladder benchmark."""
     parser = argparse.ArgumentParser(description="LC ladder scalability testbench")
     parser.add_argument(
         "--sections",
