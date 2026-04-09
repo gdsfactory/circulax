@@ -3,20 +3,22 @@
 Provides :func:`osdi_component` to load OpenVAF-compiled ``.osdi`` binaries and
 use them as circuit components inside :func:`~circulax.compiler.compile_netlist`.
 
-Requires the ``bodi`` package (available at ``/home/cdaunt/code/bodi``).
+Requires the ``bosdi`` package to be installed or its ``src/`` directory present
+on ``PYTHONPATH`` (e.g. via a ``.env`` file).  OSDI support is optional and not
+available on all platforms (e.g. Windows).
 """
-
-import sys
 
 import equinox as eqx
 import jax.numpy as jnp
 
-# bodi ships as a local editable install; add its src to the path if needed.
-_BODI_SRC = "/home/cdaunt/code/bodi/src"
-if _BODI_SRC not in sys.path:
-    sys.path.insert(0, _BODI_SRC)
-
-from osdi_loader import OsdiModel, load_osdi_model  # noqa: E402
+try:
+    from osdi_loader import OsdiModel, load_osdi_model
+except ImportError as _bosdi_err:
+    raise ImportError(
+        "OSDI support requires the 'bosdi' package, which could not be imported. "
+        "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
+        "Note: bosdi is not available on all platforms (e.g. Windows)."
+    ) from _bosdi_err
 
 
 class OsdiComponentGroup(eqx.Module):

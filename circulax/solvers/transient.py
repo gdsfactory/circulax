@@ -906,7 +906,7 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
 
 
 def setup_transient(
-    groups: list, linear_strategy: CircuitLinearSolver, transient_solver: AbstractSolver = None
+    groups: dict, linear_strategy: CircuitLinearSolver, transient_solver: AbstractSolver = None
 ) -> Callable[..., diffrax.Solution]:
     """Configures and returns a function for executing transient analysis.
 

@@ -21,7 +21,6 @@ algebra kernels.
 """
 
 import functools
-import sys
 
 import equinox as eqx
 import jax
@@ -50,10 +49,14 @@ def _assemble_osdi_group(
         and ``j_eff`` is shape ``(N, num_pins, num_pins)``.
 
     """
-    _BODI_SRC = "/home/cdaunt/code/bodi/src"
-    if _BODI_SRC not in sys.path:
-        sys.path.insert(0, _BODI_SRC)
-    from osdi_jax import osdi_eval
+    try:
+        from osdi_jax import osdi_eval
+    except ImportError as _bosdi_err:
+        raise ImportError(
+            "OSDI support requires the 'bosdi' package, which could not be imported. "
+            "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
+            "Note: bosdi is not available on all platforms (e.g. Windows)."
+        ) from _bosdi_err
 
     v_all = y[group.var_indices].astype(jnp.float64)  # (N, num_pins)
     cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)

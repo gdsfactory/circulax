@@ -1121,7 +1121,7 @@ else:
 
 
 def analyze_circuit(
-    groups: list, num_vars: int, backend: str = "default", *, is_complex: bool = False, g_leak: float = 1e-9
+    groups: dict, num_vars: int, backend: str = "default", *, is_complex: bool = False, g_leak: float = 1e-9
 ) -> CircuitLinearSolver:
     """Initializes a linear solver strategy for circuit analysis.
 

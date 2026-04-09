@@ -137,6 +137,7 @@ tqdm = ">=4.67.1,<5"
 [tool.pixi.feature.test.pypi-dependencies]
 circulax = { path = ".", editable = true, extras = ["test"] }
 
+
 # Dev tooling feature
 [tool.pixi.feature.dev.dependencies]
 tqdm = ">=4.67.1,<5"
@@ -277,6 +278,7 @@ select = ["ALL"]
     "FBT001",   # boolean-type-hint-positional-argument
 ]
 "tests/*" = [
+    "ANN",      # flake8-annotations
     "D",        # pydocstyle
     "INP001",   # implicit-namespace-package
     "PT011",    # pytest-raises-too-broad

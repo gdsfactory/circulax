@@ -4,22 +4,18 @@ Tests that OpenVAF-compiled .osdi binaries can be loaded, compiled into
 a netlist, and solved at the DC operating point — and that the results
 match the equivalent pure-JAX component implementation.
 
-Requires bodi to be built against jaxlib 0.7.x.
+Requires bosdi to be installed or its src/ directory on PYTHONPATH.
 """
 
-import sys
+from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-# Ensure bodi's src is on the path
-_BODI_SRC = "/home/cdaunt/code/bodi/src"
-if _BODI_SRC not in sys.path:
-    sys.path.insert(0, _BODI_SRC)
-
-OSDI_RESISTOR = "/home/cdaunt/code/bodi/tests/resistor_va.osdi"
-OSDI_CAPACITOR = "/home/cdaunt/code/bodi/tests/capacitor_va.osdi"
+_OSDI_DIR = Path(__file__).parent / "osdi"
+OSDI_RESISTOR = str(_OSDI_DIR / "resistor_va.osdi")
+OSDI_CAPACITOR = str(_OSDI_DIR / "capacitor_va.osdi")
 
 
 @pytest.fixture
@@ -75,7 +71,7 @@ def test_osdi_compile_netlist(osdi_resistor):
         "ports": {"out": "R1,A"},
     }
     models = {"vsrc": VoltageSource, "res": osdi_resistor}
-    groups, sys_size, _ = compile_netlist(net, models)
+    groups, _sys_size, _ = compile_netlist(net, models)
 
     assert "res" in groups
     assert isinstance(groups["res"], OsdiComponentGroup)
@@ -307,7 +303,7 @@ def test_osdi_capacitor_transient_rc_matches_jax(osdi_capacitor):
             "connections": {
                 "Vs,p1": "R1,p1",
                 "Vs,p2": "GND,p1",
-                f"R1,p2": f"C1,{cap_port_p}",
+                "R1,p2": f"C1,{cap_port_p}",
                 f"C1,{cap_port_n}": "GND,p1",
             },
             "ports": {"cap_top": f"C1,{cap_port_p}"},
@@ -322,6 +318,7 @@ def test_osdi_capacitor_transient_rc_matches_jax(osdi_capacitor):
                   saveat=diffrax.SaveAt(ts=ts), max_steps=100_000)
 
         cap_node = port_map[f"C1,{cap_port_p}"]
+        assert sol.ys is not None
         return sol.ys[:, cap_node]
 
     # OSDI capacitor

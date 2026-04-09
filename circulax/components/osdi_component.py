@@ -22,11 +22,15 @@ Example:
     >>> resistor = OsdiResistor(R=100.0, m=1.0)
 """
 
-import sys
-sys.path.insert(0, "/home/cdaunt/code/bodi/src")
-
-from osdi_loader import load_osdi_model, OsdiModel
-from osdi_jax import osdi_eval
+try:
+    from osdi_loader import load_osdi_model, OsdiModel
+    from osdi_jax import osdi_eval
+except ImportError as _bosdi_err:
+    raise ImportError(
+        "OSDI support requires the 'bosdi' package, which could not be imported. "
+        "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
+        "Note: bosdi is not available on all platforms (e.g. Windows)."
+    ) from _bosdi_err
 
 from typing import Any, ClassVar, Optional
 import jax
