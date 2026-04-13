@@ -139,6 +139,58 @@ def Splitter(signals: Signals, s: States, split_ratio: float = 0.5) -> PhysicsRe
     return {"p1": i_vec[0], "p2": i_vec[1], "p3": i_vec[2]}, {}
 
 
+@component(ports=("p1", "p2", "p3", "p4"))
+def DirectionalCoupler(
+    signals: Signals,
+    s: States,
+    coupling: float = 0.5,
+) -> PhysicsReturn:
+    """4-port directional coupler (2×2 beamsplitter) with configurable power split ratio.
+
+    Ports p1/p2 are the input ports; p3/p4 are the output ports.
+    Signal entering p1 exits at p3 (bar, amplitude t) and p4 (cross, amplitude jk).
+    Signal entering p2 exits at p3 (cross, jk) and p4 (bar, t).
+
+    S-matrix::
+
+        S = [[0,    0,    t,    jk  ],
+             [0,    0,    jk,   t   ],
+             [t,    jk,   0,    0   ],
+             [jk,   t,    0,    0   ]]
+
+    where t = sqrt(1 - coupling), k = sqrt(coupling).
+
+    .. note::
+        ``coupling`` is clipped to (1e-6, 1−1e-6) to prevent ``I + S`` from becoming
+        singular at the degenerate all-through (coupling=0) and all-cross (coupling=1)
+        operating points where the S-matrix has an eigenvalue of −1.
+
+    Args:
+        signals: Field amplitudes at all four ports.
+        s: Unused.
+        coupling: Power fraction routed to the cross port (p4 for p1 input, p3 for p2 input).
+            Defaults to ``0.5`` (50/50 splitter).
+
+    """
+    coupling = jnp.clip(coupling, 1e-6, 1.0 - 1e-6)
+    t = jnp.sqrt(1.0 - coupling)
+    k = jnp.sqrt(coupling)
+
+    S = jnp.array(
+        [
+            [0.0,   0.0,   t,      1j * k],
+            [0.0,   0.0,   1j * k, t     ],
+            [t,     1j * k, 0.0,   0.0   ],
+            [1j * k, t,    0.0,    0.0   ],
+        ],
+        dtype=jnp.complex128,
+    )
+    Y = s_to_y(S)
+    v_vec = jnp.array([signals.p1, signals.p2, signals.p3, signals.p4], dtype=jnp.complex128)
+    i_vec = Y @ v_vec
+    return {"p1": i_vec[0], "p2": i_vec[1], "p3": i_vec[2], "p4": i_vec[3]}, {}
+
+
 # ===========================================================================
 # Optical Sources
 # ===========================================================================
