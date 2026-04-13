@@ -179,6 +179,7 @@ def setup_harmonic_balance(
     def run_hb(
         y_dc: Array,
         *,
+        y_flat_init: Array | None = None,
         max_iter: int = 50,
         tol: float = 1e-6,
     ) -> tuple[Array, Array]:
@@ -188,6 +189,10 @@ def setup_harmonic_balance(
             y_dc: DC operating point, shape ``(sys_size,)``. Used as the
                 initial guess (zero AC amplitude). Obtain from
                 :meth:`~circulax.solvers.CircuitLinearSolver.solve_dc`.
+            y_flat_init: Optional flat initial waveform, shape ``(K * sys_size,)``.
+                If provided, used as the starting point instead of tiling ``y_dc``.
+                Useful for autonomous oscillators where the zero state is a trivial
+                fixed point — pass a sinusoidal initial guess to escape it.
             max_iter: Maximum number of Newton iterations.
             tol: Convergence tolerance on the infinity norm of the residual.
 
@@ -202,8 +207,8 @@ def setup_harmonic_balance(
               Two-sided amplitude at harmonic k>=1 is ``2 * |y_freq[k]|``.
 
         """
-        # Initial guess: DC solution repeated at every time point (zero AC).
-        y_flat = jnp.tile(y_dc, K)  # shape (K * sys_size,)
+        # Initial guess: use provided flat waveform or tile the DC operating point.
+        y_flat = y_flat_init if y_flat_init is not None else jnp.tile(y_dc, K)  # shape (K * sys_size,)
 
         def residual_fn(y_flat: Array) -> Array:
             y_time = y_flat.reshape(K, sys_size)
