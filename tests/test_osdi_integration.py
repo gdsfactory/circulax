@@ -13,6 +13,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from circulax.components.osdi import _BOSDI_AVAILABLE
+
+pytestmark = pytest.mark.skipif(not _BOSDI_AVAILABLE, reason="bosdi package not available")
+
 _OSDI_DIR = Path(__file__).parent / "osdi"
 OSDI_RESISTOR = str(_OSDI_DIR / "resistor_va.osdi")
 OSDI_CAPACITOR = str(_OSDI_DIR / "capacitor_va.osdi")
@@ -20,25 +24,34 @@ OSDI_CAPACITOR = str(_OSDI_DIR / "capacitor_va.osdi")
 
 @pytest.fixture
 def osdi_capacitor():
-    """Load the OSDI capacitor descriptor (ports: P, N; params: C, m, tnom)."""
+    """Load the OSDI capacitor descriptor (ports: P, N; params: mfactor, C, m).
+
+    OSDI param ordering for capacitor_va.osdi: [$mfactor(INST), C(MODEL), m(MODEL)]
+    where mfactor is the global SPICE multiplicity, C is capacitance, and m is
+    the Verilog-A parallel factor.
+    """
     from circulax import osdi_component
     return osdi_component(
         osdi_path=OSDI_CAPACITOR,
         ports=("P", "N"),
-        param_names=("C", "m", "tnom"),
-        default_params={"C": 1e-9, "m": 1.0, "tnom": 27.0},
+        param_names=("mfactor", "C", "m"),
+        default_params={"mfactor": 1.0, "C": 1e-9, "m": 1.0},
     )
 
 
 @pytest.fixture
 def osdi_resistor():
-    """Load the OSDI resistor descriptor (ports: A, B; params: R, m)."""
+    """Load the OSDI resistor descriptor (ports: A, B; params: m, R).
+
+    OSDI param ordering for resistor_va.osdi: [$mfactor(INST), R(MODEL)]
+    where m is the SPICE multiplicity factor and R is the resistance.
+    """
     from circulax import osdi_component
     return osdi_component(
         osdi_path=OSDI_RESISTOR,
         ports=("A", "B"),
-        param_names=("R", "m"),
-        default_params={"R": 1000.0, "m": 1.0},
+        param_names=("m", "R"),
+        default_params={"m": 1.0, "R": 1000.0},
     )
 
 
@@ -48,7 +61,7 @@ def test_osdi_component_loads(osdi_resistor):
     assert osdi_resistor.model.num_params == 2
     assert osdi_resistor.model.num_states == 0
     assert osdi_resistor.ports == ("A", "B")
-    assert osdi_resistor.param_names == ("R", "m")
+    assert osdi_resistor.param_names == ("m", "R")
 
 
 def test_osdi_compile_netlist(osdi_resistor):
@@ -77,7 +90,8 @@ def test_osdi_compile_netlist(osdi_resistor):
     assert isinstance(groups["res"], OsdiComponentGroup)
     assert groups["res"].num_pins == 2
     assert groups["res"].params.shape == (1, 2)   # N=1, num_params=2
-    assert float(groups["res"].params[0, 0]) == pytest.approx(100.0)
+    # param order: [m=1.0, R=100.0]; R is at index 1
+    assert float(groups["res"].params[0, 1]) == pytest.approx(100.0)
 
 
 def test_osdi_dc_single_resistor(osdi_resistor):
@@ -233,7 +247,7 @@ def test_osdi_capacitor_loads(osdi_capacitor):
     assert osdi_capacitor.model.num_params == 3  # C, m, tnom
     assert osdi_capacitor.model.num_states == 0
     assert osdi_capacitor.ports == ("P", "N")
-    assert osdi_capacitor.param_names == ("C", "m", "tnom")
+    assert osdi_capacitor.param_names == ("mfactor", "C", "m")
 
 
 def test_osdi_capacitor_dc_open_circuit(osdi_capacitor):
@@ -252,7 +266,7 @@ def test_osdi_capacitor_dc_open_circuit(osdi_capacitor):
             "GND": {"component": "ground"},
             "Vs": {"component": "vsrc", "settings": {"V": 2.0}},
             "R1": {"component": "res", "settings": {"R": 1000.0}},
-            "C1": {"component": "cap", "settings": {"C": 1e-6, "m": 1.0, "tnom": 27.0}},
+            "C1": {"component": "cap", "settings": {"mfactor": 1.0, "C": 1e-6, "m": 1.0}},
         },
         "connections": {
             "Vs,p1": "R1,p1",
@@ -323,7 +337,7 @@ def test_osdi_capacitor_transient_rc_matches_jax(osdi_capacitor):
 
     # OSDI capacitor
     osdi_models = {"vsrc": VoltageSource, "res": Resistor, "cap": osdi_capacitor}
-    v_osdi = _run_rc("cap", "P", "N", osdi_models, {"C": C_val, "m": 1.0, "tnom": 27.0})
+    v_osdi = _run_rc("cap", "P", "N", osdi_models, {"mfactor": 1.0, "C": C_val, "m": 1.0})
 
     # Pure-JAX capacitor
     jax_models = {"vsrc": VoltageSource, "res": Resistor, "cap": Capacitor}

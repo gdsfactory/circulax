@@ -21,9 +21,6 @@ Expected Results:
   - Node 3: 1.0 V (exactly V_ref / 8)
 """
 
-import sys
-sys.path.insert(0, "/home/cdaunt/code/bodi/src")
-
 import pytest
 import time
 import jax
@@ -32,7 +29,9 @@ import numpy as np
 
 from circulax import compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource
-from circulax.components.osdi_component import osdi_component
+from circulax.components.osdi_component import _BOSDI_AVAILABLE, osdi_component
+
+pytestmark = pytest.mark.skipif(not _BOSDI_AVAILABLE, reason="bosdi package not available")
 
 
 # Enable 64-bit precision for SPICE accuracy
@@ -95,12 +94,15 @@ def osdi_resistor_ladder_netlist():
 
 @pytest.fixture
 def osdi_resistor_class():
-    """Create and cache the OSDI resistor component class."""
+    """Create and cache the OSDI resistor component class.
+
+    OSDI param ordering for resistor_va.osdi: [$mfactor(INST), R(MODEL)].
+    """
     return osdi_component(
         "tests/resistor_va.osdi",
         port_names=("p1", "p2"),
-        param_names=("R", "m"),
-        param_defaults={"R": 1e3, "m": 1.0},
+        param_names=("m", "R"),
+        param_defaults={"m": 1.0, "R": 1e3},
     )
 
 
@@ -238,7 +240,7 @@ class TestOsdiComponentIntegration:
     def test_osdi_resistor_ports_and_params(self, osdi_resistor_class):
         """Verify OSDI resistor has correct port and parameter metadata."""
         assert osdi_resistor_class.ports == ("p1", "p2")
-        assert osdi_resistor_class.param_names == ("R", "m")
+        assert osdi_resistor_class.param_names == ("m", "R")
         assert osdi_resistor_class.states == ()
 
     def test_osdi_resistor_solver_call(self, osdi_resistor_class):

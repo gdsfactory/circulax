@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 
 from circulax.components.base_component import PhysicsReturn, Signals
-from circulax.components.osdi import OsdiComponentGroup, OsdiModelDescriptor
+from circulax.components.osdi import OsdiComponentGroup, OsdiModelDescriptor, _BOSDI_AVAILABLE
 from circulax.netlist import build_net_map
 
 
@@ -255,6 +255,11 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
 
         # OSDI components use a descriptor object instead of an Equinox class.
         if isinstance(comp_cls, OsdiModelDescriptor):
+            if not _BOSDI_AVAILABLE:
+                raise ImportError(
+                    f"Component '{name}' uses an OSDI model but the 'bosdi' package is not available. "
+                    "Install bosdi or its src/ directory on PYTHONPATH to use OSDI components."
+                )
             port_indices = []
             for port in comp_cls.ports:
                 key = f"{name},{port}"
@@ -364,6 +369,8 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         group_name = comp_type
         n_dev = len(items)
         n_pins = descriptor.model.num_pins
+        n_nodes = descriptor.model.num_nodes          # terminals + non-collapsed internal
+        n_internal = n_nodes - n_pins                 # extra unknowns per instance
 
         params_arr = jnp.array(
             [[item["params_dict"][k] for k in descriptor.param_names] for item in items],
@@ -371,23 +378,46 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         )  # (N, num_params)
         states_arr = jnp.zeros((n_dev, descriptor.model.num_states), dtype=jnp.float64)
 
-        var_idx = jnp.array([item["ports"] for item in items], dtype=jnp.int32)  # (N, n_pins)
+        # Regularisation diagonal: 1.0 only on *internal* nodes (index >= num_pins)
+        # that are also reactive-only (resistive_mask[i] = False, meaning F[i]=0 always).
+        # External terminal nodes never need regularisation — the wider circuit KCL
+        # provides their equations.  Internal reactive-only nodes have no equation
+        # from any other component, so j_eff[i,:] would be zero without this term.
+        is_internal = jnp.arange(n_nodes) >= n_pins
+        is_reactive = ~jnp.array(descriptor.model.resistive_mask, dtype=bool)
+        reg_mask = (is_internal & is_reactive).astype(jnp.float64)
+        reg_diag = jnp.diag(reg_mask)  # (num_nodes, num_nodes)
 
-        jac_rows = jnp.broadcast_to(var_idx[:, :, None], (n_dev, n_pins, n_pins)).reshape(-1)
-        jac_cols = jnp.broadcast_to(var_idx[:, None, :], (n_dev, n_pins, n_pins)).reshape(-1)
+        # Build (N, n_nodes) index array: terminal indices first, then one new state
+        # slot per internal node per instance (appended to the global state vector).
+        all_var_idx_list = []
+        for item in items:
+            terminal_indices = item["ports"]                  # list of n_pins ints
+            internal_indices = []
+            for _i in range(n_internal):
+                internal_indices.append(sys_size)
+                sys_size += 1
+            all_var_idx_list.append(terminal_indices + internal_indices)
+
+        all_var_idx = jnp.array(all_var_idx_list, dtype=jnp.int32)  # (N, n_nodes)
+
+        jac_rows = jnp.broadcast_to(all_var_idx[:, :, None], (n_dev, n_nodes, n_nodes)).reshape(-1)
+        jac_cols = jnp.broadcast_to(all_var_idx[:, None, :], (n_dev, n_nodes, n_nodes)).reshape(-1)
 
         compiled_groups[group_name] = OsdiComponentGroup(
             name=group_name,
             model_id=descriptor.model.id,
             num_pins=n_pins,
+            num_nodes=n_nodes,
             num_params=descriptor.model.num_params,
             num_states=descriptor.model.num_states,
             params=params_arr,
             states=states_arr,
-            var_indices=var_idx,
-            eq_indices=var_idx,
+            var_indices=all_var_idx,
+            eq_indices=all_var_idx,
             jac_rows=jac_rows,
             jac_cols=jac_cols,
+            reg_diag=reg_diag,
             index_map={item["name"]: i for i, item in enumerate(items)},
         )
 

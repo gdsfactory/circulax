@@ -58,12 +58,12 @@ def _assemble_osdi_group(
             "Note: bosdi is not available on all platforms (e.g. Windows)."
         ) from _bosdi_err
 
-    v_all = y[group.var_indices].astype(jnp.float64)  # (N, num_pins)
+    v_all = y[group.var_indices].astype(jnp.float64)  # (N, num_nodes) — terminals + internal
     cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)
 
-    G = cond.reshape(-1, group.num_pins, group.num_pins)   # (N, n, n)  dI/dV
-    C = cap.reshape(-1, group.num_pins, group.num_pins)    # (N, n, n)  dQ/dV
-    j_eff = G + (alpha / dt) * C
+    G = cond.reshape(-1, group.num_nodes, group.num_nodes)   # (N, n, n)  dI/dV
+    C = cap.reshape(-1, group.num_nodes, group.num_nodes)    # (N, n, n)  dQ/dV
+    j_eff = G + (alpha / dt) * C + group.reg_diag           # reg_diag broadcasts over N
     return cur, chg, j_eff
 
 
@@ -232,9 +232,9 @@ def assemble_gc_real(
         n_entries = int(jnp.array(group.jac_rows).reshape(-1).shape[0])
 
         if isinstance(group, OsdiComponentGroup):
-            # Use analytical G and C from bodi directly (DC: alpha=1, dt=1 then separate).
+            # Use analytical G and C from bosdi directly (DC: alpha=1, dt=1 then separate).
             _, _, j_eff = _assemble_osdi_group(y_guess, group, alpha=1.0, dt=1.0)
-            # j_eff = G + C here; bodi currently zeros capacitances so G_vals = j_eff, C_vals = 0
+            # j_eff = G + C; bodi currently zeros capacitances so G_vals = j_eff, C_vals = 0
             g_vals_list.append(j_eff.reshape(-1).astype(y_guess.dtype))
             c_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
             continue

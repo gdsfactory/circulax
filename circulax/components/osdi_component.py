@@ -25,12 +25,14 @@ Example:
 try:
     from osdi_loader import load_osdi_model, OsdiModel
     from osdi_jax import osdi_eval
+    _BOSDI_AVAILABLE = True
+    _BOSDI_ERR = None
 except ImportError as _bosdi_err:
-    raise ImportError(
-        "OSDI support requires the 'bosdi' package, which could not be imported. "
-        "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
-        "Note: bosdi is not available on all platforms (e.g. Windows)."
-    ) from _bosdi_err
+    _BOSDI_AVAILABLE = False
+    _BOSDI_ERR = _bosdi_err
+    load_osdi_model = None  # type: ignore[assignment]
+    OsdiModel = None  # type: ignore[assignment]
+    osdi_eval = None  # type: ignore[assignment]
 
 from typing import Any, ClassVar, Optional
 import jax
@@ -218,6 +220,13 @@ def osdi_component(
     # ─────────────────────────────────────────────────────────────────────
     # 1. Load OSDI model and extract metadata
     # ─────────────────────────────────────────────────────────────────────
+    if not _BOSDI_AVAILABLE:
+        raise ImportError(
+            "OSDI support requires the 'bosdi' package, which could not be imported. "
+            "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
+            "Note: bosdi is not available on all platforms (e.g. Windows)."
+        ) from _BOSDI_ERR
+
     try:
         model = load_osdi_model(osdi_path, version=osdi_version)
     except (FileNotFoundError, RuntimeError) as e:

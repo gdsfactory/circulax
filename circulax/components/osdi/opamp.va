@@ -1,0 +1,61 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module opamp(p, n, out);
+	inout p, n, out;
+	electrical p, n, out;
+    electrical pn1, pn2, pn3;
+
+	(*desc= "Input resistance", type="instance", units = "Ohm"*) parameter real rin = 1e6 from (0:inf];
+    (*desc= "Output resistance", type="instance", units = "Ohm"*) parameter real rout = 1 from (0:inf];
+    (*desc= "Gain", type="instance", units = ""*) parameter real gain = 1e6 from (0:inf];
+    (*desc= "Common mode gain", type="instance", units = ""*) parameter real cmgain = 0 from [-inf:inf];
+    (*desc= "Positive saturation", type="instance", units = "V"*) parameter real va = 10 from (-inf:inf];
+    (*desc= "Negative saturation", type="instance", units = "V"*) parameter real vb = -10 from (-inf:inf];
+    (*desc= "Input offset", type="instance", units = "V"*) parameter real voffs = 0 from (-inf:inf];
+    // Zero disables the pole
+    (*desc= "Pole frequency #1", type="instance", units = "Hz"*) parameter real fp1 = 0 from [0:inf];
+    (*desc= "Pole frequency #2", type="instance", units = "Hz"*) parameter real fp2 = 0 from [0:inf];
+    (*desc= "Pole frequency #3", type="instance", units = "Hz"*) parameter real fp3 = 0 from [0:inf];
+
+    real x, xc, y, vspan, vzero, cint, tau1, tau2, tau3, y1;
+
+    analog begin
+        vspan = va-vb;
+        vzero = (va+vb)/2;
+        x = V(p, n);
+        xc = (V(p)+V(n))/2 - vzero;
+        y = vb + vspan * ( 2 / `M_PI * atan( `M_PI / 2 * gain / vspan * 2 * ( x - voffs ) ) + 1) / 2 + xc*cmgain;
+
+        cint = 1e-6;
+        tau1 = fp1!=0 ? 1/(2*`M_PI*fp1) : 0;
+        tau2 = fp2!=0 ? 1/(2*`M_PI*fp2) : 0;
+        tau3 = fp3!=0 ? 1/(2*`M_PI*fp3) : 0;
+
+        // Filter through poles 1-3
+        I(pn1) <+ tau1*ddt(cint*V(pn1)) + cint*(V(pn1) - y);
+        I(pn2) <+ tau2*ddt(cint*V(pn2)) + cint*(V(pn2) - V(pn1));
+        I(pn3) <+ tau3*ddt(cint*V(pn3)) + cint*(V(pn3) - V(pn2));
+
+        // Filtered output, node collapse unused first order filters
+        if (fp3==0) begin
+            // V(pn3) <+ 0;
+            if (fp2==0) begin
+                // V(pn2) <+ 0;
+                if (fp1==0) begin
+                    // V(pn1) <+ 0;
+                    y1 = y;
+                end else begin
+                    y1 = V(pn1);
+                end
+            end else begin
+                y1 = V(pn2);
+            end
+        end else begin
+            y1 = V(pn3);
+        end
+
+        I(out) <+ (V(out)-y1)/rout;
+        I(p,n) <+ V(p, n)/rin;
+	end
+endmodule

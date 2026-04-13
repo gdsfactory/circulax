@@ -1,0 +1,64 @@
+9 stage ring oscillator
+
+load "psp103v4.osdi"
+
+include "models.inc"
+model vsource vsource
+model isource isource
+
+subckt inverter (in out vdd vss)
+parameters w=1u l=0.2u pfact=2
+  mp (out in vdd vdd) pmos w=w*pfact l=l
+  mn (out in vss vss) nmos w=w l=l
+ends
+
+i0 (0 1) isource type="pulse" val0=0 val1=10u delay=1n rise=1n fall=1n width=1n
+u1 (1 2 vdd 0)  inverter w=10u l=1u
+u2 (2 3 vdd 0)  inverter w=10u l=1u
+u3 (3 4 vdd 0)  inverter w=10u l=1u
+u4 (4 5 vdd 0)  inverter w=10u l=1u
+u5 (5 6 vdd 0)  inverter w=10u l=1u
+u6 (6 7 vdd 0)  inverter w=10u l=1u
+u7 (7 8 vdd 0)  inverter w=10u l=1u
+u8 (8 9 vdd 0)  inverter w=10u l=1u
+u9 (9 1 vdd 0)  inverter w=10u l=1u
+
+vdd (vdd 0) vsource dc=1.2
+
+control
+  // options tran_method="gear2"
+  options tran_method="trap"
+  // options nr_residualcheck=1 reltol=1e-3 vntol=1e-6 tran_lteratio=3.5 tran_itl=50
+  // options relrefsol="pointlocal" relrefres="pointlocal" relreflte="pointlocal"
+  // options relrefsol="local" relrefres="local" relreflte="local"
+  analysis tran1 tran step=0.05n stop=1u maxstep=0.05n
+  print stats
+  postprocess(PYTHON, "runme.py")
+endc
+
+
+embed "runme.py" <<<FILE
+from rawfile import rawread
+from runtest import *
+import numpy as np
+import sys
+
+tests=[]
+
+tran1 = rawread('tran1.raw').get()
+t = tran1["time"]
+v1 = tran1["1"]
+print("Points", t.size)
+
+# sys.exit(0)
+
+import matplotlib.pyplot as plt
+
+fig1, ax1 = plt.subplots(1, 1)
+fig1.axes[0].set_title('Ring oscillator')
+fig1.axes[0].set_ylabel('V [V]')
+fig1.axes[0].set_xlabel('time [us]')
+fig1.axes[0].plot(t*1e6, v1, color="blue", marker=".", label="v(1)")
+plt.show()
+
+>>>FILE

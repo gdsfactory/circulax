@@ -7,11 +7,10 @@ Note: These tests must be run in an environment where BODI's JAX version
 matches Circulax's JAX version. For now, we test the class structure
 and factory without instantiating the solver_call()."""
 
-import sys
-sys.path.insert(0, "/home/cdaunt/code/bodi/src")
-
 import pytest
-from circulax.components.osdi_component import osdi_component, OsdiComponent
+from circulax.components.osdi_component import _BOSDI_AVAILABLE, osdi_component, OsdiComponent
+
+pytestmark = pytest.mark.skipif(not _BOSDI_AVAILABLE, reason="bosdi package not available")
 
 
 class TestOsdiComponentFactory:

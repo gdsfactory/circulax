@@ -13,36 +13,54 @@ import jax.numpy as jnp
 
 try:
     from osdi_loader import OsdiModel, load_osdi_model
+    _BOSDI_AVAILABLE = True
+    _BOSDI_ERR = None
 except ImportError as _bosdi_err:
-    raise ImportError(
-        "OSDI support requires the 'bosdi' package, which could not be imported. "
-        "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
-        "Note: bosdi is not available on all platforms (e.g. Windows)."
-    ) from _bosdi_err
+    _BOSDI_AVAILABLE = False
+    _BOSDI_ERR = _bosdi_err
+    OsdiModel = None  # type: ignore[assignment]
+    load_osdi_model = None  # type: ignore[assignment]
 
 
 class OsdiComponentGroup(eqx.Module):
-    """Batch of N identical OSDI device instances, evaluated via bodi.
+    """Batch of N identical OSDI device instances, evaluated via bosdi.
 
     Unlike :class:`~circulax.compiler.ComponentGroup`, this group calls
     ``osdi_eval`` with all N instances at once (leveraging Rayon parallelism)
     and uses the analytical Jacobians (conductances/capacitances) that the
     OSDI model returns directly — no ``jax.jacfwd`` required.
+
+    Internal OSDI nodes (e.g. PSP103's ``di``, ``si``) that are not collapsed
+    onto a terminal are allocated as extra unknowns in the global state vector,
+    exactly like VoltageSource's ``i_src``.  ``num_nodes`` covers all of them;
+    ``num_pins`` is the external terminal count only.
+
+    ``var_indices`` has shape ``(N, num_nodes)``: the first ``num_pins`` columns
+    index terminal node voltages in the circuit node block; the remaining
+    ``num_nodes - num_pins`` columns index the internal-node slots appended at
+    the end of the global state vector.  ``eq_indices`` is identical — each
+    node's KCL equation lives at the same global index as its voltage unknown.
     """
 
     name: str = eqx.field(static=True)
-    model_id: int = eqx.field(static=True)   # bodi registry ID — not differentiable
-    num_pins: int = eqx.field(static=True)
+    model_id: int = eqx.field(static=True)   # bosdi registry ID — not differentiable
+    num_pins: int = eqx.field(static=True)   # external terminals only
+    num_nodes: int = eqx.field(static=True)  # terminals + non-collapsed internal nodes
     num_params: int = eqx.field(static=True)
     num_states: int = eqx.field(static=True)
 
     params: jnp.ndarray   # (N, num_params) float64 — batched device parameters
     states: jnp.ndarray   # (N, num_states) float64 — zeros for stateless models
 
-    var_indices: jnp.ndarray  # (N, num_pins) int32 — indices into global y vector
-    eq_indices: jnp.ndarray   # (N, num_pins) int32 — indices into global residual
-    jac_rows: jnp.ndarray     # (N*num_pins*num_pins,) int32 — COO row indices
-    jac_cols: jnp.ndarray     # (N*num_pins*num_pins,) int32 — COO col indices
+    var_indices: jnp.ndarray  # (N, num_nodes) int32 — terminal + internal indices into global y
+    eq_indices: jnp.ndarray   # (N, num_nodes) int32 — same as var_indices (eq lives at its own y slot)
+    jac_rows: jnp.ndarray     # (N*num_nodes*num_nodes,) int32 — COO row indices
+    jac_cols: jnp.ndarray     # (N*num_nodes*num_nodes,) int32 — COO col indices
+
+    # Precomputed diagonal regularisation matrix (num_nodes, num_nodes).
+    # Diagonal entry i is 1.0 if node i is reactive-only (G[i,:]=0 always, F[i]=0),
+    # and 0.0 otherwise.  Added to j_eff in assembly so DC Newton stays non-singular.
+    reg_diag: jnp.ndarray  # (num_nodes, num_nodes) float64
 
     index_map: dict | None = eqx.field(static=True, default=None)
     is_fdomain: bool = eqx.field(static=True, default=False)
@@ -108,6 +126,13 @@ def osdi_component(
         models = {"res": OsdiResistor, "vsrc": VoltageSource}
 
     """
+    if not _BOSDI_AVAILABLE:
+        raise ImportError(
+            "OSDI support requires the 'bosdi' package, which could not be imported. "
+            "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
+            "Note: bosdi is not available on all platforms (e.g. Windows)."
+        ) from _BOSDI_ERR
+
     model = load_osdi_model(osdi_path)
 
     if model.num_pins != len(ports):
