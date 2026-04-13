@@ -229,13 +229,17 @@ def setup_harmonic_balance(
 
         """
 
-        def residual_fn(y_flat: Array) -> Array:
-            y_time = y_flat.reshape(K, sys_size)
-            return _hb_residual(y_time, groups, t_points, omega, ground_indices, is_complex=is_complex).flatten()
+        def newton_step(y_flat: Array, grps: Any) -> Array:
+            # grps is passed explicitly via args= so that Optimistix's
+            # ImplicitAdjoint custom VJP can differentiate through it.
+            # Parameters captured only in closures are opaque to the VJP.
+            def _res(y: Array) -> Array:
+                return _hb_residual(
+                    y.reshape(K, sys_size), grps, t_points, omega, ground_indices, is_complex=is_complex
+                ).flatten()
 
-        def newton_step(y_flat: Array, _: Any) -> Array:
-            r = residual_fn(y_flat)
-            J = jax.jacobian(residual_fn)(y_flat)
+            r = _res(y_flat)
+            J = jax.jacobian(_res)(y_flat)
             # Regularise: prevents singular Jacobian when floating nodes have
             # no DC path to ground (mirrors the DC solver's g_leak).
             J = J + g_leak * jnp.eye(J.shape[0], dtype=J.dtype)
@@ -249,8 +253,16 @@ def setup_harmonic_balance(
         def _solve(y_flat: Array) -> tuple[Array, Array]:
             # optx.FixedPointIteration uses jax.lax.while_loop internally —
             # this makes run_hb compatible with jax.jit.
+            # optx.fixed_point defaults to ImplicitAdjoint, which applies the
+            # implicit function theorem at the converged fixed point.  groups
+            # MUST be passed via args= (not captured in a closure) because
+            # ImplicitAdjoint differentiates only through its explicit args
+            # pytree — closure variables are opaque to it and give zero gradients.
             hb_solver = optx.FixedPointIteration(rtol=tol, atol=tol)
-            sol = optx.fixed_point(newton_step, hb_solver, y_flat, max_steps=max_iter, throw=False)
+            sol = optx.fixed_point(
+                newton_step, hb_solver, y_flat, args=groups,
+                max_steps=max_iter, throw=False,
+            )
             y_flat_sol = sol.value
             y_time_sol = y_flat_sol.reshape(K, sys_size)
             # Normalise by K so that y_freq[k] is the true complex amplitude.
