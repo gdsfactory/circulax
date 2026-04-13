@@ -138,6 +138,8 @@ def setup_harmonic_balance(
     *,
     is_complex: bool = False,
     g_leak: float = 1e-9,
+    osc_node: int | None = None,
+    amplitude_tries: Array | None = None,
 ) -> Callable[[Array], tuple[Array, Array]]:
     """Configure and return a callable for Harmonic Balance analysis.
 
@@ -162,9 +164,22 @@ def setup_harmonic_balance(
         g_leak: Small leakage conductance added to the Jacobian diagonal for
             regularisation. Prevents singular matrices when floating nodes
             have no DC path to ground.
+        osc_node: State-vector index of the oscillator output node, obtained
+            from the ``net_map`` returned by :func:`~circulax.compiler.compile_netlist`
+            (e.g. ``net_map["VDP,p1"]``).  When set, the returned ``run_hb``
+            callable automatically runs Newton from several sinusoidal initial
+            amplitudes in parallel (via :func:`jax.vmap`) and returns the
+            solution with the largest fundamental component.  This removes the
+            need to manually choose a starting amplitude for autonomous
+            oscillators, where ``y=0`` is always a trivial Newton fixed point
+            and low-amplitude starts converge there instead of to the limit
+            cycle.  Has no effect when ``y_flat_init`` is supplied explicitly.
+        amplitude_tries: 1-D array of initial voltage amplitudes (V) to try
+            when ``osc_node`` is set.  Defaults to six log-spaced values
+            spanning 0.3 V – 20 V, which covers most practical oscillators.
 
     Returns:
-        A callable ``run_hb(y_dc, *, max_iter=50, tol=1e-6) -> (y_time, y_freq)``
+        A callable ``run_hb(y_dc, *, y_flat_init=None, max_iter=50, tol=1e-6) -> (y_time, y_freq)``
         that finds the periodic steady state starting from the DC operating
         point ``y_dc``. Compatible with ``jax.jit``.
 
@@ -175,6 +190,13 @@ def setup_harmonic_balance(
     K = 2 * num_harmonics + 1
     omega = 2.0 * jnp.pi * freq
     t_points = jnp.linspace(0.0, 1.0 / freq, K, endpoint=False)
+
+    _amplitude_tries: Array = (
+        amplitude_tries
+        if amplitude_tries is not None
+        else jnp.array([0.3, 0.7, 1.5, 3.0, 7.0, 20.0], dtype=jnp.float64)
+    )
+    _phase = 2.0 * jnp.pi * jnp.arange(K, dtype=jnp.float64) / K  # (K,)
 
     def run_hb(
         y_dc: Array,
@@ -190,9 +212,8 @@ def setup_harmonic_balance(
                 initial guess (zero AC amplitude). Obtain from
                 :meth:`~circulax.solvers.CircuitLinearSolver.solve_dc`.
             y_flat_init: Optional flat initial waveform, shape ``(K * sys_size,)``.
-                If provided, used as the starting point instead of tiling ``y_dc``.
-                Useful for autonomous oscillators where the zero state is a trivial
-                fixed point — pass a sinusoidal initial guess to escape it.
+                Overrides the automatic multi-start strategy even when
+                ``osc_node`` was set at setup time.
             max_iter: Maximum number of Newton iterations.
             tol: Convergence tolerance on the infinity norm of the residual.
 
@@ -207,8 +228,6 @@ def setup_harmonic_balance(
               Two-sided amplitude at harmonic k>=1 is ``2 * |y_freq[k]|``.
 
         """
-        # Initial guess: use provided flat waveform or tile the DC operating point.
-        y_flat = y_flat_init if y_flat_init is not None else jnp.tile(y_dc, K)  # shape (K * sys_size,)
 
         def residual_fn(y_flat: Array) -> Array:
             y_time = y_flat.reshape(K, sys_size)
@@ -227,15 +246,39 @@ def setup_harmonic_balance(
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
             return y_flat + delta * damping
 
-        # optx.FixedPointIteration uses jax.lax.while_loop internally —
-        # this makes run_hb compatible with jax.jit.
-        hb_solver = optx.FixedPointIteration(rtol=tol, atol=tol)
-        sol = optx.fixed_point(newton_step, hb_solver, y_flat, max_steps=max_iter, throw=False)
-        y_flat = sol.value
+        def _solve(y_flat: Array) -> tuple[Array, Array]:
+            # optx.FixedPointIteration uses jax.lax.while_loop internally —
+            # this makes run_hb compatible with jax.jit.
+            hb_solver = optx.FixedPointIteration(rtol=tol, atol=tol)
+            sol = optx.fixed_point(newton_step, hb_solver, y_flat, max_steps=max_iter, throw=False)
+            y_flat_sol = sol.value
+            y_time_sol = y_flat_sol.reshape(K, sys_size)
+            # Normalise by K so that y_freq[k] is the true complex amplitude.
+            y_freq_sol = jnp.fft.rfft(y_time_sol, axis=0) / K
+            return y_time_sol, y_freq_sol
 
-        y_time = y_flat.reshape(K, sys_size)
-        # Normalise by K so that y_freq[k] is the true complex amplitude.
-        y_freq = jnp.fft.rfft(y_time, axis=0) / K
-        return y_time, y_freq
+        # ── Autonomous multi-start ──────────────────────────────────────────────
+        # When osc_node is set and no explicit init is provided, run Newton from
+        # several sinusoidal initial amplitudes in parallel and keep the solution
+        # with the largest fundamental at osc_node.  This transparently handles
+        # the basin-of-attraction problem: the HB residual is dome-shaped between
+        # y=0 and the limit cycle, and Newton from low amplitudes converges to the
+        # trivial zero solution.  At least one amplitude in _amplitude_tries will
+        # be above the dome peak and land in the limit-cycle basin.
+        if osc_node is not None and y_flat_init is None:
+            def _single_start(A: Array) -> tuple[Array, Array]:
+                y0 = (jnp.zeros(K * sys_size, dtype=jnp.float64)
+                      .at[jnp.arange(K) * sys_size + osc_node].set(A * jnp.sin(_phase)))
+                return _solve(y0)
+
+            y_times, y_freqs = jax.vmap(_single_start)(_amplitude_tries)
+            # Select the run that produced the largest fundamental amplitude.
+            fund_amps = jnp.abs(y_freqs[:, 1, osc_node])
+            best = jnp.argmax(fund_amps)
+            return jnp.take(y_times, best, axis=0), jnp.take(y_freqs, best, axis=0)
+
+        # ── Standard single-start ───────────────────────────────────────────────
+        y_flat = y_flat_init if y_flat_init is not None else jnp.tile(y_dc, K)
+        return _solve(y_flat)
 
     return run_hb
