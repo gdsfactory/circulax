@@ -21,47 +21,11 @@ algebra kernels.
 """
 
 import functools
-import sys
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 from jax import Array
-
-from circulax.components.osdi import OsdiComponentGroup
-
-
-def _assemble_osdi_group(
-    y: Array,
-    group: OsdiComponentGroup,
-    alpha: float,
-    dt: float,
-) -> tuple[Array, Array, Array]:
-    """Evaluate one OSDI group via bodi and return ``(f_l, q_l, j_eff)``.
-
-    Args:
-        y:     Global state vector.
-        group: The :class:`~circulax.components.osdi.OsdiComponentGroup` to evaluate.
-        alpha: Jacobian scaling factor (1.0 for Backward Euler).
-        dt:    Timestep used to scale the reactive block.
-
-    Returns:
-        ``(f_l, q_l, j_eff)`` where ``f_l`` and ``q_l`` are shape ``(N, num_pins)``
-        and ``j_eff`` is shape ``(N, num_pins, num_pins)``.
-
-    """
-    _BODI_SRC = "/home/cdaunt/code/bodi/src"
-    if _BODI_SRC not in sys.path:
-        sys.path.insert(0, _BODI_SRC)
-    from osdi_jax import osdi_eval
-
-    v_all = y[group.var_indices].astype(jnp.float64)  # (N, num_pins)
-    cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)
-
-    G = cond.reshape(-1, group.num_pins, group.num_pins)   # (N, n, n)  dI/dV
-    C = cap.reshape(-1, group.num_pins, group.num_pins)    # (N, n, n)  dQ/dV
-    j_eff = G + (alpha / dt) * C
-    return cur, chg, j_eff
 
 
 def _real_physics(v: Array, p: Array, group, t1: float) -> tuple[Array, Array]:
@@ -161,12 +125,6 @@ def assemble_system_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
-        if isinstance(group, OsdiComponentGroup):
-            f_l, q_l, j_eff = _assemble_osdi_group(y_guess, group, alpha, dt)
-            total_f = total_f.at[group.eq_indices].add(f_l)
-            total_q = total_q.at[group.eq_indices].add(q_l)
-            vals_list.append(j_eff.reshape(-1))
-            continue
 
         if group.is_fdomain:
             # F-domain component: evaluate admittance at f=0 (DC).
@@ -228,14 +186,6 @@ def assemble_gc_real(
         group = component_groups[k]
         n_entries = int(jnp.array(group.jac_rows).reshape(-1).shape[0])
 
-        if isinstance(group, OsdiComponentGroup):
-            # Use analytical G and C from bodi directly (DC: alpha=1, dt=1 then separate).
-            _, _, j_eff = _assemble_osdi_group(y_guess, group, alpha=1.0, dt=1.0)
-            # j_eff = G + C here; bodi currently zeros capacitances so G_vals = j_eff, C_vals = 0
-            g_vals_list.append(j_eff.reshape(-1).astype(y_guess.dtype))
-            c_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
-            continue
-
         if group.is_fdomain:
             # Fdomain groups are re-evaluated per-frequency in ac_sweep.
             # Emit zero blocks so COO alignment with _build_index_arrays is preserved.
@@ -287,13 +237,6 @@ def assemble_residual_only_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
-
-        if isinstance(group, OsdiComponentGroup):
-            # dt is unused here (residual only); alpha/dt factor cancels out.
-            f_l, q_l, _ = _assemble_osdi_group(y_guess, group, alpha=1.0, dt=1.0)
-            total_f = total_f.at[group.eq_indices].add(f_l)
-            total_q = total_q.at[group.eq_indices].add(q_l)
-            continue
 
         if group.is_fdomain:
             # F-domain groups have no time-domain physics; their contribution is
@@ -371,18 +314,6 @@ def assemble_system_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
-
-        if isinstance(group, OsdiComponentGroup):
-            # OSDI models are real-valued; contribute only to the real residual/Jacobian block.
-            f_l, q_l, j_eff = _assemble_osdi_group(y_guess[:half_size], group, alpha, dt)
-            total_f = total_f.at[group.eq_indices].add(f_l)
-            total_q = total_q.at[group.eq_indices].add(q_l)
-            # RR block only; RI, IR, II are zero for real devices.
-            vals_blocks[0].append(j_eff.reshape(-1))
-            vals_blocks[1].append(jnp.zeros(j_eff.size, dtype=jnp.float64))
-            vals_blocks[2].append(jnp.zeros(j_eff.size, dtype=jnp.float64))
-            vals_blocks[3].append(jnp.zeros(j_eff.size, dtype=jnp.float64))
-            continue
 
         if group.is_fdomain:
             # F-domain component: evaluate admittance at f=0 (DC) — complex circuit path.
@@ -465,12 +396,6 @@ def assemble_residual_only_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
-
-        if isinstance(group, OsdiComponentGroup):
-            f_l, q_l, _ = _assemble_osdi_group(y_guess[:half_size], group, alpha=1.0, dt=1.0)
-            total_f = total_f.at[group.eq_indices].add(f_l)
-            total_q = total_q.at[group.eq_indices].add(q_l)
-            continue
 
         if group.is_fdomain:
             # F-domain groups have no time-domain physics; their contribution is

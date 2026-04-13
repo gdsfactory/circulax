@@ -10,7 +10,6 @@ import jax
 import jax.numpy as jnp
 
 from circulax.components.base_component import PhysicsReturn, Signals
-from circulax.components.osdi import OsdiComponentGroup, OsdiModelDescriptor
 from circulax.netlist import build_net_map
 
 
@@ -105,7 +104,7 @@ def _get_default_params_cached(func: callable) -> dict[str, Any]:
 
 
 def get_default_params(func: callable) -> dict[str, Any]:
-    """Return a copy so callers can’t mutate the cache."""
+    """Return a copy so callers can't mutate the cache."""
     return dict(_get_default_params_cached(func))
 
 
@@ -232,8 +231,6 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
 
     # Buckets: Key = (comp_type_name, tree_structure), Value = list of instances
     buckets = defaultdict(list)
-    # Separate bucket for OSDI instances (keyed by comp_type only)
-    osdi_buckets: dict[str, list] = defaultdict(list)
     sys_size = num_nodes
 
     # --- 2. Process Instances ---
@@ -252,23 +249,6 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
 
         comp_cls = models_map[comp_type]
         settings = data.get("settings", {})
-
-        # OSDI components use a descriptor object instead of an Equinox class.
-        if isinstance(comp_cls, OsdiModelDescriptor):
-            port_indices = []
-            for port in comp_cls.ports:
-                key = f"{name},{port}"
-                if key in port_to_node_map:
-                    port_indices.append(port_to_node_map[key])
-                else:
-                    msg = f"Port '{port}' on '{name}' is unconnected.\nYour netlist connections must include '{key}'"
-                    raise ValueError(msg)
-            osdi_buckets[comp_type].append({
-                "params_dict": comp_cls.make_instance(settings),
-                "ports": port_indices,
-                "name": name,
-            })
-            continue
 
         # A. Create Equinox Object
         try:
@@ -318,8 +298,6 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         else:
             group_name = comp_type
 
-        # --- Standard Equinox path ---
-
         # A. Assign Internal States
         all_var_indices = []
         for item in items:
@@ -356,39 +334,6 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             index_map=index_map,
             is_fdomain=getattr(comp_cls, "_is_fdomain", False),
             amplitude_param=getattr(comp_cls, "amplitude_param", ""),
-        )
-
-    # --- Process OSDI buckets ---
-    for comp_type, items in osdi_buckets.items():
-        descriptor: OsdiModelDescriptor = models_map[comp_type]
-        group_name = comp_type
-        n_dev = len(items)
-        n_pins = descriptor.model.num_pins
-
-        params_arr = jnp.array(
-            [[item["params_dict"][k] for k in descriptor.param_names] for item in items],
-            dtype=jnp.float64,
-        )  # (N, num_params)
-        states_arr = jnp.zeros((n_dev, descriptor.model.num_states), dtype=jnp.float64)
-
-        var_idx = jnp.array([item["ports"] for item in items], dtype=jnp.int32)  # (N, n_pins)
-
-        jac_rows = jnp.broadcast_to(var_idx[:, :, None], (n_dev, n_pins, n_pins)).reshape(-1)
-        jac_cols = jnp.broadcast_to(var_idx[:, None, :], (n_dev, n_pins, n_pins)).reshape(-1)
-
-        compiled_groups[group_name] = OsdiComponentGroup(
-            name=group_name,
-            model_id=descriptor.model.id,
-            num_pins=n_pins,
-            num_params=descriptor.model.num_params,
-            num_states=descriptor.model.num_states,
-            params=params_arr,
-            states=states_arr,
-            var_indices=var_idx,
-            eq_indices=var_idx,
-            jac_rows=jac_rows,
-            jac_cols=jac_cols,
-            index_map={item["name"]: i for i, item in enumerate(items)},
         )
 
     return compiled_groups, sys_size, port_to_node_map
