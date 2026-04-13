@@ -59,6 +59,7 @@ docs = [
     "mkdocstrings[python]>=0.27.0",
     "mkdocs-glightbox>=0.4.0",
     "mkdocs-minify-plugin>=0.8.0",
+    "jupyter-dash"
 ]
 dev = [
     "circulax[test,docs]",
