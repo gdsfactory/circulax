@@ -17,7 +17,7 @@
     * [Mach-Zehnder Modulator](examples/mzm.md)
     * [Photonics Transient](examples/photonics_transient.md)
     * [Ring Modulator](examples/ring_modulator.md)
-* Inverse Design
+* [Inverse Design](inverse_design.md)
     * [LC Filter Synthesis](examples/01_lc_filter_synthesis.md)
     * [Oscillator HB Tuning](examples/02_oscillator_hb_tuning.md)
     * [Photonic CMZ Demux](examples/03_photonic_cmz_demux.md)

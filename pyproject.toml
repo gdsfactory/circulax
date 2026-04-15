@@ -162,7 +162,7 @@ circulax = { path = ".", editable = true }
 # ---------------------------------------------------------------------------
 
 [tool.pixi.tasks]
-copy_readme      = "cp ReadMe.md docs/index.md && sed -i 's|docs/images|images|g' docs/index.md"
+copy_readme      = "cp ReadMe.md docs/index.md && sed -i 's|docs/||g' docs/index.md"
 install_ipkernel = "python -m ipykernel install --user --name circulax"
 nbrun            = { cmd = ["/bin/sh", "-c", "find examples -name '*.ipynb' -not -path '*/.ipynb_checkpoints/*' | xargs -P4 -I NB papermill NB NB -k circulax"], depends-on = ["install_ipkernel"], description = "Execute all notebooks in-place with papermill (parallel)" }
 nbdocs           = { cmd = "rm -rf docs/examples && mkdir -p docs/examples && jupyter nbconvert --config docs/nbconvert_config.py --to markdown", depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }

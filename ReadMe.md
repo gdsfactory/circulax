@@ -6,10 +6,11 @@
 </picture>
 
 **A differentiable circuit simulator built on JAX.**
-Define netlists, run transient / DC / AC / harmonic-balance analysis, and differentiate through the solver for gradient-based optimization and inverse design.
+Define netlists, run transient / DC / AC / harmonic-balance analysis, and differentiate through the solver for gradient-based optimization and inverse design. Circulax aims to be flexible multi-diciplined circuit simulator [SAX](https://github.com/flaport/sax).
 
 **[Documentation](https://cdaunt.github.io/circulax/)**
 
+## Installation
 ```sh
 pip install circulax
 ```
@@ -78,6 +79,27 @@ def Capacitor(signals: Signals, s: States, C: float = 1e-12):
     return {}, {"p1": q, "p2": -q}          # dq/dt becomes current automatically
 ```
 
+Non-linear opto-electronic components are just as simple — the Jacobian is computed automatically via [Automatic Differentiation](https://docs.jax.dev/en/latest/automatic-differentiation.html):
+
+```python
+@component(ports=("optical_in", "anode", "cathode"))
+def Photodetector(signals: Signals, s: States,
+                  responsivity: float = 0.8, dark_current: float = 1e-9):
+    optical_power = jnp.abs(signals.optical_in) ** 2           # non-linear
+    i_photo = responsivity * optical_power + dark_current
+    i_reflect = -0.01 * signals.optical_in                     # small back-reflection
+    return {"optical_in": i_reflect, "anode": i_photo, "cathode": -i_photo}, {}
+```
+
+Existing [SAX](https://flaport.github.io/sax/) models plug in directly — reuse your photonic PDK as-is:
+
+```python
+import sax
+from circulax.s_transforms import sax_component
+
+Straight = sax_component(sax.models.straight)   # that's it — ready to simulate
+```
+
 ## Features
 
 - **Transient** — implicit ODE stepping via [Diffrax](https://docs.kidger.site/diffrax/); handles stiff circuits.
@@ -88,7 +110,9 @@ def Capacitor(signals: Signals, s: States, C: float = 1e-12):
 - **Hardware-agnostic** — CPU, GPU, or TPU with no code changes.
 - **Mixed-domain** — electronic and photonic circuits in a single netlist.
 
-## vs SPICE
+## Comparison to SPICE
+
+Circulax is a SPICE-like simulator but built with modern tooling so users can easily create their own models in a language they know.
 
 | | SPICE | circulax |
 |---|---|---|
@@ -96,6 +120,12 @@ def Capacitor(signals: Signals, s: States, C: float = 1e-12):
 | Derivatives | Hardcoded or compiler-generated | Automatic differentiation |
 | Solver | Fixed/heuristic stepping | Adaptive ODE (Diffrax) |
 | Hardware | CPU-only | CPU / GPU / TPU |
+
+## Inverse Design via Back-propagation
+
+Because the entire solver is written in JAX, gradients flow end-to-end from a loss function back through the simulation and into component parameters. Use `jax.grad` and standard optimizers to automatically tune circuit designs — the cost is one forward + one backward pass regardless of parameter count.
+
+See the [Inverse Design guide](docs/inverse_design.md) for a comparison with finite differences and worked examples.
 
 ---
 
