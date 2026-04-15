@@ -53,6 +53,7 @@ split_refactor_available: bool = split_solver_available and hasattr(klujax, "ref
 split_rs_refactor_available: bool = split_solver_available and hasattr(klurs, "refactor")
 split_rs_fused_available: bool = split_solver_available and hasattr(klurs, "refactor_and_solve")
 
+
 # ---------------------------------------------------------------------------
 # Index-building helpers shared across all solver factory classmethods
 # ---------------------------------------------------------------------------
@@ -615,24 +616,6 @@ class KLUSplitLinear(KLUSplitSolver):
     def cleanup(self) -> None:  # noqa: D102
         del self._handle_wrapper
 
-    def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        """Full factor + solve in one call (used by DC solver)."""
-        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
-        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-
-        numeric = klujax.factor(self.u_rows, self.u_cols, coalesced_vals, self._handle_wrapper.handle)
-        solution = klujax.solve_with_numeric(numeric, residual, self._handle_wrapper.handle)
-        klujax.free_numeric(numeric)
-        return lx.Solution(
-            value=solution.reshape(residual.shape),
-            result=lx.RESULTS.successful,
-            state=None,
-            stats={},
-        )
-
     def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
         """Factor the Jacobian and return a numeric handle for repeated solves.
 
@@ -879,7 +862,7 @@ class KLURSplitQuadratic(KLURSplitLinear):
             l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
             raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
             coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-            x, refreshed = klurs.refactor_and_solve(
+            x, refreshed = _klurs_refactor_and_solve(
                 self.u_rows, self.u_cols, coalesced_vals, residual, numeric, self._handle_wrapper.handle
             )
             return lx.Solution(value=x.reshape(residual.shape), result=lx.RESULTS.successful, state=None, stats={}), refreshed
