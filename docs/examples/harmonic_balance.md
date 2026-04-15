@@ -16,13 +16,14 @@ import numpy as np
 import schemdraw
 import schemdraw.elements as elm
 
-from circulax import analyze_circuit, compile_netlist, setup_harmonic_balance
+from circulax import compile_circuit, setup_harmonic_balance
 from circulax.components.electronic import Capacitor, Diode, Inductor, Resistor, VoltageSourceAC
 
 jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-15 16:19:13,550:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ---
@@ -107,20 +108,22 @@ models = {
     "capacitor": Capacitor,
 }
 
-groups, num_vars, net_map = compile_netlist(lcr_net, models)
+circuit = compile_circuit(lcr_net, models, backend="dense")
+groups = circuit.groups
+num_vars = circuit.sys_size
+net_map = circuit.port_map
 print(f"System size: {num_vars} variables")
 print(f"Node map: {net_map}")
 ```
 
     System size: 6 variables
-    Node map: {'C1,p1': 1, 'L1,p2': 1, 'C1,p2': 0, 'Vs,p2': 0, 'GND,p1': 0, 'R1,p2': 2, 'L1,p1': 2, 'R1,p1': 3, 'Vs,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
+    Node map: {'C1,p1': 1, 'L1,p2': 1, 'GND,p1': 0, 'C1,p2': 0, 'Vs,p2': 0, 'R1,p2': 2, 'L1,p1': 2, 'Vs,p1': 3, 'R1,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
 
 
 
 ```python
 # DC operating point (zero for a purely AC circuit)
-dc_solver = analyze_circuit(groups, num_vars, backend="dense")
-y_dc = dc_solver.solve_dc(groups, jnp.zeros(num_vars))
+y_dc = circuit()
 
 # Harmonic Balance: 5 harmonics → K = 11 time points per period
 N_harmonics = 5
@@ -186,9 +189,7 @@ H = 1.0 / (1 - w**2 * L_val * C_val + 1j * w * R_val * C_val)
 
 fig, ax = plt.subplots(figsize=(8, 3.5))
 ax.semilogx(freqs / 1e6, 20 * np.log10(np.abs(H)), "C0", lw=2, label="Analytical |H(jω)|")
-ax.scatter(
-    [f_drive / 1e6], [20 * np.log10(vout_amp[1] / vin_amp[1])], color="C1", zorder=5, s=80, label="HB result at $f_{drive}$"
-)
+ax.scatter([f_drive / 1e6], [20 * np.log10(vout_amp[1] / vin_amp[1])], color="C1", zorder=5, s=80, label="HB result at $f_{drive}$")
 ax.axvline(f_res / 1e6, color="gray", ls="--", lw=1, label=f"$f_0$ = {f_res / 1e6:.2f} MHz")
 ax.set_xlabel("Frequency (MHz)")
 ax.set_ylabel("Magnitude (dB)")
@@ -351,7 +352,7 @@ print(f"InductorFD._is_fdomain  = {InductorFD._is_fdomain}")
 f_check = f_res
 Y_C = 1j * 2 * np.pi * f_check * C_val
 Y_L = 1.0 / (1j * 2 * np.pi * f_check * L_val)
-print(f"\nAt f_res = {f_res/1e6:.3f} MHz:")
+print(f"\nAt f_res = {f_res / 1e6:.3f} MHz:")
 print(f"  Y_C = {Y_C:.4e} S  (Im > 0 → capacitive)")
 print(f"  Y_L = {Y_L:.4e} S  (Im < 0 → inductive)")
 ```
@@ -369,10 +370,10 @@ print(f"  Y_L = {Y_L:.4e} S  (Im < 0 → inductive)")
 # Identical topology to the time-domain LCR — only the C and L models change.
 lcr_fd_net = {
     "instances": {
-        "Vs": {"component": "vsrc",        "settings": {"V": V_amp, "freq": f_drive}},
-        "R1": {"component": "resistor",    "settings": {"R": R_val}},
+        "Vs": {"component": "vsrc", "settings": {"V": V_amp, "freq": f_drive}},
+        "R1": {"component": "resistor", "settings": {"R": R_val}},
         "L1": {"component": "inductor_fd", "settings": {"L": L_val}},
-        "C1": {"component": "capacitor_fd","settings": {"C": C_val}},
+        "C1": {"component": "capacitor_fd", "settings": {"C": C_val}},
     },
     "connections": {
         "Vs,p1": "R1,p1",
@@ -385,21 +386,23 @@ lcr_fd_net = {
 }
 
 models_fd = {
-    "vsrc":        VoltageSourceAC,
-    "resistor":    Resistor,
+    "vsrc": VoltageSourceAC,
+    "resistor": Resistor,
     "inductor_fd": InductorFD,
-    "capacitor_fd":CapacitorFD,
+    "capacitor_fd": CapacitorFD,
 }
 
-groups_fd, num_vars_fd, net_map_fd = compile_netlist(lcr_fd_net, models_fd)
+circuit_fd = compile_circuit(lcr_fd_net, models_fd, backend="dense")
+groups_fd = circuit_fd.groups
+num_vars_fd = circuit_fd.sys_size
+net_map_fd = circuit_fd.port_map
 
 print(f"Time-domain LCR  →  system size = {num_vars} variables  (nodes + i_L + i_src)")
 print(f"F-domain LCR     →  system size = {num_vars_fd} variables  (nodes + i_src, no i_L state)")
 print()
 
 # DC operating point — trivially zero for a purely AC source
-dc_solver_fd = analyze_circuit(groups_fd, num_vars_fd, backend="dense")
-y_dc_fd = dc_solver_fd.solve_dc(groups_fd, jnp.zeros(num_vars_fd))
+y_dc_fd = circuit_fd()
 print(f"DC operating point (f-domain): max|y_dc| = {float(jnp.max(jnp.abs(y_dc_fd))):.2e} V")
 
 # Harmonic Balance with same settings as Part 1
@@ -422,17 +425,17 @@ print(f"y_time_fd shape: {y_time_fd.shape}")
 
 ```python
 # Extract Vin and Vout by node name from each net_map
-vin_td_idx  = net_map["Vs,p1"]
+vin_td_idx = net_map["Vs,p1"]
 vout_td_idx = net_map["C1,p1"]
-vin_fd_idx  = net_map_fd["Vs,p1"]
+vin_fd_idx = net_map_fd["Vs,p1"]
 vout_fd_idx = net_map_fd["C1,p1"]
 
-vin_td  = np.array(y_time[:, vin_td_idx])
+vin_td = np.array(y_time[:, vin_td_idx])
 vout_td = np.array(y_time[:, vout_td_idx])
-vin_fd  = np.array(y_time_fd[:, vin_fd_idx])
+vin_fd = np.array(y_time_fd[:, vin_fd_idx])
 vout_fd = np.array(y_time_fd[:, vout_fd_idx])
 
-max_err_in  = float(jnp.max(jnp.abs(jnp.array(vin_td)  - jnp.array(vin_fd))))
+max_err_in = float(jnp.max(jnp.abs(jnp.array(vin_td) - jnp.array(vin_fd))))
 max_err_out = float(jnp.max(jnp.abs(jnp.array(vout_td) - jnp.array(vout_fd))))
 print(f"Max |ΔV_in|  (time-domain vs f-domain) = {max_err_in:.2e} V")
 print(f"Max |ΔV_out| (time-domain vs f-domain) = {max_err_out:.2e} V")
@@ -441,8 +444,8 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 3.8))
 
 # ── Left: Vin comparison ──────────────────────────────────────────────────────
 ax = axes[0]
-ax.plot(t_ns, vin_td, "C0-",  lw=2.5, label="Time-domain  (L, C)")
-ax.plot(t_ns, vin_fd, "C1--", lw=2,   label="F-domain (InductorFD, CapacitorFD)")
+ax.plot(t_ns, vin_td, "C0-", lw=2.5, label="Time-domain  (L, C)")
+ax.plot(t_ns, vin_fd, "C1--", lw=2, label="F-domain (InductorFD, CapacitorFD)")
 ax.set_xlabel("Time (ns)")
 ax.set_ylabel("Voltage (V)")
 ax.set_title(r"$V_\mathrm{in}$ — time-domain vs f-domain")
@@ -451,8 +454,8 @@ ax.grid(True, alpha=0.4)
 
 # ── Right: Vout comparison ────────────────────────────────────────────────────
 ax = axes[1]
-ax.plot(t_ns, vout_td, "C0-",  lw=2.5, label="Time-domain  (L, C)")
-ax.plot(t_ns, vout_fd, "C1--", lw=2,   label="F-domain (InductorFD, CapacitorFD)")
+ax.plot(t_ns, vout_td, "C0-", lw=2.5, label="Time-domain  (L, C)")
+ax.plot(t_ns, vout_fd, "C1--", lw=2, label="F-domain (InductorFD, CapacitorFD)")
 ax.set_xlabel("Time (ns)")
 ax.set_ylabel("Voltage (V)")
 ax.set_title(r"$V_\mathrm{out}$ — time-domain vs f-domain")
@@ -461,7 +464,8 @@ ax.grid(True, alpha=0.4)
 
 plt.suptitle(
     f"LCR at resonance — max waveform error: ΔVin={max_err_in:.1e} V,  ΔVout={max_err_out:.1e} V",
-    fontsize=10, y=1.01,
+    fontsize=10,
+    y=1.01,
 )
 plt.tight_layout()
 plt.show()
@@ -534,9 +538,11 @@ clipper_net = {
 
 clip_models = {"vsrc": VoltageSourceAC, "resistor": Resistor, "diode": Diode}
 
-clip_groups, clip_vars, clip_map = compile_netlist(clipper_net, clip_models)
-
-clip_dc = analyze_circuit(clip_groups, clip_vars, backend="dense").solve_dc(clip_groups, jnp.zeros(clip_vars))
+circuit_clip = compile_circuit(clipper_net, clip_models, backend="dense")
+clip_groups = circuit_clip.groups
+clip_vars = circuit_clip.sys_size
+clip_map = circuit_clip.port_map
+clip_dc = circuit_clip()
 
 N_clip = 10  # 10 harmonics to capture the rectified waveform
 run_hb_clip = setup_harmonic_balance(clip_groups, clip_vars, freq=f_clip, num_harmonics=N_clip)

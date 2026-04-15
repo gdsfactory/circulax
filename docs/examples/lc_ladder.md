@@ -39,6 +39,7 @@ jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-15 16:19:14,066:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -101,9 +102,7 @@ def create_lc_ladder(n_sections):
         net["connections"]["GND,p1"] = (*net["connections"]["GND,p1"], f"{c_name},p2")
 
         # Advance
-        previous_node = (
-            f"{l_name},p2"  # The node after the inductor is the input to the next
-        )
+        previous_node = f"{l_name},p2"  # The node after the inductor is the input to the next
 
     # 3. Termination
     net["connections"]["Rl,p1"] = previous_node
@@ -113,7 +112,7 @@ def create_lc_ladder(n_sections):
 
 
 
-![svg](LC_ladder_files/LC_ladder_4_0.svg)
+![svg](lc_ladder_files/lc_ladder_4_0.svg)
 
 
 
@@ -196,9 +195,7 @@ if sol.result == diffrax.RESULTS.successful:
     plt.grid(True)
 
     theory_delay = N_SECTIONS * jnp.sqrt(10e-9 * 4e-12) * 1e9
-    plt.axvline(
-        theory_delay + 1.0, color="green", linestyle=":", linewidth=3.0, label="Theoretical Arrival"
-    )
+    plt.axvline(theory_delay + 1.0, color="green", linestyle=":", linewidth=3.0, label="Theoretical Arrival")
     plt.legend()
 
     plt.show()
@@ -210,7 +207,7 @@ else:
     Generating 500-stage LC Ladder...
 
 
-    Compilation finished in 0.4607s
+    Compilation finished in 0.5100s
     System Matrix Size: 1004x1004 (1008016 elements)
     Solving DC Operating Point...
 
@@ -219,13 +216,13 @@ else:
 
 
        ✅ Simulation Successful
-    Simulation completed in 1.5711s
+    Simulation completed in 1.5033s
     Total Steps: 3172
 
 
 
 
-![png](LC_ladder_files/LC_ladder_5_4.png)
+![png](lc_ladder_files/lc_ladder_5_4.png)
 
 
 

@@ -16,19 +16,18 @@ Simulating a sweep in JAX requires a different mindset than standard Python loop
 ```python
 import time
 
-import equinox as eqx
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from circulax.compiler import compile_netlist
+from circulax import compile_circuit, update_params_dict
 from circulax.components.electronic import NMOS, CurrentSource, Resistor, VoltageSource
-from circulax.solvers import analyze_circuit
 
 jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-15 16:19:06,866:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -66,28 +65,6 @@ net_dict = {
 
 
 ```python
-def update_param_value(groups, group_name, instance_name, param_key, new_value):
-    g = groups[group_name]
-
-    instance_idx = g.index_map[instance_name]
-
-    batched_comp = g.params
-    current_vals = getattr(batched_comp, param_key)
-
-    new_vals = current_vals.at[instance_idx].set(new_value)
-
-    new_batched_comp = eqx.tree_at(
-        lambda c: getattr(c, param_key), batched_comp, new_vals
-    )
-    new_g = eqx.tree_at(lambda g: g.params, g, new_batched_comp)
-
-    new_groups = groups.copy()
-    new_groups[group_name] = new_g
-    return new_groups
-
-
-
-
 models_map = {
     "nmos": NMOS,
     "resistor": Resistor,
@@ -97,15 +74,13 @@ models_map = {
 }
 
 print("1. Compiling...")
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-
-linear_strat = analyze_circuit(groups, sys_size, is_complex=False)
+circuit = compile_circuit(net_dict, models_map)
 
 
 @jax.jit
 def scan_step(y_prev, v_in_val):
-    new_groups = update_param_value(groups, "source_dc", "Vin1", "V", v_in_val)
-    y_sol = linear_strat.solve_dc(new_groups, y_guess=y_prev)
+    new_groups = update_params_dict(circuit.groups, "source_dc", "Vin1", "V", v_in_val)
+    y_sol = circuit.solver.solve_dc(new_groups, y_prev)
     return y_sol, y_sol
 
 
@@ -115,18 +90,15 @@ print(f"2. Running Sweep ({len(sweep_voltages)} points)...")
 print("Sweeping DC Operating Point (with Continuation)...")
 start_time = time.time()
 
-y_current = jnp.zeros(sys_size)
+y_current = jnp.zeros(circuit.sys_size)
 # Using JAX scan, the previous solution is used as a guess for the sequential root solve
 final_y, solutions = jax.lax.scan(scan_step, y_current, sweep_voltages)
 
 total = time.time() - start_time
 print(f"Simulation Time: {total:.3f}s")
 
-idx_out1 = port_map["RD1,p2"]
-idx_out2 = port_map["RD2,p2"]
-
-v_out1 = solutions[:, idx_out1]
-v_out2 = solutions[:, idx_out2]
+v_out1 = circuit.get_port_field(solutions, "RD1,p2")
+v_out2 = circuit.get_port_field(solutions, "RD2,p2")
 
 plt.figure(figsize=(10, 6))
 plt.plot(sweep_voltages, v_out1, "r-", linewidth=2, label="V_out1 (Inv)")
@@ -134,9 +106,7 @@ plt.plot(sweep_voltages, v_out2, "b-", linewidth=2, label="V_out2 (Non-Inv)")
 
 plt.axvline(2.5, color="k", linestyle=":", label="V_ref (2.5V)")
 plt.axhline(5.0, color="green", linestyle="--", alpha=0.5, label="VDD")
-plt.axhline(
-    5.0 - (1e-3 * 2000), color="green", linestyle="--", alpha=0.5, label="Min Swing"
-)
+plt.axhline(5.0 - (1e-3 * 2000), color="green", linestyle="--", alpha=0.5, label="Min Swing")
 
 plt.title("Diff Pair DC Transfer (Sequential Loop)")
 plt.xlabel("Input Voltage Vin1 (V)")
@@ -153,7 +123,7 @@ plt.show()
     Sweeping DC Operating Point (with Continuation)...
 
 
-    Simulation Time: 0.316s
+    Simulation Time: 0.301s
 
 
 

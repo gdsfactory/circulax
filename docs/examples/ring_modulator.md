@@ -57,15 +57,16 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from circulax.compiler import compile_netlist
+from circulax import compile_circuit
 from circulax.components.base_component import PhysicsReturn, Signals, States, component, source
 from circulax.components.electronic import Resistor
-from circulax.solvers import analyze_circuit, setup_transient
+from circulax.solvers import setup_transient
 
 jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-15 16:19:06,852:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Component definitions
@@ -157,9 +158,9 @@ def RingModulator(
     c = 2.998e8  # speed of light, m/s
 
     # Photon lifetimes
-    tau_e = 2.0 * ng * L / ((1.0 - gamma ** 2) * c)
+    tau_e = 2.0 * ng * L / ((1.0 - gamma**2) * c)
     alpha_v = alpha0 + alpha1 * voltage
-    tau_l = 2.0 * ng * L / ((1.0 - alpha_v ** 2) * c)
+    tau_l = 2.0 * ng * L / ((1.0 - alpha_v**2) * c)
     tau = 1.0 / (1.0 / tau_e + 1.0 / tau_l)
 
     coupling = jnp.sqrt(2.0 / tau_e)
@@ -168,16 +169,16 @@ def RingModulator(
     delta_omega = 2.0 * jnp.pi * (f_operating - f_resonance) + v_to_wr * voltage
 
     # Ring energy ODE RHS: da/dt = -j*coupling*E_i + j*delta_omega*a - a/tau
-    rhs_a = (-1j * coupling * signals.p1 + 1j * delta_omega * s.a - s.a / tau)
+    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * s.a - s.a / tau
 
     # Output field from the ring: E_o = E_i - j*coupling*a
     E_o_expected = signals.p1 - 1j * coupling * s.a
 
     f = {
-        "p1": 0.0 + 0.0j,               # ring is transparent at input (S11=0)
+        "p1": 0.0 + 0.0j,  # ring is transparent at input (S11=0)
         "p2": s.i_out,
         "i_out": signals.p2 - E_o_expected,  # enforce E_o = E_i - j*coupling*a
-        "a": -rhs_a,                     # ring energy ODE (negated RHS)
+        "a": -rhs_a,  # ring energy ODE (negated RHS)
     }
     q = {"a": s.a}
     return f, q
@@ -194,10 +195,10 @@ c = 2.998e8  # m/s
 
 # Ring geometry and coupling
 ng = 3.8
-radius_um = 5.0                          # ring radius, μm
+radius_um = 5.0  # ring radius, μm
 L_ring = float(2.0 * np.pi * radius_um * 1e-6)  # circumference, m
-gamma = 0.976                            # through-coupling amplitude
-alpha0 = 0.969                           # round-trip amplitude (unbiased)
+gamma = 0.976  # through-coupling amplitude
+alpha0 = 0.969  # round-trip amplitude (unbiased)
 
 # Operating wavelength – 0.30 nm blue-detuned from resonance.
 # This gives Δω·τ ≈ 2.4, producing ~1–2 visible ringing cycles during the
@@ -210,8 +211,8 @@ f_resonance = c / (wavelength_res_nm * 1e-9)
 f_operating = c / (wavelength_op_nm * 1e-9)
 
 # Derived photon lifetimes
-tau_e = 2.0 * ng * L_ring / ((1.0 - gamma ** 2) * c)
-tau_l = 2.0 * ng * L_ring / ((1.0 - alpha0 ** 2) * c)
+tau_e = 2.0 * ng * L_ring / ((1.0 - gamma**2) * c)
+tau_l = 2.0 * ng * L_ring / ((1.0 - alpha0**2) * c)
 tau = 1.0 / (1.0 / tau_e + 1.0 / tau_l)
 coupling = np.sqrt(2.0 / tau_e)
 
@@ -222,7 +223,7 @@ T_osc = 1.0 / delta_f  # period of output power oscillation during transient
 # Steady-state transmission (analytic)
 A = 2.0 * tau / tau_e
 x = 2.0 * np.pi * delta_f * tau  # normalised detuning Δω·τ
-T_ss = np.sqrt(((1 - A) ** 2 + x ** 2) / (1 + x ** 2))
+T_ss = np.sqrt(((1 - A) ** 2 + x**2) / (1 + x**2))
 
 print(f"Ring circumference : L = {L_ring * 1e6:.2f} μm  (R = {radius_um} μm)")
 print(f"Coupling lifetime  : τ_e = {tau_e * 1e12:.1f} ps")
@@ -282,13 +283,16 @@ net_dict = {
     },
     "connections": {
         "GND,p1": ("Src,p2", "Load,p2"),  # common ground
-        "Src,p1": "Ring,p1",              # source output → ring input
-        "Ring,p2": "Load,p1",             # ring output → load
+        "Src,p1": "Ring,p1",  # source output → ring input
+        "Ring,p2": "Load,p1",  # ring output → load
     },
 }
 
 print("Compiling netlist...")
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
+circuit = compile_circuit(net_dict, models_map, is_complex=True)
+groups = circuit.groups
+sys_size = circuit.sys_size
+port_map = circuit.port_map
 ```
 
     Compiling netlist...
@@ -300,10 +304,8 @@ At $t = 0$ the source is off, so the DC operating point is trivially zero.
 
 
 ```python
-linear_strat = analyze_circuit(groups, sys_size, is_complex=True)
-
-y_guess = jnp.zeros(sys_size * 2, dtype=jnp.float64)
-y0 = linear_strat.solve_dc(groups, y_guess)
+linear_strat = circuit.solver
+y0 = circuit()
 ```
 
 ## Transient simulation
@@ -334,7 +336,7 @@ transient_sim = setup_transient(groups=groups, linear_strategy=linear_strat)
 controller = diffrax.PIDController(
     rtol=1e-4,
     atol=1e-6,
-    dtmax=rise_time / 2,   # keep steps within the source rise time
+    dtmax=rise_time / 2,  # keep steps within the source rise time
 )
 
 print("Running transient simulation...")
@@ -368,12 +370,11 @@ The ring energy $a(t)$ is read directly from the solution vector via
 
 
 ```python
-ys_complex = sol.ys[:, :sys_size] + 1j * sol.ys[:, sys_size:]
 ts_ps = sol.ts * 1e12
 
-E_in = ys_complex[:, port_map["Src,p1"]]
-E_out = ys_complex[:, port_map["Ring,p2"]]
-a_val = ys_complex[:, port_map["Ring,a"]]
+E_in = circuit.get_port_field(sol.ys, "Src,p1")
+E_out = circuit.get_port_field(sol.ys, "Ring,p2")
+a_val = circuit.get_port_field(sol.ys, "Ring,a")
 
 P_in = jnp.abs(E_in) ** 2
 P_out = jnp.abs(E_out) ** 2
@@ -386,12 +387,10 @@ T_osc_ps = T_osc * 1e12
 
 axes[0].plot(ts_ps, jnp.abs(E_in), color="tab:blue", linewidth=1.5, label="|E_in| (source)")
 axes[0].plot(ts_ps, jnp.abs(E_out), color="tab:orange", linewidth=1.5, label="|E_out| (transmitted)")
-axes[0].axhline(T_ss, color="tab:orange", linestyle="--", linewidth=0.8,
-                label=f"Steady-state |T| = {T_ss:.3f}")
+axes[0].axhline(T_ss, color="tab:orange", linestyle="--", linewidth=0.8, label=f"Steady-state |T| = {T_ss:.3f}")
 axes[0].set_ylabel("|E| (a.u.)")
 axes[0].set_title(
-    f"Optical Impulse Response — ring modulator  "
-    f"(Δλ = {detuning_nm} nm,  Δω·τ = {x:.1f},  T_osc = {T_osc_ps:.1f} ps)"
+    f"Optical Impulse Response — ring modulator  (Δλ = {detuning_nm} nm,  Δω·τ = {x:.1f},  T_osc = {T_osc_ps:.1f} ps)"
 )
 axes[0].legend(loc="upper right")
 
@@ -399,7 +398,7 @@ axes[1].plot(ts_ps, jnp.abs(a_val) ** 2, color="tab:green", linewidth=1.5)
 axes[1].set_ylabel("|a|² (ring energy, a.u.)")
 axes[1].set_title(f"Ring energy  (τ ≈ {tau * 1e12:.1f} ps,  ringing period ≈ {T_osc_ps:.1f} ps)")
 
-a2_ss = (2.0 / tau_e) * tau ** 2 / (1 + x ** 2)
+a2_ss = (2.0 / tau_e) * tau**2 / (1 + x**2)
 axes[1].annotate(
     f"T_osc ≈ {T_osc_ps:.0f} ps",
     xy=(t_on_ps + T_osc_ps, a2_ss * 0.5),
@@ -411,10 +410,8 @@ axes[1].annotate(
 
 P_out_norm = P_out / (P_in + eps)
 axes[2].plot(ts_ps, P_out_norm, color="tab:red", linewidth=1.5)
-axes[2].axhline(T_ss ** 2, color="tab:red", linestyle="--", linewidth=0.8,
-                label=f"Steady-state |T|² = {T_ss**2:.3f}")
-axes[2].axvspan(t_on_ps, t_on_ps + 3 * tau * 1e12, alpha=0.08, color="white",
-                label=f"~3τ transient ({3 * tau * 1e12:.0f} ps)")
+axes[2].axhline(T_ss**2, color="tab:red", linestyle="--", linewidth=0.8, label=f"Steady-state |T|² = {T_ss**2:.3f}")
+axes[2].axvspan(t_on_ps, t_on_ps + 3 * tau * 1e12, alpha=0.08, color="white", label=f"~3τ transient ({3 * tau * 1e12:.0f} ps)")
 axes[2].set_ylabel("|E_out|² / |E_in|²")
 axes[2].set_xlabel("Time (ps)")
 axes[2].set_title("Normalised power transmission — ringing at turn-on edge")
@@ -425,8 +422,7 @@ for ax in axes:
     ax.axvline(50, color="gray", linestyle=":", linewidth=0.8, alpha=0.6)
     ax.axvline(150, color="gray", linestyle=":", linewidth=0.8, alpha=0.6)
 
-fig.text(0.5, 0.01, "Gray dotted lines mark t_on = 50 ps and t_off = 150 ps",
-         ha="center", color="gray", fontsize=8)
+fig.text(0.5, 0.01, "Gray dotted lines mark t_on = 50 ps and t_off = 150 ps", ha="center", color="gray", fontsize=8)
 
 fig.tight_layout()
 plt.show()
@@ -547,9 +543,9 @@ def RingModulatorEO(
     c = 2.998e8
     voltage = jnp.real(signals.v_e)  # electrical port — real part only
 
-    tau_e = 2.0 * ng * L / ((1.0 - gamma ** 2) * c)
+    tau_e = 2.0 * ng * L / ((1.0 - gamma**2) * c)
     alpha_v = alpha0 + alpha1 * voltage
-    tau_l = 2.0 * ng * L / ((1.0 - alpha_v ** 2) * c)
+    tau_l = 2.0 * ng * L / ((1.0 - alpha_v**2) * c)
     tau = 1.0 / (1.0 / tau_e + 1.0 / tau_l)
     coupling = jnp.sqrt(2.0 / tau_e)
 
@@ -559,11 +555,11 @@ def RingModulatorEO(
     E_o_expected = signals.p1 - 1j * coupling * s.a
 
     f = {
-        "p1":    0.0 + 0.0j,
-        "p2":    s.i_out,
-        "v_e":   0.0 + 0.0j,              # high-impedance electrical port
+        "p1": 0.0 + 0.0j,
+        "p2": s.i_out,
+        "v_e": 0.0 + 0.0j,  # high-impedance electrical port
         "i_out": signals.p2 - E_o_expected,
-        "a":     -rhs_a,
+        "a": -rhs_a,
     }
     q = {"a": s.a}
     return f, q
@@ -572,28 +568,28 @@ def RingModulatorEO(
 
 ```python
 # ── Electrical RC parameters ──────────────────────────────────────────────
-V_bias     = -2.0      # V   — DC reverse bias (negative = reverse-biased PN junction)
-V_ac       = 0.2       # V   — small-signal swing (<<1, so response is linear)
-R_s        = 100.0     # Ω   — series resistance (contact + waveguide)
-C_j        = 100e-15   # F   — junction depletion capacitance
-v_to_wr    =  2.0 * np.pi * 2e9   # rad/s/V — EO coefficient (2 GHz/V resonance shift)
-t_ac_start = 10e-12    # s   — delay before AC is enabled
+V_bias = -2.0  # V   — DC reverse bias (negative = reverse-biased PN junction)
+V_ac = 0.2  # V   — small-signal swing (<<1, so response is linear)
+R_s = 100.0  # Ω   — series resistance (contact + waveguide)
+C_j = 100e-15  # F   — junction depletion capacitance
+v_to_wr = 2.0 * np.pi * 2e9  # rad/s/V — EO coefficient (2 GHz/V resonance shift)
+t_ac_start = 10e-12  # s   — delay before AC is enabled
 
-f_RC    = 1.0 / (2.0 * np.pi * R_s * C_j)   # electrical 3-dB bandwidth
-f_opt_bw = 1.0 / (2.0 * np.pi * tau)         # optical photon-lifetime bandwidth
+f_RC = 1.0 / (2.0 * np.pi * R_s * C_j)  # electrical 3-dB bandwidth
+f_opt_bw = 1.0 / (2.0 * np.pi * tau)  # optical photon-lifetime bandwidth
 
-print(f"Electrical RC bandwidth : f_RC  = {f_RC  / 1e9:.1f} GHz")
+print(f"Electrical RC bandwidth : f_RC  = {f_RC / 1e9:.1f} GHz")
 print(f"Optical photon-lifetime : f_opt = {f_opt_bw / 1e9:.1f} GHz")
 print(f"EO coefficient          : dω/dV = {v_to_wr / (2e9 * np.pi):.1f} × 2π GHz/V")
 
 # ── Models map ────────────────────────────────────────────────────────
 models_map_ss = {
-    "ground":      lambda: 0,
-    "optical_cw":  OpticalSourceStep,
-    "biased_ac":   BiasedACSource,
-    "ring_eo":     RingModulatorEO,
-    "resistor":    Resistor,
-    "capacitor":   Capacitor,
+    "ground": lambda: 0,
+    "optical_cw": OpticalSourceStep,
+    "biased_ac": BiasedACSource,
+    "ring_eo": RingModulatorEO,
+    "resistor": Resistor,
+    "capacitor": Capacitor,
 }
 
 # ── Netlist ───────────────────────────────────────────────────────────────────
@@ -603,52 +599,61 @@ models_map_ss = {
 #   Ring,v_e = node_ve  (high-impedance; ring reads voltage, draws no current)
 net_dict_ss = {
     "instances": {
-        "GND":    {"component": "ground"},
-        "OptSrc": {"component": "optical_cw",  "settings": {"power": 1.0}},
-        "Ring":   {"component": "ring_eo",     "settings": {
-            "ng": ng, "L": L_ring, "gamma": gamma, "alpha0": alpha0,
-            "f_operating": float(f_operating), "f_resonance": float(f_resonance),
-            "v_to_wr": v_to_wr,
-        }},
-        "Load":   {"component": "resistor",    "settings": {"R": 1.0}},
-        "Vsrc":   {"component": "biased_ac",   "settings": {
-            "V_bias": V_bias, "V_ac": V_ac, "freq": 1e9, "t_ac_start": t_ac_start,
-        }},
-        "Rs":     {"component": "resistor",    "settings": {"R": R_s}},
-        "Cj":     {"component": "capacitor",   "settings": {"C": C_j}},
+        "GND": {"component": "ground"},
+        "OptSrc": {"component": "optical_cw", "settings": {"power": 1.0}},
+        "Ring": {
+            "component": "ring_eo",
+            "settings": {
+                "ng": ng,
+                "L": L_ring,
+                "gamma": gamma,
+                "alpha0": alpha0,
+                "f_operating": float(f_operating),
+                "f_resonance": float(f_resonance),
+                "v_to_wr": v_to_wr,
+            },
+        },
+        "Load": {"component": "resistor", "settings": {"R": 1.0}},
+        "Vsrc": {
+            "component": "biased_ac",
+            "settings": {
+                "V_bias": V_bias,
+                "V_ac": V_ac,
+                "freq": 1e9,
+                "t_ac_start": t_ac_start,
+            },
+        },
+        "Rs": {"component": "resistor", "settings": {"R": R_s}},
+        "Cj": {"component": "capacitor", "settings": {"C": C_j}},
     },
     "connections": {
-        "GND,p1":   ("OptSrc,p2", "Load,p2", "Vsrc,p2", "Cj,p2"),
+        "GND,p1": ("OptSrc,p2", "Load,p2", "Vsrc,p2", "Cj,p2"),
         "OptSrc,p1": "Ring,p1",
-        "Ring,p2":  "Load,p1",
-        "Vsrc,p1":  "Rs,p1",
-        "Rs,p2":    ("Cj,p1", "Ring,v_e"),   # node_ve: RC junction & ring voltage port
+        "Ring,p2": "Load,p1",
+        "Vsrc,p1": "Rs,p1",
+        "Rs,p2": ("Cj,p1", "Ring,v_e"),  # node_ve: RC junction & ring voltage port
     },
 }
 
 print("\nCompiling small-signal netlist...")
-groups_ss, sys_size_ss, port_map_ss = compile_netlist(net_dict_ss, models_map_ss)
-
-# ── DC operating point ────────────────────────────────────────────────────────────────
-# At t=0: BiasedACSource outputs V_bias (AC term is sigmoid(-10) ≈ 0).
-# OpticalSourceStep is always on.  solve_dc finds the joint optical + electrical
-# steady state: ring at optical SS, node_ve = V_bias.
-linear_strat_ss = analyze_circuit(groups_ss, sys_size_ss, is_complex=True)
-y_guess_ss = jnp.zeros(sys_size_ss * 2, dtype=jnp.float64)
-y0_ss = linear_strat_ss.solve_dc(groups_ss, y_guess_ss)
+circuit_ss = compile_circuit(net_dict_ss, models_map_ss, is_complex=True)
+groups_ss = circuit_ss.groups
+sys_size_ss = circuit_ss.sys_size
+port_map_ss = circuit_ss.port_map
+linear_strat_ss = circuit_ss.solver
+y0_ss = circuit_ss()
 
 # Report DC state
-ys0_complex = y0_ss[:sys_size_ss] + 1j * y0_ss[sys_size_ss:]
-V_ve_dc = float(jnp.real(ys0_complex[port_map_ss["Ring,v_e"]]))
-E_in_dc  = ys0_complex[port_map_ss["Ring,p1"]]
-E_out_dc = ys0_complex[port_map_ss["Ring,p2"]]
+V_ve_dc = float(jnp.real(circuit_ss.get_port_field(y0_ss, "Ring,v_e")))
+E_in_dc = circuit_ss.get_port_field(y0_ss, "Ring,p1")
+E_out_dc = circuit_ss.get_port_field(y0_ss, "Ring,p2")
 T_dc_sim = float(jnp.abs(E_out_dc) / (jnp.abs(E_in_dc) + 1e-20))
 
 # Analytic DC transmission at the biased detuning
 delta_omega_dc = 2.0 * np.pi * (f_operating - f_resonance) + v_to_wr * V_bias
-x_dc  = delta_omega_dc * tau
-A_dc  = 2.0 * tau / tau_e
-T_dc_analytic = np.sqrt(((1 - A_dc) ** 2 + x_dc ** 2) / (1 + x_dc ** 2))
+x_dc = delta_omega_dc * tau
+A_dc = 2.0 * tau / tau_e
+T_dc_analytic = np.sqrt(((1 - A_dc) ** 2 + x_dc**2) / (1 + x_dc**2))
 
 print(f"\nDC node_ve voltage : {V_ve_dc:.3f} V  (expected {V_bias:.1f} V)")
 print(f"DC |T| simulated   : {T_dc_sim:.4f}")
@@ -672,10 +677,10 @@ print(f"DC Δω·τ            : {x_dc:.3f}")
 
 
 ```python
-freqs_GHz  = np.linspace(1.0, 80, 10)
-N_periods  = 10.0      # simulate this many AC periods per run
-n_save     = 500       # save this many points in the readout window
-amplitudes = []        # will hold max(P_out) - min(P_out) per frequency
+freqs_GHz = np.linspace(1.0, 80, 10)
+N_periods = 10.0  # simulate this many AC periods per run
+n_save = 500  # save this many points in the readout window
+amplitudes = []  # will hold max(P_out) - min(P_out) per frequency
 
 transient_sim_ss = setup_transient(groups=groups_ss, linear_strategy=linear_strat_ss)
 E_out_node = port_map_ss["Ring,p2"]
@@ -690,7 +695,7 @@ for idx, f_ghz in enumerate(freqs_GHz):
     t_read = t_ac_start + (N_periods // 2) / f_hz
     ts_save = jnp.linspace(t_read, t_sim, n_save)
 
-    dtmax = 1.0 / (20.0 * f_hz)   # ≥ 20 samples per AC period
+    dtmax = 1.0 / (20.0 * f_hz)  # ≥ 20 samples per AC period
 
     sol = transient_sim_ss(
         t0=0.0,
@@ -705,12 +710,12 @@ for idx, f_ghz in enumerate(freqs_GHz):
     )
 
     if sol.result != diffrax.RESULTS.successful:
-        print(f"  [{idx+1:2d}/{len(freqs_GHz)}] {f_ghz:5.1f} GHz  WARNING: {sol.result}")
+        print(f"  [{idx + 1:2d}/{len(freqs_GHz)}] {f_ghz:5.1f} GHz  WARNING: {sol.result}")
 
-    ys_c   = sol.ys[:, :sys_size_ss] + 1j * sol.ys[:, sys_size_ss:]
-    P_out  = jnp.abs(ys_c[:, E_out_node]) ** 2
-    P_norm = jnp.min(P_out[:int(-n_save/2)])
-    amplitudes.append(float(jnp.max(P_out[:int(-n_save/2)])-P_norm))
+    ys_c = sol.ys[:, :sys_size_ss] + 1j * sol.ys[:, sys_size_ss:]
+    P_out = jnp.abs(ys_c[:, E_out_node]) ** 2
+    P_norm = jnp.min(P_out[: int(-n_save / 2)])
+    amplitudes.append(float(jnp.max(P_out[: int(-n_save / 2)]) - P_norm))
 
     if (idx + 1) % 2 == 0:
         print(f"  {idx + 1}/{len(freqs_GHz)} done")
@@ -739,13 +744,10 @@ print("Sweep complete.")
 
 
 ```python
-omega_m = 2.0 * np.pi * freqs_GHz * 1e9   # rad/s
+omega_m = 2.0 * np.pi * freqs_GHz * 1e9  # rad/s
 
-delta_omega_dc = (
-    2.0 * np.pi * (float(f_operating) - float(f_resonance))
-    + v_to_wr * V_bias
-)
-inv_tau   = 1.0 / tau
+delta_omega_dc = 2.0 * np.pi * (float(f_operating) - float(f_resonance)) + v_to_wr * V_bias
+inv_tau = 1.0 / tau
 inv_tau_l = 1.0 / tau_l
 
 # Electrical RC lowpass
@@ -753,52 +755,65 @@ H_RC = 1.0 / (1.0 + 1j * omega_m * R_s * C_j)
 
 # Second-order optical transfer function
 #   H_opt(jω) = (jω + 2/τ_l) / (Δω² + (1/τ)² − ω² + j(2/τ)ω)
-denom_dc    = delta_omega_dc ** 2 + inv_tau ** 2
-H_opt       = (1j * omega_m + 2.0 * inv_tau_l) / (
-                  -omega_m ** 2 + 1j * 2.0 * inv_tau * omega_m + denom_dc
-              )
+denom_dc = delta_omega_dc**2 + inv_tau**2
+H_opt = (1j * omega_m + 2.0 * inv_tau_l) / (-(omega_m**2) + 1j * 2.0 * inv_tau * omega_m + denom_dc)
 
-H_total     = H_RC * H_opt
-H_mag       = np.abs(H_total)
-H_norm      = H_mag / H_mag[0]
-H_dB        = 20.0 * np.log10(H_norm)
+H_total = H_RC * H_opt
+H_mag = np.abs(H_total)
+H_norm = H_mag / H_mag[0]
+H_dB = 20.0 * np.log10(H_norm)
 
-H_RC_dB  = 20.0 * np.log10(np.abs(H_RC)  / np.abs(H_RC[0]))
+H_RC_dB = 20.0 * np.log10(np.abs(H_RC) / np.abs(H_RC[0]))
 H_opt_dB = 20.0 * np.log10(np.abs(H_opt) / np.abs(H_opt[0]))
 
-f_pole_GHz = np.sqrt(delta_omega_dc ** 2 + inv_tau ** 2) / (2.0 * np.pi * 1e9)
+f_pole_GHz = np.sqrt(delta_omega_dc**2 + inv_tau**2) / (2.0 * np.pi * 1e9)
 
-amps      = np.array(amplitudes)
+amps = np.array(amplitudes)
 amps_norm = amps / (amps[0])
-amps_dB   = 20.0 * np.log10(amps_norm)
+amps_dB = 20.0 * np.log10(amps_norm)
 
-print(f"DC-biased detuning  Δf      : {delta_omega_dc / (2*np.pi*1e9):.1f} GHz  (Δω·τ = {delta_omega_dc * tau:.2f})")
+print(f"DC-biased detuning  Δf      : {delta_omega_dc / (2 * np.pi * 1e9):.1f} GHz  (Δω·τ = {delta_omega_dc * tau:.2f})")
 print(f"Optical pole magnitude      : {f_pole_GHz:.1f} GHz")
 print(f"Optical peak (no RC)        : {float(np.max(H_opt_dB)):.1f} dB  at {freqs_GHz[np.argmax(H_opt_dB)]:.1f} GHz")
 print(f"Combined peak (RC + optical): {float(np.max(H_dB)):.1f} dB  at {freqs_GHz[np.argmax(H_dB)]:.1f} GHz")
 
 fig, ax = plt.subplots(figsize=(9, 5))
 
-ax.plot(freqs_GHz, amps_dB, "o-",  ms=7.5, linewidth=2.0, zorder=3,
-            label="Transient (max − min of $|E_{out}|^2$)")
-ax.plot(freqs_GHz, H_dB,    "w--",       linewidth=3.0,
-            label="Analytic: RC × optical (combined)")
-ax.plot(freqs_GHz, H_opt_dB, ":",  linewidth=2.0, alpha=0.6,
-            label=r"Optical alone: $(j\omega\!+\!2/\tau_l)/(…)$  [peaks near $|\Delta\omega|$]")
-ax.plot(freqs_GHz, H_RC_dB,  ":",  linewidth=2.0, alpha=0.6,
-            label=f"RC alone: $1/(1+j\\omega R_s C_j)$  [$f_{{RC}}$={f_RC/1e9:.0f} GHz]")
+ax.plot(freqs_GHz, amps_dB, "o-", ms=7.5, linewidth=2.0, zorder=3, label="Transient (max − min of $|E_{out}|^2$)")
+ax.plot(freqs_GHz, H_dB, "w--", linewidth=3.0, label="Analytic: RC × optical (combined)")
+ax.plot(
+    freqs_GHz,
+    H_opt_dB,
+    ":",
+    linewidth=2.0,
+    alpha=0.6,
+    label=r"Optical alone: $(j\omega\!+\!2/\tau_l)/(…)$  [peaks near $|\Delta\omega|$]",
+)
+ax.plot(
+    freqs_GHz,
+    H_RC_dB,
+    ":",
+    linewidth=2.0,
+    alpha=0.6,
+    label=f"RC alone: $1/(1+j\\omega R_s C_j)$  [$f_{{RC}}$={f_RC / 1e9:.0f} GHz]",
+)
 
 ax.axhline(-3.0, color="gray", linestyle=":", linewidth=0.9, label="−3 dB")
-ax.axvline(abs(delta_omega_dc) / (2*np.pi*1e9), color="tab:orange",
-           linestyle=":", linewidth=0.9, alpha=0.7,
-           label=f"|Δf| = {abs(delta_omega_dc)/(2*np.pi*1e9):.0f} GHz (optical peak region)")
+ax.axvline(
+    abs(delta_omega_dc) / (2 * np.pi * 1e9),
+    color="tab:orange",
+    linestyle=":",
+    linewidth=0.9,
+    alpha=0.7,
+    label=f"|Δf| = {abs(delta_omega_dc) / (2 * np.pi * 1e9):.0f} GHz (optical peak region)",
+)
 
 ax.set_xlabel("Modulation frequency (GHz)")
 ax.set_ylabel("Normalised EO response (dB)")
 ax.set_title(
     f"Small-signal EO response — RC × optical  "
-    f"($V_{{bias}}$={V_bias:.0f} V, $\\Delta\\omega\\cdot\\tau$={delta_omega_dc*tau:.1f}, "
-    f"$R_s$={R_s:.0f} Ω, $C_j$={C_j*1e15:.0f} fF)"
+    f"($V_{{bias}}$={V_bias:.0f} V, $\\Delta\\omega\\cdot\\tau$={delta_omega_dc * tau:.1f}, "
+    f"$R_s$={R_s:.0f} Ω, $C_j$={C_j * 1e15:.0f} fF)"
 )
 ax.set_xlim(freqs_GHz[0], freqs_GHz[-1])
 ax.set_ylim(-15.0, 12.0)
@@ -873,48 +888,60 @@ def BiasedSinSource(
 
 
 models_map_hb = {
-    "ground":      lambda: 0,
-    "optical_cw":  OpticalSourceStep,
-    "biased_sin":  BiasedSinSource,
-    "ring_eo":     RingModulatorEO,
-    "resistor":    Resistor,
-    "capacitor":   Capacitor,
+    "ground": lambda: 0,
+    "optical_cw": OpticalSourceStep,
+    "biased_sin": BiasedSinSource,
+    "ring_eo": RingModulatorEO,
+    "resistor": Resistor,
+    "capacitor": Capacitor,
 }
 
 net_dict_hb = {
     "instances": {
-        "GND":    {"component": "ground"},
-        "OptSrc": {"component": "optical_cw",  "settings": {"power": 1.0}},
-        "Ring":   {"component": "ring_eo",     "settings": {
-            "ng": ng, "L": L_ring, "gamma": gamma, "alpha0": alpha0,
-            "f_operating": float(f_operating), "f_resonance": float(f_resonance),
-            "v_to_wr": v_to_wr,
-        }},
-        "Load":   {"component": "resistor",    "settings": {"R": 1.0}},
-        "Vsrc":   {"component": "biased_sin",  "settings": {
-            "V_bias": V_bias, "V_ac": V_ac, "freq": 1e9,   # placeholder; updated per sweep point
-        }},
-        "Rs":     {"component": "resistor",    "settings": {"R": R_s}},
-        "Cj":     {"component": "capacitor",   "settings": {"C": C_j}},
+        "GND": {"component": "ground"},
+        "OptSrc": {"component": "optical_cw", "settings": {"power": 1.0}},
+        "Ring": {
+            "component": "ring_eo",
+            "settings": {
+                "ng": ng,
+                "L": L_ring,
+                "gamma": gamma,
+                "alpha0": alpha0,
+                "f_operating": float(f_operating),
+                "f_resonance": float(f_resonance),
+                "v_to_wr": v_to_wr,
+            },
+        },
+        "Load": {"component": "resistor", "settings": {"R": 1.0}},
+        "Vsrc": {
+            "component": "biased_sin",
+            "settings": {
+                "V_bias": V_bias,
+                "V_ac": V_ac,
+                "freq": 1e9,  # placeholder; updated per sweep point
+            },
+        },
+        "Rs": {"component": "resistor", "settings": {"R": R_s}},
+        "Cj": {"component": "capacitor", "settings": {"C": C_j}},
     },
     "connections": {
-        "GND,p1":    ("OptSrc,p2", "Load,p2", "Vsrc,p2", "Cj,p2"),
+        "GND,p1": ("OptSrc,p2", "Load,p2", "Vsrc,p2", "Cj,p2"),
         "OptSrc,p1": "Ring,p1",
-        "Ring,p2":   "Load,p1",
-        "Vsrc,p1":   "Rs,p1",
-        "Rs,p2":     ("Cj,p1", "Ring,v_e"),
+        "Ring,p2": "Load,p1",
+        "Vsrc,p1": "Rs,p1",
+        "Rs,p2": ("Cj,p1", "Ring,v_e"),
     },
 }
 
 print("Compiling HB netlist...")
-groups_hb, num_vars_hb, port_map_hb = compile_netlist(net_dict_hb, models_map_hb)
+circuit_hb = compile_circuit(net_dict_hb, models_map_hb, is_complex=True)
+groups_hb = circuit_hb.groups
+num_vars_hb = circuit_hb.sys_size
+port_map_hb = circuit_hb.port_map
+y_dc_hb = circuit_hb()
 
-linear_strat_hb = analyze_circuit(groups_hb, num_vars_hb, is_complex=True)
-y_dc_hb = linear_strat_hb.solve_dc(groups_hb, jnp.zeros(num_vars_hb * 2, dtype=jnp.float64))
-
-ys0_hb = y_dc_hb[:num_vars_hb] + 1j * y_dc_hb[num_vars_hb:]
-E_in_dc_hb  = ys0_hb[port_map_hb["Ring,p1"]]
-E_out_dc_hb = ys0_hb[port_map_hb["Ring,p2"]]
+E_in_dc_hb = circuit_hb.get_port_field(y_dc_hb, "Ring,p1")
+E_out_dc_hb = circuit_hb.get_port_field(y_dc_hb, "Ring,p2")
 T_dc_hb = float(jnp.abs(E_out_dc_hb) / (jnp.abs(E_in_dc_hb) + 1e-20))
 print(f"\nDC |T| (HB netlist) : {T_dc_hb:.4f}  (transient: {T_dc_sim:.4f})")
 ```
@@ -928,39 +955,33 @@ print(f"\nDC |T| (HB netlist) : {T_dc_hb:.4f}  (transient: {T_dc_sim:.4f})")
 
 
 ```python
-N_harm_hb = 5   # 5 harmonics → K = 11 time samples per period
-K_hb      = 2 * N_harm_hb + 1
-f_demo    = 1e9  # 1 GHz single-point demo
+N_harm_hb = 5  # 5 harmonics → K = 11 time samples per period
+K_hb = 2 * N_harm_hb + 1
+f_demo = 1e9  # 1 GHz single-point demo
 
 groups_hb_demo = update_group_params(groups_hb, "biased_sin", "freq", f_demo)
 
-run_hb_demo = setup_harmonic_balance(
-    groups_hb_demo, num_vars_hb, freq=f_demo, num_harmonics=N_harm_hb, is_complex=True
-)
+run_hb_demo = setup_harmonic_balance(groups_hb_demo, num_vars_hb, freq=f_demo, num_harmonics=N_harm_hb, is_complex=True)
 y_time_demo, _ = run_hb_demo(y_dc_hb)
-print(f"HB converged at {f_demo/1e9:.0f} GHz.  y_time shape: {y_time_demo.shape}")
+print(f"HB converged at {f_demo / 1e9:.0f} GHz.  y_time shape: {y_time_demo.shape}")
 
-# Reconstruct complex optical fields from the unrolled [re | im] state.
 vout_hb = port_map_hb["Ring,p2"]
-vin_hb  = port_map_hb["Ring,p1"]
+vin_hb = port_map_hb["Ring,p1"]
 T_period_demo = 1.0 / f_demo
 t_hb_demo = np.linspace(0, T_period_demo * 1e9, K_hb, endpoint=False)  # ns
 
-E_in_demo  = y_time_demo[:, vin_hb]  + 1j * y_time_demo[:, vin_hb  + num_vars_hb]
-E_out_demo = y_time_demo[:, vout_hb] + 1j * y_time_demo[:, vout_hb + num_vars_hb]
-P_in_demo  = jnp.abs(E_in_demo)  ** 2
+E_in_demo = circuit_hb.get_port_field(y_time_demo, "Ring,p1")
+E_out_demo = circuit_hb.get_port_field(y_time_demo, "Ring,p2")
+P_in_demo = jnp.abs(E_in_demo) ** 2
 P_out_demo = jnp.abs(E_out_demo) ** 2
 
 fig, ax = plt.subplots(figsize=(8, 3.5))
-ax.plot(t_hb_demo, np.array(P_in_demo),  "C0o-", ms=7, label=r"$|E_\mathrm{in}|^2$  (CW)")
+ax.plot(t_hb_demo, np.array(P_in_demo), "C0o-", ms=7, label=r"$|E_\mathrm{in}|^2$  (CW)")
 ax.plot(t_hb_demo, np.array(P_out_demo), "C1s-", ms=7, label=r"$|E_\mathrm{out}|^2$  (modulated)")
-ax.axhline(T_dc_hb ** 2, color="C1", ls="--", lw=0.8, label=f"DC $|T|^2 = {T_dc_hb**2:.3f}$")
+ax.axhline(T_dc_hb**2, color="C1", ls="--", lw=0.8, label=f"DC $|T|^2 = {T_dc_hb**2:.3f}$")
 ax.set_xlabel("Time (ns)")
 ax.set_ylabel("Power (a.u.)")
-ax.set_title(
-    f"HB waveform at $f_m$ = {f_demo/1e9:.0f} GHz  "
-    f"($K$ = {K_hb} points, $N_h$ = {N_harm_hb})"
-)
+ax.set_title(f"HB waveform at $f_m$ = {f_demo / 1e9:.0f} GHz  ($K$ = {K_hb} points, $N_h$ = {N_harm_hb})")
 ax.legend()
 plt.tight_layout()
 plt.show()
@@ -987,56 +1008,64 @@ def hb_sweep_point(freq):
     """HB solve at one modulation frequency — vmappable over freq."""
     g_f = update_group_params(groups_hb, "biased_sin", "freq", freq)
 
-    run_hb = setup_harmonic_balance(
-        g_f, num_vars_hb, freq=freq, num_harmonics=N_harm_hb, is_complex=True
-    )
+    run_hb = setup_harmonic_balance(g_f, num_vars_hb, freq=freq, num_harmonics=N_harm_hb, is_complex=True)
     y_time, _ = run_hb(y_dc_hb)
 
-    E_out = y_time[:, vout_hb] + 1j * y_time[:, vout_hb + num_vars_hb]
+    E_out = circuit_hb.get_port_field(y_time, "Ring,p2")
     P_out = jnp.abs(E_out) ** 2
     return jnp.max(P_out) - jnp.min(P_out)
 
 
-freqs_GHz_HB = jnp.array(freqs_GHz-0.5*jnp.diff(freqs_GHz)[0]) #offsetting only for visualization
-sweep_freqs_hb = freqs_GHz_HB*1e9
+freqs_GHz_HB = jnp.array(freqs_GHz - 0.5 * jnp.diff(freqs_GHz)[0])  # offsetting only for visualization
+sweep_freqs_hb = freqs_GHz_HB * 1e9
 
 print(f"Running vmapped HB sweep over {len(sweep_freqs_hb)} frequencies (1–50 GHz)...")
 amps_hb = jax.jit(jax.vmap(hb_sweep_point))(sweep_freqs_hb)
 print("Done.")
 
-amps_hb_np   = np.array(amps_hb)
+amps_hb_np = np.array(amps_hb)
 amps_hb_norm = amps_hb_np / (amps_hb_np[0] + 1e-30)
-amps_hb_dB   = 20.0 * np.log10(amps_hb_norm + 1e-30)
+amps_hb_dB = 20.0 * np.log10(amps_hb_norm + 1e-30)
 
 fig, ax = plt.subplots(figsize=(9, 5))
 
 ax.plot(
-    freqs_GHz, amps_dB, "o-", ms=7.5, linewidth=2.0, zorder=3,
+    freqs_GHz,
+    amps_dB,
+    "o-",
+    ms=7.5,
+    linewidth=2.0,
+    zorder=3,
     label="Transient",
 )
 ax.plot(
-    freqs_GHz_HB, amps_hb_dB, "D--", ms=5, linewidth=1.5, zorder=4,
+    freqs_GHz_HB,
+    amps_hb_dB,
+    "D--",
+    ms=5,
+    linewidth=1.5,
+    zorder=4,
     label=f"HB vmap ({len(sweep_freqs_hb)} freqs, one XLA call, $N_h$={N_harm_hb})",
 )
-ax.plot(freqs_GHz, H_dB, "w-", linewidth=2.0, alpha=0.7,
-            label="Analytic: RC × optical")
-ax.plot(freqs_GHz, H_opt_dB, ":", linewidth=2.0, alpha=0.5,
-            label=r"Optical alone: $(j\omega + 2/\tau_l)/(…)$")
-ax.plot(freqs_GHz, H_RC_dB,  ":", linewidth=2.0, alpha=0.5,
-            label=f"RC alone  [$f_{{RC}}$ = {f_RC/1e9:.0f} GHz]")
+ax.plot(freqs_GHz, H_dB, "w-", linewidth=2.0, alpha=0.7, label="Analytic: RC × optical")
+ax.plot(freqs_GHz, H_opt_dB, ":", linewidth=2.0, alpha=0.5, label=r"Optical alone: $(j\omega + 2/\tau_l)/(…)$")
+ax.plot(freqs_GHz, H_RC_dB, ":", linewidth=2.0, alpha=0.5, label=f"RC alone  [$f_{{RC}}$ = {f_RC / 1e9:.0f} GHz]")
 
 ax.axhline(-3.0, color="gray", linestyle=":", linewidth=1.5, label="−3 dB")
 ax.axvline(
     abs(delta_omega_dc) / (2 * np.pi * 1e9),
-    color="tab:orange", linestyle=":", linewidth=0.9, alpha=0.7,
-    label=f"|Δf| = {abs(delta_omega_dc)/(2*np.pi*1e9):.0f} GHz",
+    color="tab:orange",
+    linestyle=":",
+    linewidth=0.9,
+    alpha=0.7,
+    label=f"|Δf| = {abs(delta_omega_dc) / (2 * np.pi * 1e9):.0f} GHz",
 )
 
 ax.set_xlabel("Modulation frequency (GHz)")
 ax.set_ylabel("Normalised EO response (dB)")
 ax.set_title(
     f"EO bandwidth — HB vmap vs transient vs analytic  "
-    f"($V_{{bias}}$={V_bias:.0f} V, $\\Delta\\omega\\cdot\\tau$={delta_omega_dc*tau:.1f})"
+    f"($V_{{bias}}$={V_bias:.0f} V, $\\Delta\\omega\\cdot\\tau$={delta_omega_dc * tau:.1f})"
 )
 ax.set_xlim(freqs_GHz[0], freqs_GHz[-1])
 ax.set_ylim(-15.0, 12.0)
@@ -1132,109 +1161,125 @@ def NRZSource(
 
 
 # ── NRZ signal parameters ──────────────────────────────────────────────────────
-T_bit_nrz   = 1.0 / 56e9          # ≈ 17.86 ps per bit
-N_bits_nrz  = 128                  # 128-bit pattern
-rise_nrz    = 2e-12                # 2 ps rise time (≈ 11 % of T_bit)
-t_start_nrz = T_bit_nrz           # quiet preamble: ring settles at V_low before first bit
+T_bit_nrz = 1.0 / 56e9  # ≈ 17.86 ps per bit
+N_bits_nrz = 128  # 128-bit pattern
+rise_nrz = 2e-12  # 2 ps rise time (≈ 11 % of T_bit)
+t_start_nrz = T_bit_nrz  # quiet preamble: ring settles at V_low before first bit
 
 V_bias = -2.0
 V_pp = 1.0
-V_low_nrz   = V_bias - 0.5*V_pp
-V_high_nrz  = V_bias + 0.5*V_pp
+V_low_nrz = V_bias - 0.5 * V_pp
+V_high_nrz = V_bias + 0.5 * V_pp
 
 # 32-bit PRBS-like pattern tiled 4× for 128 bits
 _bits32 = jnp.array(
-    [1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0,
-     1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0],
+    [1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0],
     dtype=jnp.float64,
 )
-bits_nrz = jnp.tile(_bits32, 4)   # shape (128,)
+bits_nrz = jnp.tile(_bits32, 4)  # shape (128,)
 
-t_end_nrz = t_start_nrz + N_bits_nrz * T_bit_nrz   # ≈ 2.3 ns total
+t_end_nrz = t_start_nrz + N_bits_nrz * T_bit_nrz  # ≈ 2.3 ns total
 
 # Voltage-dependent internal loss: alpha_v = alpha0 + alpha1_eo * V
 # With reverse-bias convention (negative voltages), alpha1_eo > 0 means
 # more reverse bias (more negative V) → lower alpha_v → more internal loss.
 # Ring stays over-coupled (alpha_v < gamma) throughout the drive range.
-alpha1_eo = 0.007          # V⁻¹  (positive; negative drive voltages give less loss at V_high)
+alpha1_eo = 0.007  # V⁻¹  (positive; negative drive voltages give less loss at V_high)
 
 # ── Eye-diagram circuit parameters (eye section only) ─────────────────────────
 # f_RC >> f_opt so the photon lifetime is the sole bandwidth bottleneck.
-R_s_eye   = 40.0                                          # Ω   (low contact + driver resistance)
-C_j_eye   = 55e-15                                        # F   (compact depletion capacitance)
-f_RC_eye  = 1.0 / (2.0 * np.pi * R_s_eye * C_j_eye)
+R_s_eye = 40.0  # Ω   (low contact + driver resistance)
+C_j_eye = 55e-15  # F   (compact depletion capacitance)
+f_RC_eye = 1.0 / (2.0 * np.pi * R_s_eye * C_j_eye)
 # Realistic EO coefficient for silicon PN ring at 1310 nm: ~15 GHz/V resonance shift
-v_to_wr_eye = 2.0 * np.pi * 15e9                          # rad/s/V
+v_to_wr_eye = 2.0 * np.pi * 15e9  # rad/s/V
 
 # Bias at Δω·τ = 1 (steepest slope of Lorentzian → maximum modulation depth)
 # Solving 2π(f_op − f_res_eye) + v_to_wr_eye × V_bias = 1/τ for f_res_eye:
-V_bias_nrz      = (V_low_nrz + V_high_nrz) / 2.0         # = −2 V
+V_bias_nrz = (V_low_nrz + V_high_nrz) / 2.0  # = −2 V
 detuning_eye_hz = (1.0 / tau - v_to_wr_eye * V_bias_nrz) / (2.0 * np.pi)
 f_resonance_eye = float(f_operating - detuning_eye_hz)
 
 f_opt_eye = 1.0 / (2.0 * np.pi * tau)
-print(f"56 GBaud NRZ: T_bit = {T_bit_nrz*1e12:.2f} ps,  τ = {tau*1e12:.2f} ps  (T_bit/τ = {T_bit_nrz/tau:.1f})")
-print(f"Optical bandwidth: f_opt = {f_opt_eye/1e9:.1f} GHz  |  f_RC = {f_RC_eye/1e9:.0f} GHz  (optically limited)")
-print(f"Bias detuning: Δω·τ = 1.00 at V_bias = {V_bias_nrz:.1f} V  (f_res_eye = f_op − {detuning_eye_hz/1e9:.1f} GHz)")
-print(f"Simulation: {N_bits_nrz} bits, t_end = {t_end_nrz*1e12:.0f} ps")
+print(f"56 GBaud NRZ: T_bit = {T_bit_nrz * 1e12:.2f} ps,  τ = {tau * 1e12:.2f} ps  (T_bit/τ = {T_bit_nrz / tau:.1f})")
+print(f"Optical bandwidth: f_opt = {f_opt_eye / 1e9:.1f} GHz  |  f_RC = {f_RC_eye / 1e9:.0f} GHz  (optically limited)")
+print(f"Bias detuning: Δω·τ = 1.00 at V_bias = {V_bias_nrz:.1f} V  (f_res_eye = f_op − {detuning_eye_hz / 1e9:.1f} GHz)")
+print(f"Simulation: {N_bits_nrz} bits, t_end = {t_end_nrz * 1e12:.0f} ps")
 # Transmission and τ_l at each NRZ level
 for _V, _label in [(V_low_nrz, "V_low"), (V_high_nrz, "V_high")]:
-    _av   = alpha0 + alpha1_eo * _V
-    _tl   = 2.0 * ng * L_ring / ((1.0 - _av**2) * 2.998e8)
-    _dw   = 2.0 * np.pi * detuning_eye_hz + v_to_wr_eye * _V
-    _x    = _dw * tau
-    _A    = 2.0 * tau / tau_e
-    _T    = np.sqrt(((1 - _A)**2 + _x**2) / (1 + _x**2))
-    print(f"  {_label}={_V}V: α_v={_av:.4f}, τ_l={_tl*1e12:.1f} ps, Δω·τ={_x:.2f}, |T|={_T:.3f}")
+    _av = alpha0 + alpha1_eo * _V
+    _tl = 2.0 * ng * L_ring / ((1.0 - _av**2) * 2.998e8)
+    _dw = 2.0 * np.pi * detuning_eye_hz + v_to_wr_eye * _V
+    _x = _dw * tau
+    _A = 2.0 * tau / tau_e
+    _T = np.sqrt(((1 - _A) ** 2 + _x**2) / (1 + _x**2))
+    print(f"  {_label}={_V}V: α_v={_av:.4f}, τ_l={_tl * 1e12:.1f} ps, Δω·τ={_x:.2f}, |T|={_T:.3f}")
 
 # ── Models and netlist ─────────────────────────────────────────────────────────
 models_map_eye = {
-    "ground":     lambda: 0,
+    "ground": lambda: 0,
     "optical_cw": OpticalSourceStep,
-    "nrz_src":    NRZSource,
-    "ring_eo":    RingModulatorEO,
-    "resistor":   Resistor,
-    "capacitor":  Capacitor,
+    "nrz_src": NRZSource,
+    "ring_eo": RingModulatorEO,
+    "resistor": Resistor,
+    "capacitor": Capacitor,
 }
 
 net_dict_eye = {
     "instances": {
-        "GND":    {"component": "ground"},
-        "OptSrc": {"component": "optical_cw",  "settings": {"power": 1.0}},
-        "Ring":   {"component": "ring_eo",     "settings": {
-            "ng": ng, "L": L_ring, "gamma": gamma, "alpha0": alpha0,
-            "alpha1": alpha1_eo,   # voltage-dependent internal loss (eye diagram only)
-            "f_operating": float(f_operating), "f_resonance": float(f_resonance_eye),
-            "v_to_wr": v_to_wr_eye,
-        }},
-        "Load":   {"component": "resistor",    "settings": {"R": 1.0}},
-        "Vsrc":   {"component": "nrz_src",     "settings": {
-            "V_low": V_low_nrz, "V_high": V_high_nrz,
-            "T_bit": T_bit_nrz, "rise": rise_nrz,
-            "bits": bits_nrz, "t_start": t_start_nrz,
-        }},
-        "Rs":     {"component": "resistor",    "settings": {"R": R_s_eye}},
-        "Cj":     {"component": "capacitor",   "settings": {"C": C_j_eye}},
+        "GND": {"component": "ground"},
+        "OptSrc": {"component": "optical_cw", "settings": {"power": 1.0}},
+        "Ring": {
+            "component": "ring_eo",
+            "settings": {
+                "ng": ng,
+                "L": L_ring,
+                "gamma": gamma,
+                "alpha0": alpha0,
+                "alpha1": alpha1_eo,  # voltage-dependent internal loss (eye diagram only)
+                "f_operating": float(f_operating),
+                "f_resonance": float(f_resonance_eye),
+                "v_to_wr": v_to_wr_eye,
+            },
+        },
+        "Load": {"component": "resistor", "settings": {"R": 1.0}},
+        "Vsrc": {
+            "component": "nrz_src",
+            "settings": {
+                "V_low": V_low_nrz,
+                "V_high": V_high_nrz,
+                "T_bit": T_bit_nrz,
+                "rise": rise_nrz,
+                "bits": bits_nrz,
+                "t_start": t_start_nrz,
+            },
+        },
+        "Rs": {"component": "resistor", "settings": {"R": R_s_eye}},
+        "Cj": {"component": "capacitor", "settings": {"C": C_j_eye}},
     },
     "connections": {
-        "GND,p1":    ("OptSrc,p2", "Load,p2", "Vsrc,p2", "Cj,p2"),
+        "GND,p1": ("OptSrc,p2", "Load,p2", "Vsrc,p2", "Cj,p2"),
         "OptSrc,p1": "Ring,p1",
-        "Ring,p2":   "Load,p1",
-        "Vsrc,p1":   "Rs,p1",
-        "Rs,p2":     ("Cj,p1", "Ring,v_e"),
+        "Ring,p2": "Load,p1",
+        "Vsrc,p1": "Rs,p1",
+        "Rs,p2": ("Cj,p1", "Ring,v_e"),
     },
 }
 
 print("\nCompiling NRZ netlist...")
-groups_eye, sys_size_eye, port_map_eye = compile_netlist(net_dict_eye, models_map_eye)
+circuit_eye = compile_circuit(net_dict_eye, models_map_eye, is_complex=True)
+groups_eye = circuit_eye.groups
+sys_size_eye = circuit_eye.sys_size
+port_map_eye = circuit_eye.port_map
+linear_strat_eye = circuit_eye.solver
 
 # DC at t=0: NRZSource outputs V_low (all sigmoids ≈ 0, since t_start = T_bit >> rise)
-linear_strat_eye = analyze_circuit(groups_eye, sys_size_eye, is_complex=True)
-y0_nrz = linear_strat_eye.solve_dc(groups_eye, jnp.zeros(sys_size_eye * 2, dtype=jnp.float64))
-
-ys0_eye  = y0_nrz[:sys_size_eye] + 1j * y0_nrz[sys_size_eye:]
-V_ve0    = float(jnp.real(ys0_eye[port_map_eye["Ring,v_e"]]))
-T_dc_eye = float(jnp.abs(ys0_eye[port_map_eye["Ring,p2"]]) / (jnp.abs(ys0_eye[port_map_eye["Ring,p1"]]) + 1e-20))
+y0_nrz = circuit_eye()
+V_ve0 = float(jnp.real(circuit_eye.get_port_field(y0_nrz, "Ring,v_e")))
+T_dc_eye = float(
+    jnp.abs(circuit_eye.get_port_field(y0_nrz, "Ring,p2"))
+    / (jnp.abs(circuit_eye.get_port_field(y0_nrz, "Ring,p1")) + 1e-20)
+)
 print(f"DC: V_ve = {V_ve0:.3f} V  (expected {V_low_nrz:.1f} V),  |T| = {T_dc_eye:.4f}")
 ```
 
@@ -1256,11 +1301,12 @@ print(f"DC: V_ve = {V_ve0:.3f} V  (expected {V_low_nrz:.1f} V),  |T| = {T_dc_eye
 transient_sim_nrz = setup_transient(groups=groups_eye, linear_strategy=linear_strat_eye)
 
 controller_nrz = diffrax.PIDController(
-    rtol=1e-6, atol=1e-8,
-    dtmax=rise_nrz / 2,   # ≤ 1 ps per step — resolves each sigmoid transition
+    rtol=1e-6,
+    atol=1e-8,
+    dtmax=rise_nrz / 2,  # ≤ 1 ps per step — resolves each sigmoid transition
 )
 
-print(f"Running NRZ transient simulation ({N_bits_nrz} bits at 56 GBaud, t_end = {t_end_nrz*1e12:.0f} ps)…")
+print(f"Running NRZ transient simulation ({N_bits_nrz} bits at 56 GBaud, t_end = {t_end_nrz * 1e12:.0f} ps)…")
 sol_nrz = transient_sim_nrz(
     t0=0.0,
     t1=t_end_nrz,
@@ -1277,7 +1323,6 @@ if sol_nrz.result == diffrax.RESULTS.successful:
 else:
     print(f"Simulation ended with: {sol_nrz.result}")
 
-ys_complex_nrz = sol_nrz.ys[:, :sys_size_eye] + 1j * sol_nrz.ys[:, sys_size_eye:]
 ts_ps_nrz = sol_nrz.ts * 1e12
 ```
 
@@ -1298,10 +1343,9 @@ def fold_eye(P_out, ts, t_start, T_bit, N_skip=8):
     t_raw = np.array((ts[mask] - t_eye_start) % T_bit) * 1e12
     n_bins = 200
     edges = np.linspace(0, T_ps, n_bins + 1)
-    ctrs  = (edges[:-1] + edges[1:]) / 2
-    bidx  = np.clip(np.digitize(t_raw, edges) - 1, 0, n_bins - 1)
-    means = np.array([P[bidx == i].mean() if np.any(bidx == i) else np.nan
-                      for i in range(n_bins)])
+    ctrs = (edges[:-1] + edges[1:]) / 2
+    bidx = np.clip(np.digitize(t_raw, edges) - 1, 0, n_bins - 1)
+    means = np.array([P[bidx == i].mean() if np.any(bidx == i) else np.nan for i in range(n_bins)])
     P_mid = (np.nanmax(means) + np.nanmin(means)) / 2
     cross_ps = ctrs[np.nanargmin(np.abs(means - P_mid))]
     phase = T_bit / 2 - cross_ps * 1e-12
@@ -1311,8 +1355,8 @@ def fold_eye(P_out, ts, t_start, T_bit, N_skip=8):
     return t3, P3, T_ps
 
 
-V_ve_nrz  = jnp.real(ys_complex_nrz[:, port_map_eye["Ring,v_e"]])
-E_out_nrz = ys_complex_nrz[:, port_map_eye["Ring,p2"]]
+V_ve_nrz = jnp.real(circuit_eye.get_port_field(sol_nrz.ys, "Ring,v_e"))
+E_out_nrz = circuit_eye.get_port_field(sol_nrz.ys, "Ring,p2")
 P_out_nrz = jnp.abs(E_out_nrz) ** 2
 
 t_plot_end_ps = 1000.0
@@ -1326,8 +1370,13 @@ edges_ps = np.concatenate([[0.0], transitions_ps, [t_end_nrz * 1e12]])
 values_V = np.concatenate([[V_low_nrz], levels_V])
 
 axes[0].stairs(values_V, edges_ps, color="gray", alpha=0.5, linewidth=1.0, label="Ideal NRZ (no RC)")
-axes[0].plot(ts_ps_nrz[t_mask], np.array(V_ve_nrz[t_mask]), color="tab:cyan", linewidth=0.8,
-             label=f"V at ring ($R_s$ = {R_s_eye:.0f} Ω, $C_j$ = {C_j_eye*1e15:.0f} fF, $f_{{RC}}$ = {f_RC_eye/1e9:.0f} GHz)")
+axes[0].plot(
+    ts_ps_nrz[t_mask],
+    np.array(V_ve_nrz[t_mask]),
+    color="tab:cyan",
+    linewidth=0.8,
+    label=f"V at ring ($R_s$ = {R_s_eye:.0f} Ω, $C_j$ = {C_j_eye * 1e15:.0f} fF, $f_{{RC}}$ = {f_RC_eye / 1e9:.0f} GHz)",
+)
 axes[0].set_ylabel("Voltage (V)")
 axes[0].set_title("56 GBaud NRZ — electrical node (RC-filtered)")
 axes[0].legend(loc="upper right", fontsize=9)
@@ -1339,7 +1388,7 @@ axes[1].set_ylabel(r"$|E_\mathrm{out}|^2$ (a.u.)")
 axes[1].set_xlabel("Time (ps)")
 axes[1].set_title(
     r"Optical output power — ISI from photon lifetime ($\tau \approx$ "
-     f"{tau*1e12:.1f} ps, $T_{{\\rm bit}}/\\tau$ = {T_bit_nrz/tau:.1f})"
+    f"{tau * 1e12:.1f} ps, $T_{{\\rm bit}}/\\tau$ = {T_bit_nrz / tau:.1f})"
 )
 fig.tight_layout()
 plt.show()
@@ -1353,13 +1402,14 @@ ax.set_xlabel("Time (ps)")
 ax.set_ylabel(r"$|E_\mathrm{out}|^2$ (a.u.)")
 ax.set_xlim(0, 3 * T_ps_nrz)
 for k in range(3):
-    ax.axvline((k + 0.5) * T_ps_nrz, color="gray", linestyle=":", linewidth=0.8, alpha=0.6,
-               label="Bit boundary" if k == 0 else None)
+    ax.axvline(
+        (k + 0.5) * T_ps_nrz, color="gray", linestyle=":", linewidth=0.8, alpha=0.6, label="Bit boundary" if k == 0 else None
+    )
 ax.set_title(
     f"Eye diagram (3 bits) — 56 GBaud NRZ,  $V_{{pp}}$ = {V_high_nrz - V_low_nrz:.1f} V,  "
     f"$V_{{bias}}$ = {(V_low_nrz + V_high_nrz) / 2:.1f} V\n"
-    f"($f_{{RC}}$ = {f_RC_eye/1e9:.0f} GHz,  $\\tau$ = {tau*1e12:.1f} ps,  "
-    f"$T_{{\\rm bit}}/\\tau$ = {T_bit_nrz/tau:.1f},  {N_bits_nrz - 8} bits shown)"
+    f"($f_{{RC}}$ = {f_RC_eye / 1e9:.0f} GHz,  $\\tau$ = {tau * 1e12:.1f} ps,  "
+    f"$T_{{\\rm bit}}/\\tau$ = {T_bit_nrz / tau:.1f},  {N_bits_nrz - 8} bits shown)"
 )
 ax.legend(fontsize=9)
 fig.tight_layout()
@@ -1397,33 +1447,38 @@ V_bias_sweep = jnp.array([-1.75, -2.0, -2.25, -2.5])
 y0_sweep = []
 for Vb in V_bias_sweep:
     Vb = float(Vb)
-    g = update_group_params(groups_eye, "nrz_src", "V_low",  Vb - 0.5 * V_pp)
-    g = update_group_params(g,          "nrz_src", "V_high", Vb + 0.5 * V_pp)
+    g = update_group_params(groups_eye, "nrz_src", "V_low", Vb - 0.5 * V_pp)
+    g = update_group_params(g, "nrz_src", "V_high", Vb + 0.5 * V_pp)
     g = update_group_params(g, "ring_eo", "f_resonance", f_operating)
-    y0_sweep.append(linear_strat_eye.solve_dc(g, jnp.zeros(sys_size_eye * 2, dtype=jnp.float64)))
-y0_sweep = jnp.stack(y0_sweep)   # shape (4, sys_size_eye * 2)
+    y0_sweep.append(circuit_eye.solver.solve_dc(g, jnp.zeros(sys_size_eye * 2, dtype=jnp.float64)))
+y0_sweep = jnp.stack(y0_sweep)  # shape (4, sys_size_eye * 2)
 
-N_bits_vmap  = 32                                     # 32 bits keeps per-sweep memory small
-t_end_vmap   = t_start_nrz + N_bits_vmap * T_bit_nrz  # ≈ 589 ps (vs 2.3 ns for Part 4)
+N_bits_vmap = 32  # 32 bits keeps per-sweep memory small
+t_end_vmap = t_start_nrz + N_bits_vmap * T_bit_nrz  # ≈ 589 ps (vs 2.3 ns for Part 4)
 ts_save_vmap = jnp.linspace(0.0, t_end_vmap, 4000)
+
 
 def run_eye_for_vbias(V_bias_val, y0):
     """Single transient eye-diagram run, parameterised by V_bias — vmappable."""
-    V_low_val  = V_bias_val - 0.5 * V_pp
+    V_low_val = V_bias_val - 0.5 * V_pp
     V_high_val = V_bias_val + 0.5 * V_pp
-    g = update_group_params(groups_eye, "nrz_src", "V_low",  V_low_val)
-    g = update_group_params(g,          "nrz_src", "V_high", V_high_val)
+    g = update_group_params(groups_eye, "nrz_src", "V_low", V_low_val)
+    g = update_group_params(g, "nrz_src", "V_high", V_high_val)
     g = update_group_params(g, "ring_eo", "f_resonance", f_operating)
 
-    sim = setup_transient(groups=g, linear_strategy=linear_strat_eye)
+    sim = setup_transient(groups=g, linear_strategy=circuit_eye.solver)
     sol = sim(
-        t0=0.0, t1=t_end_vmap, dt0=1e-13, y0=y0,
+        t0=0.0,
+        t1=t_end_vmap,
+        dt0=1e-13,
+        y0=y0,
         saveat=diffrax.SaveAt(ts=ts_save_vmap),
-        max_steps=8_000_000, throw=False,
+        max_steps=8_000_000,
+        throw=False,
         stepsize_controller=diffrax.PIDController(rtol=1e-6, atol=1e-8, dtmax=rise_nrz / 2),
     )
-    ys = sol.ys[:, :sys_size_eye] + 1j * sol.ys[:, sys_size_eye:]
-    return jnp.abs(ys[:, port_map_eye["Ring,p2"]]) ** 2
+    return jnp.abs(circuit_eye.get_port_field(sol.ys, "Ring,p2")) ** 2
+
 
 print(f"Running jax.vmap over {len(V_bias_sweep)} V_bias values: {V_bias_sweep.tolist()} V")
 P_out_sweep = jax.jit(jax.vmap(run_eye_for_vbias))(V_bias_sweep, y0_sweep)
@@ -1456,7 +1511,7 @@ for idx, Vb in enumerate(V_bias_sweep):
 
 fig.suptitle(
     f"Eye diagrams — 56 GBaud NRZ,  $V_{{pp}}$ = {V_pp:.2f} V,  "
-    f"$\\tau$ = {tau*1e12:.2f} ps,  $T_\\mathrm{{bit}}/\\tau$ = {T_bit_nrz/tau:.2f}\n"
+    f"$\\tau$ = {tau * 1e12:.2f} ps,  $T_\\mathrm{{bit}}/\\tau$ = {T_bit_nrz / tau:.2f}\n"
     f"(f_resonance fixed; $V_\\mathrm{{bias}}$ shifts operating point along Lorentzian)",
     fontsize=11,
 )
