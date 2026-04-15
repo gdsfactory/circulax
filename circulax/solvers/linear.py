@@ -1,20 +1,7 @@
-"""Circuit Linear Solvers Strategy Pattern.
+"""Circuit linear solver strategies.
 
-This module defines the linear algebra strategies used by the circuit simulator.
-It leverages the `lineax` abstract base class to provide interchangeable solvers
-that work seamlessly with JAX transformations (JIT, VMAP, GRAD).
-
-Architecture
-------------
-The core idea is to separate the *physics assembly* (calculating Jacobian values)
-from the *linear solve* (inverting the Jacobian).
-
-Classes:
-    CircuitLinearSolver: Abstract base defining the interface and common DC logic.
-    DenseSolver:        Uses JAX's native dense solver (LU decomposition). Best for small circuits (N < 2000) & GPU.
-    KLUSolver:          Uses the KLU sparse solver (via `klujax`). Best for large circuits on CPU.
-    SparseSolver:       Uses JAX's iterative BiCGStab. Best for large transient simulations on GPU.
-
+Separates physics assembly (Jacobian values) from the linear solve (matrix inversion).
+All solvers implement the ``lineax`` abstract interface and are JAX-transformable.
 """
 
 from typing import Any
@@ -124,37 +111,23 @@ def _klu_deduplicate(
 
 
 class CircuitLinearSolver(lx.AbstractLinearSolver):
-    """Abstract Base Class for all circuit linear solvers.
-
-    This class provides the unified interface for:
-    1.  Storing static matrix structure (indices, rows, cols).
-    2.  Handling Real vs. Complex-Unrolled system configurations.
-    3.  Providing a robust Newton-Raphson DC Operating Point solver.
+    """Abstract base for all circuit linear solvers.
 
     Attributes:
         ground_indices (jax.Array): Indices of nodes connected to ground (forced to 0V).
-        is_complex (bool): Static flag. If True, the system is 2N x 2N (Real/Imag unrolled).
-                           If False, the system is N x N (Real).
+        is_complex (bool): If True, the system is 2N×2N (real/imag unrolled); otherwise N×N.
 
     """
 
     ground_indices: jax.Array
-
-    # Store configuration so we don't need to pass it around
     is_complex: bool = eqx.field(static=True)
 
-    # --- Lineax Interface (Required Implementation) ---
     def init(self, operator: Any, options: Any) -> Any:  # noqa: ARG002
-        """Initialize the solver state (No-op for stateless solvers)."""
+        """Initialize the solver state (no-op for stateless solvers)."""
         return None
 
     def compute(self, state: Any, vector: jax.Array, options: Any) -> lx.Solution:
-        """Performs the computation of the component for each step.
-
-        In our case, we usually call `_solve_impl` directly to avoid overhead,
-        but this satisfies the API.
-
-        """
+        """Satisfies the lineax API; call ``_solve_impl`` directly for internal use."""
         msg = "Directly call _solve_impl for internal use."
         raise NotImplementedError(msg)
 
@@ -247,21 +220,14 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         atol: float = 1e-6,
         max_steps: int = 100,
     ) -> jax.Array:
-        """Performs a robust DC Operating Point analysis (Newton-Raphson).
-
-        This method:
-        1.  Detects if the system is Real or Complex based on `self.is_complex`.
-        2.  Assembles the system with dt=infinity (to open capacitors).
-        3.  Applies ground constraints (setting specific rows/cols to identity).
-        4.  Solves the linear system J * delta = -Residual.
-        5.  Applies voltage damping to prevent exponential overshoot.
+        """DC operating point via damped Newton-Raphson.
 
         Args:
-            component_groups (dict): The circuit components and their parameters.
-            y_guess (jax.Array): Initial guess vector (Shape: [N] or [2N]).
+            component_groups: Compiled circuit components.
+            y_guess: Initial guess vector (shape ``[N]`` or ``[2N]``).
 
         Returns:
-            jax.Array: The converged solution vector (Flat).
+            Converged solution vector.
 
         """
         y, _ = self._run_newton(component_groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
@@ -455,9 +421,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         return jax.lax.cond(converged, lambda _: y_direct, rescue, None)
 
 
-# ==============================================================================
-# 2. DENSE SOLVER (JAX Native LU)
-# ==============================================================================
+# --- DenseSolver ---
 
 
 class DenseSolver(CircuitLinearSolver):
@@ -477,26 +441,19 @@ class DenseSolver(CircuitLinearSolver):
 
     static_rows: jax.Array
     static_cols: jax.Array
-    sys_size: int = eqx.field(static=True)  # Matrix Dimension (N or 2N)
-
-    # Defined here to satisfy dataclass rules (must be after base fields)
+    sys_size: int = eqx.field(static=True)
     g_leak: float = 1e-9
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        # 1. Build Dense Matrix from Sparse Values
         J = jnp.zeros((self.sys_size, self.sys_size), dtype=residual.dtype)
         J = J.at[self.static_rows, self.static_cols].add(all_vals)
 
-        # 2. Add Leakage (Regularization)
-        #    Ensures matrix is invertible even if transistors turn off (floating nodes).
         diag_idx = jnp.arange(self.sys_size)
         J = J.at[diag_idx, diag_idx].add(self.g_leak)
 
-        # 3. Apply Ground Constraints (Stiff Diagonal)
         for idx in self.ground_indices:
             J = J.at[idx, idx].add(GROUND_STIFFNESS)
 
-        # 4. Dense Solve (LU)
         x = jnp.linalg.solve(J, residual)
         return lx.Solution(value=x, result=lx.RESULTS.successful, state=None, stats={})
 
@@ -516,9 +473,7 @@ class DenseSolver(CircuitLinearSolver):
         )
 
 
-# ==============================================================================
-# 3. KLU SOLVER (CPU Sparse)
-# ==============================================================================
+# --- KLU Solvers ---
 
 
 class KLUSplitSolver(CircuitLinearSolver):
@@ -553,16 +508,10 @@ class KLUSplitSolver(CircuitLinearSolver):
         del self._handle_wrapper
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        # 1. Prepare raw value vector including Ground and Leakage entries
         g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-
-        # 2. Coalesce duplicate entries (COO -> Unique COO)
         coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-
-        # 3. Call KLU Wrapper
         solution = klujax.solve_with_symbol(
             self.u_rows,
             self.u_cols,
@@ -615,17 +564,10 @@ class KlursSplitSolver(KLUSplitSolver):
     _handle_wrapper: KLURSHandleManager = eqx.field(static=True)
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        # 1. Prepare raw value vector including Ground and Leakage entries
         g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-
-        # 2. Coalesce duplicate entries (COO -> Unique COO)
         coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-
-        # 3. Call klurs Wrapper
-        # solution = klurs.solve_with_symbol(self.u_rows, self.u_cols, coalesced_vals, residual, self.symbolic_handle)
         solution = klurs.solve_with_symbol(
             self.u_rows,
             self.u_cols,
@@ -683,7 +625,6 @@ class KLUSplitLinear(KLUSplitSolver):
 
         numeric = klujax.factor(self.u_rows, self.u_cols, coalesced_vals, self._handle_wrapper.handle)
         solution = klujax.solve_with_numeric(numeric, residual, self._handle_wrapper.handle)
-        # Free the numeric handle to prevent memory leaks in the C++ backend
         klujax.free_numeric(numeric)
         return lx.Solution(
             value=solution.reshape(residual.shape),
@@ -975,16 +916,10 @@ class KLUSolver(CircuitLinearSolver):
     g_leak: float = 1e-9
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        # 1. Prepare raw value vector including Ground and Leakage entries
         g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-
-        # 2. Coalesce duplicate entries (COO -> Unique COO)
         coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-
-        # 3. Call KLU Wrapper
         solution = klujax.solve(self.u_rows, self.u_cols, coalesced_vals, residual)
         return lx.Solution(value=solution, result=lx.RESULTS.successful, state=None, stats={})
 
@@ -1007,9 +942,7 @@ class KLUSolver(CircuitLinearSolver):
         )
 
 
-# ==============================================================================
-# 4. SPARSE SOLVER (JAX BiCGStab Wrapper)
-# ==============================================================================
+# --- SparseSolver ---
 
 
 class SparseSolver(CircuitLinearSolver):
@@ -1032,31 +965,20 @@ class SparseSolver(CircuitLinearSolver):
     g_leak: float = 1e-9
 
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        # 1. Build Preconditioner (Diagonal Approximation)
-        #    Extract diagonal elements from the sparse entries
+        # Jacobi preconditioner: extract diagonal, add leakage and ground stiffness.
         diag_vals = jax.ops.segment_sum(all_vals * self.diag_mask, self.static_rows, num_segments=self.sys_size)
-        #    Add Leakage & Ground stiffness to diagonal
         diag_vals = diag_vals + self.g_leak
         for idx in self.ground_indices:
             diag_vals = diag_vals.at[idx].add(GROUND_STIFFNESS)
-
-        #    Invert diagonal for Jacobi Preconditioner
         inv_diag = jnp.where(jnp.abs(diag_vals) < 1e-12, 1.0, 1.0 / diag_vals)
 
-        # 2. Define Linear Operator A(x)
-        #    Implicitly computes A * x without forming the full matrix
         def matvec(x: jax.Array) -> jax.Array:
-            x_gathered = x[self.static_cols]
-            products = all_vals * x_gathered
-            Ax = jax.ops.segment_sum(products, self.static_rows, num_segments=self.sys_size)
-
-            # Add Leakage & Ground contributions
+            Ax = jax.ops.segment_sum(all_vals * x[self.static_cols], self.static_rows, num_segments=self.sys_size)
             Ax = Ax + (x * self.g_leak)
             for idx in self.ground_indices:
                 Ax = Ax.at[idx].add(GROUND_STIFFNESS * x[idx])
             return Ax
 
-        # 3. Solve (BiCGStab)
         delta_guess = residual * inv_diag
         x, _ = jax.scipy.sparse.linalg.bicgstab(
             matvec,

@@ -43,7 +43,6 @@ import time
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
@@ -102,6 +101,7 @@ F_SRC = 1e3         # driving frequency (Hz)
 L_VAL = 100e-6      # inductor per stage (H)   — f_r ≈ 50 kHz
 C_VAL = 100e-9      # cap per stage (F)
 import math
+
 F_R = 1.0 / (2.0 * math.pi * math.sqrt(L_VAL * C_VAL))  # ≈ 50.3 kHz
 
 R_SRC = 10.0        # source series resistance (Ω)
@@ -335,7 +335,7 @@ def _print_legend(dt_values: list[float]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:  # noqa: C901
+def main() -> None:
     """Parse CLI arguments and run the stiff Newton benchmark."""
     parser = argparse.ArgumentParser(description="Stiff Newton benchmark (LC+diode chain, fixed dt)")
     parser.add_argument("--stages", type=int, nargs="+", default=[5, 10, 20], metavar="N")

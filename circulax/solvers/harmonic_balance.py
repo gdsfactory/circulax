@@ -116,7 +116,6 @@ def _hb_residual(
                 contrib = jnp.zeros(sys_size, dtype=jnp.complex128)
                 return contrib.at[group.eq_indices].add(i_ports)
 
-            # Evaluate over all harmonics simultaneously.
             fdomain_R_k = jax.vmap(_fdomain_contrib)(y_freq, freqs)  # (N_harm+1, sys_size)
             R_k = R_k + fdomain_R_k
 
@@ -141,47 +140,24 @@ def setup_harmonic_balance(
     osc_node: int | None = None,
     amplitude_tries: Array | None = None,
 ) -> Callable[[Array], tuple[Array, Array]]:
-    """Configure and return a callable for Harmonic Balance analysis.
-
-    This is the primary entry point for HB analysis, mirroring the pattern of
-    :func:`~circulax.solvers.setup_transient`: circuit-specific data (groups,
-    frequency, number of harmonics) are captured at setup time; the returned
-    callable takes only the DC operating point and solver options.
+    """Configure and return a Harmonic Balance callable.
 
     Args:
-        groups: Compiled component groups returned by
-            :func:`~circulax.compiler.compile_netlist`.
-        num_vars: Total number of state variables (second return value of
-            :func:`~circulax.compiler.compile_netlist`).
-        freq: Fundamental frequency in Hz of the periodic drive.
-        num_harmonics: Number of harmonics to include. The solver uses
-            K = 2*num_harmonics + 1 time points. More harmonics improve
-            accuracy for strongly nonlinear circuits at the cost of a larger
-            Jacobian (K*sys_size x K*sys_size).
-        is_complex: Set ``True`` for photonic (complex-valued) circuits.
-            The state vector is stored in unrolled ``[re | im]`` block format
-            of length ``2 * num_vars``.
-        g_leak: Small leakage conductance added to the Jacobian diagonal for
-            regularisation. Prevents singular matrices when floating nodes
-            have no DC path to ground.
-        osc_node: State-vector index of the oscillator output node, obtained
-            from the ``net_map`` returned by :func:`~circulax.compiler.compile_netlist`
-            (e.g. ``net_map["VDP,p1"]``).  When set, the returned ``run_hb``
-            callable automatically runs Newton from several sinusoidal initial
-            amplitudes in parallel (via :func:`jax.vmap`) and returns the
-            solution with the largest fundamental component.  This removes the
-            need to manually choose a starting amplitude for autonomous
-            oscillators, where ``y=0`` is always a trivial Newton fixed point
-            and low-amplitude starts converge there instead of to the limit
-            cycle.  Has no effect when ``y_flat_init`` is supplied explicitly.
-        amplitude_tries: 1-D array of initial voltage amplitudes (V) to try
-            when ``osc_node`` is set.  Defaults to six log-spaced values
-            spanning 0.3 V – 20 V, which covers most practical oscillators.
+        groups: Compiled component groups from :func:`~circulax.compiler.compile_netlist`.
+        num_vars: Total number of state variables.
+        freq: Fundamental frequency in Hz.
+        num_harmonics: Number of harmonics; uses K = 2*N+1 time points.
+        is_complex: ``True`` for photonic circuits (unrolled ``[re | im]`` state).
+        g_leak: Diagonal regularisation to prevent singular Jacobians at floating nodes.
+        osc_node: State-vector index of the oscillator node (from ``net_map``).
+            Enables automatic multi-start across ``amplitude_tries``. No effect
+            if ``y_flat_init`` is supplied.
+        amplitude_tries: Amplitudes (V) to try when ``osc_node`` is set.
+            Defaults to ``[0.3, 0.7, 1.5, 3.0, 7.0, 20.0]``.
 
     Returns:
-        A callable ``run_hb(y_dc, *, y_flat_init=None, max_iter=50, tol=1e-6) -> (y_time, y_freq)``
-        that finds the periodic steady state starting from the DC operating
-        point ``y_dc``. Compatible with ``jax.jit``.
+        ``run_hb(y_dc, *, y_flat_init=None, max_iter=50, tol=1e-6) -> (y_time, y_freq)``,
+        compatible with ``jax.jit``.
 
     """
     _, _, ground_idxs, sys_size = _build_index_arrays(groups, num_vars, is_complex=is_complex)
@@ -230,9 +206,6 @@ def setup_harmonic_balance(
         """
 
         def newton_step(y_flat: Array, grps: Any) -> Array:
-            # grps is passed explicitly via args= so that Optimistix's
-            # ImplicitAdjoint custom VJP can differentiate through it.
-            # Parameters captured only in closures are opaque to the VJP.
             def _res(y: Array) -> Array:
                 return _hb_residual(
                     y.reshape(K, sys_size), grps, t_points, omega, ground_indices, is_complex=is_complex
@@ -251,13 +224,8 @@ def setup_harmonic_balance(
             return y_flat + delta * damping
 
         def _solve(y_flat: Array) -> tuple[Array, Array]:
-            # optx.FixedPointIteration uses jax.lax.while_loop internally —
-            # this makes run_hb compatible with jax.jit.
-            # optx.fixed_point defaults to ImplicitAdjoint, which applies the
-            # implicit function theorem at the converged fixed point.  groups
-            # MUST be passed via args= (not captured in a closure) because
-            # ImplicitAdjoint differentiates only through its explicit args
-            # pytree — closure variables are opaque to it and give zero gradients.
+            # groups MUST be passed via args= — ImplicitAdjoint differentiates
+            # only through explicit args; closure-captured variables give zero gradients.
             hb_solver = optx.FixedPointIteration(rtol=tol, atol=tol)
             sol = optx.fixed_point(
                 newton_step, hb_solver, y_flat, args=groups,
@@ -269,14 +237,9 @@ def setup_harmonic_balance(
             y_freq_sol = jnp.fft.rfft(y_time_sol, axis=0) / K
             return y_time_sol, y_freq_sol
 
-        # ── Autonomous multi-start ──────────────────────────────────────────────
-        # When osc_node is set and no explicit init is provided, run Newton from
-        # several sinusoidal initial amplitudes in parallel and keep the solution
-        # with the largest fundamental at osc_node.  This transparently handles
-        # the basin-of-attraction problem: the HB residual is dome-shaped between
-        # y=0 and the limit cycle, and Newton from low amplitudes converges to the
-        # trivial zero solution.  At least one amplitude in _amplitude_tries will
-        # be above the dome peak and land in the limit-cycle basin.
+        # Autonomous multi-start: y=0 is always a trivial fixed point for oscillators,
+        # so low-amplitude starts converge to zero. Try several amplitudes and keep
+        # the one with the largest fundamental — at least one will be above the basin.
         if osc_node is not None and y_flat_init is None:
             def _single_start(A: Array) -> tuple[Array, Array]:
                 y0 = (jnp.zeros(K * sys_size, dtype=jnp.float64)
@@ -284,12 +247,9 @@ def setup_harmonic_balance(
                 return _solve(y0)
 
             y_times, y_freqs = jax.vmap(_single_start)(_amplitude_tries)
-            # Select the run that produced the largest fundamental amplitude.
-            fund_amps = jnp.abs(y_freqs[:, 1, osc_node])
-            best = jnp.argmax(fund_amps)
+            best = jnp.argmax(jnp.abs(y_freqs[:, 1, osc_node]))
             return jnp.take(y_times, best, axis=0), jnp.take(y_freqs, best, axis=0)
 
-        # ── Standard single-start ───────────────────────────────────────────────
         y_flat = y_flat_init if y_flat_init is not None else jnp.tile(y_dc, K)
         return _solve(y_flat)
 

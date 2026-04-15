@@ -31,22 +31,8 @@ def Capacitor(signals: Signals, s: States, C: float = 1e-12) -> PhysicsReturn:
 
 @component(ports=("p1", "p2"), states=("i_L",))
 def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
-    """V = L * di/dt  ->  di_L/dt = V / L.
-
-    We treat Flux (phi) = L * i_L.
-    """
+    """V = L * di/dt formulated via flux: f['i_L'] = V, q['i_L'] = -L*i_L."""
     v_drop = signals.p1 - signals.p2
-    # Flow: Current i_L flows p1 -> p2.
-    # State Eq: i_L is the variable. We constrain its derivative via flux.
-    # However, standard modified nodal analysis often writes:
-    #   p1: i_L
-    #   p2: -i_L
-    #   branch: v1 - v2 - L*di/dt = 0
-    #
-    # In this (f, q) formulation:
-    # f['i_L'] = v1 - v2 (Force / Potential)
-    # q['i_L'] = -L * i_L (Momentum / Flux)
-    # Result: (v1-v2) - d/dt(L*i_L) = 0  => v = L di/dt
     return ({"p1": s.i_L, "p2": -s.i_L, "i_L": v_drop}, {"i_L": -L * s.i_L})
 
 
@@ -332,11 +318,9 @@ def NMOSDynamic(
         Cgs_ov: Gate-source overlap capacitance in farads. Defaults to ``1e-15``.
 
     """
-    # 1. DC Current
     i_ds = _nmos_current(signals.d, signals.g, signals.s, Kp, W, L, Vth, lam)
     f_dict = {"d": i_ds, "g": 0.0, "s": -i_ds}
 
-    # 2. Charges
     vgs = signals.g - signals.s
     vds = signals.d - signals.s
     vgd = signals.g - signals.d
@@ -520,7 +504,6 @@ def BJT_NPN_Dynamic(
 
     f_dict = {"c": i_c, "b": i_b, "e": i_e}
 
-    # 2. Dynamic Charges (Diffusion + Depletion)
     Qje_depl = _junction_charge(vbe, Cje, Vje, Mje)
     Qjc_depl = _junction_charge(vbc, Cjc, Vjc, Mjc)
 
@@ -592,54 +575,28 @@ def VoltageControlledSwitch(signals: Signals, s: States, Ron: float = 1.0, Roff:
 
 @component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_src", "i_ctrl"))
 def CCVS(signals: Signals, s: States, R: float = 1.0) -> PhysicsReturn:
-    """Current Controlled Voltage Source (Transresistance).
-
-    Physics:
-    1. Input side (in_p, in_m) acts as a short circuit (0V drop) to measure current 'i_ctrl'.
-    2. Output side (out_p, out_m) acts as a voltage source V = R * i_ctrl.
-    """
-    # 1. Input Constraint: Short Circuit (v_in = 0)
-    #    The variable 'i_ctrl' is the current flowing through this short.
+    """Current Controlled Voltage Source: V_out = R * i_ctrl, V_in = 0 (short)."""
     eq_in = signals.in_p - signals.in_m
-
-    # 2. Output Constraint: Voltage Source (v_out - R*i_in = 0)
-    #    The variable 'i_src' is the current delivered by this source.
     eq_out = (signals.out_p - signals.out_m) - (R * s.i_ctrl)
-
     return {
-        # Output side flow (standard voltage source behavior)
         "out_p": s.i_src,
         "out_m": -s.i_src,
-        # Input side flow (current 'i_ctrl' enters in_p, leaves in_m)
         "in_p": s.i_ctrl,
         "in_m": -s.i_ctrl,
-        # Equations for the state variables
-        "i_src": eq_out,  # Enforce V_out = R * I_in
-        "i_ctrl": eq_in,  # Enforce V_in = 0
+        "i_src": eq_out,
+        "i_ctrl": eq_in,
     }, {}
 
 
 @component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_ctrl",))
 def CCCS(signals: Signals, s: States, alpha: float = 1.0) -> PhysicsReturn:
-    """Current Controlled Current Source (Current Gain).
-
-    Physics:
-    1. Input side (in_p, in_m) acts as a short circuit to measure 'i_ctrl'.
-    2. Output side pushes current I_out = alpha * i_ctrl.
-    """
-    # 1. Input Constraint: Short Circuit
+    """Current Controlled Current Source: I_out = alpha * i_ctrl, V_in = 0 (short)."""
     eq_in = signals.in_p - signals.in_m
-
-    # 2. Output Current Calculation
     i_out = alpha * s.i_ctrl
-
     return {
-        # Output side flow (Direct current injection)
         "out_p": i_out,
         "out_m": -i_out,
-        # Input side flow (Short circuit current path)
         "in_p": s.i_ctrl,
         "in_m": -s.i_ctrl,
-        # Equation for the state variable
-        "i_ctrl": eq_in,  # Enforce V_in = 0
+        "i_ctrl": eq_in,
     }, {}
