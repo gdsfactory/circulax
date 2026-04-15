@@ -98,7 +98,7 @@ def setup_ac_sweep(
         - **y_dc** — DC operating point, shape ``(num_vars,)``.
         - **freqs** — frequencies in Hz, shape ``(N_freqs,)``.
         - **S** — S-parameter matrix, shape ``(N_freqs, N_ports, N_ports)``
-          complex128.
+            complex128.
 
         Compatible with :func:`jax.jit` and :func:`jax.vmap` over ``y_dc``.
 

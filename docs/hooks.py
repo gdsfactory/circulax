@@ -28,7 +28,8 @@ def on_config(config: Any, **kwargs: Any) -> Any:
 
 
 def on_pre_build(config: Any, **kwargs: Any) -> None:
-    """Called before the build starts."""
+    """Called before the build starts. Generates assets that must exist before file discovery."""
+    _generate_lcr_animation()
 
 
 def on_files(files: Any, config: Any, **kwargs: Any) -> Any:
@@ -140,6 +141,92 @@ def on_page_context(context: Any, page: Any, config: Any, nav: Any, **kwargs: An
 def on_post_page(output: str, page: Any, config: Any, **kwargs: Any) -> str:
     """Called after page is fully processed."""
     return output
+
+
+def _generate_lcr_animation() -> None:
+    """Generate docs/images/lcr_animation.gif from the LCR transient simulation."""
+    out_path = Path(__file__).parent / "images" / "lcr_animation.gif"
+    if out_path.exists():
+        return  # already generated; skip during incremental rebuilds
+
+    import jax
+    import jax.numpy as jnp
+    import diffrax
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.animation as animation
+
+    from circulax import compile_circuit
+    from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
+    from circulax.solvers import setup_transient
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    jax.config.update("jax_enable_x64", True)
+
+    net_dict = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "V1":  {"component": "source_voltage", "settings": {"V": 1.0, "delay": 0.25e-9}},
+            "R1":  {"component": "resistor",        "settings": {"R": 10.0}},
+            "C1":  {"component": "capacitor",       "settings": {"C": 1e-11}},
+            "L1":  {"component": "inductor",        "settings": {"L": 5e-9}},
+        },
+        "connections": {
+            "GND,p1": ("V1,p2", "C1,p2"),
+            "V1,p1": "R1,p1",
+            "R1,p2": "L1,p1",
+            "L1,p2": "C1,p1",
+        },
+    }
+    models = {
+        "resistor": Resistor, "capacitor": Capacitor,
+        "inductor": Inductor, "source_voltage": VoltageSource,
+        "ground": lambda: 0,
+    }
+
+    circuit = compile_circuit(net_dict, models)
+    y_op    = circuit()
+    sim     = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
+    t_max   = 3e-9
+    sol     = sim(
+        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
+        saveat=diffrax.SaveAt(ts=jnp.linspace(0, t_max, 500)),
+        max_steps=100_000,
+    )
+
+    ts    = sol.ts
+    v_src = circuit.get_port_field(sol.ys, "V1,p1")
+    v_cap = circuit.get_port_field(sol.ys, "C1,p1")
+    i_ind = sol.ys[:, 5]
+
+    fig, ax1 = plt.subplots(figsize=(9, 4))
+    ax2 = ax1.twinx()
+    (ln1,) = ax1.plot([], [], "b-",  linewidth=2.5, label="Capacitor V")
+    (ln2,) = ax1.plot([], [], "g--", linewidth=2,   label="Source V")
+    (ln3,) = ax2.plot([], [], "r:",  linewidth=2,   label="Inductor I")
+    ax1.set_xlim(0, float(t_max))
+    ax1.set_ylim(float(v_cap.min()) - 0.1, float(v_cap.max()) + 0.2)
+    ax2.set_ylim(float(i_ind.min()) - 0.005, float(i_ind.max()) + 0.005)
+    ax1.set_xlabel("Time (s)")
+    ax1.set_ylabel("Voltage (V)")
+    ax2.set_ylabel("Current (A)")
+    ax1.legend(loc="upper left")
+    ax2.legend(loc="upper right")
+    ax1.set_title("LCR Impulse Response — underdamped ringing at ~1 GHz")
+    ax1.grid(True)
+    fig.tight_layout()
+
+    def _frame(i: int):
+        n = max(2, i * 5)
+        for ln, y in [(ln1, v_cap), (ln2, v_src), (ln3, i_ind)]:
+            ln.set_data(ts[:n], y[:n])
+        return ln1, ln2, ln3
+
+    ani = animation.FuncAnimation(fig, _frame, frames=100, interval=40, blit=True)
+    ani.save(str(out_path), writer="pillow", fps=25)
+    plt.close(fig)
 
 
 def _parse_special(content: str) -> str | None:

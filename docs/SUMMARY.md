@@ -20,6 +20,6 @@
 * Inverse Design
     * [LC Filter Synthesis](examples/01_lc_filter_synthesis.md)
     * [Oscillator HB Tuning](examples/02_oscillator_hb_tuning.md)
-    * [Photonic CMZ Demux](examples/04_photonic_cmz_demux.md)
-    * [HEMT PA Optimisation](examples/05_hemt_pa_optimization.md)
-* [API Reference](references/)
+    * [Photonic CMZ Demux](examples/03_photonic_cmz_demux.md)
+    * [HEMT PA Optimisation](examples/04_hemt_pa_optimization.md)
+* [API Reference](references/index.md)

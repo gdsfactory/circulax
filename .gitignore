@@ -11,4 +11,5 @@ docs/references/
 *code-workspace
 site/*
 docs/examples/*_files
+docs/images/lcr_animation.gif
 circulax/_version.py
