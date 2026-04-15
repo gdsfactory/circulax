@@ -10,4 +10,5 @@ circulax_workspace.code-workspace
 docs/references/
 *code-workspace
 site/*
+docs/examples/*_files
 circulax/_version.py
