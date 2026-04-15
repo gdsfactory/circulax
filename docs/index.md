@@ -60,6 +60,24 @@ sol = sim(
 v_cap = circuit.get_port_field(sol.ys, "C1,p1")  # capacitor voltage over time
 ```
 
+## Defining Components
+
+Components are plain Python functions — no boilerplate, no subclassing:
+
+```python
+from circulax.components.base_component import component, Signals, States
+
+@component(ports=("p1", "p2"))
+def Resistor(signals: Signals, s: States, R: float = 1e3):
+    i = (signals.p1 - signals.p2) / R
+    return {"p1": i, "p2": -i}, {}          # (currents, charges)
+
+@component(ports=("p1", "p2"))
+def Capacitor(signals: Signals, s: States, C: float = 1e-12):
+    q = C * (signals.p1 - signals.p2)
+    return {}, {"p1": q, "p2": -q}          # dq/dt becomes current automatically
+```
+
 ## Features
 
 - **Transient** — implicit ODE stepping via [Diffrax](https://docs.kidger.site/diffrax/); handles stiff circuits.
