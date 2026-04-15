@@ -69,7 +69,7 @@ plt.rcParams.update({
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 16:19:22,993:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-15 17:32:50,168:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## CMZ topology in detail
@@ -242,7 +242,7 @@ with schemdraw.Drawing(canvas=ax) as d:
 
 
 
-![png](04_photonic_cmz_demux_files/04_photonic_cmz_demux_3_0.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_3_0.png)
 
 
 
@@ -572,7 +572,7 @@ print("starting point. Backpropagation will find the arm lengths that make them 
 
 
 
-![png](04_photonic_cmz_demux_files/04_photonic_cmz_demux_8_0.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_8_0.png)
 
 
 
@@ -755,7 +755,7 @@ plt.show()
 
 
 
-![png](04_photonic_cmz_demux_files/04_photonic_cmz_demux_11_0.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_11_0.png)
 
 
 
@@ -788,7 +788,7 @@ print(f"Improvement: {diag_init.mean()*100:.1f}% -> {np.mean(diag_final)*100:.1f
 
 
 
-![png](04_photonic_cmz_demux_files/04_photonic_cmz_demux_12_1.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_12_1.png)
 
 
 
@@ -885,7 +885,7 @@ for i, (label, wl_t) in enumerate(zip(det_labels, target_wls)):
 
 
 
-![png](04_photonic_cmz_demux_files/04_photonic_cmz_demux_13_2.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_13_2.png)
 
 
 

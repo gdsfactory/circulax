@@ -27,7 +27,7 @@ from circulax.solvers import setup_transient
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 16:19:17,405:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-15 17:32:41,275:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -143,7 +143,7 @@ plt.show()
 ```
 
     Compiling...
-    {'C1,p1': 1, 'L1,p2': 1, 'GND,p1': 0, 'C1,p2': 0, 'V1,p2': 0, 'R1,p2': 2, 'L1,p1': 2, 'V1,p1': 3, 'R1,p1': 3, 'V1,i_src': 4, 'L1,i_L': 5}
+    {'C1,p1': 1, 'L1,p2': 1, 'V1,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'R1,p2': 2, 'L1,p1': 2, 'R1,p1': 3, 'V1,p1': 3, 'V1,i_src': 4, 'L1,i_L': 5}
     Total System Size: 6
     Group: source_voltage
       Count: 1

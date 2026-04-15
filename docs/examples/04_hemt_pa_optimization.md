@@ -47,7 +47,9 @@ print("JAX backend:", jax.default_backend())
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 16:19:32,214:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
+    WARNING:2026-04-15 17:32:56,951:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
     JAX backend: cpu
@@ -408,7 +410,7 @@ plt.tight_layout()
 
 
 
-![png](05_hemt_pa_optimization_files/05_hemt_pa_optimization_7_0.png)
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_7_0.png)
 
 
 

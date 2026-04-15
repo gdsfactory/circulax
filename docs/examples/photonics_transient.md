@@ -25,7 +25,7 @@ from circulax.solvers import setup_transient
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 16:19:06,878:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-15 17:32:29,353:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 

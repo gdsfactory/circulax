@@ -73,7 +73,7 @@ plt.rcParams.update({
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 16:19:45,321:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-15 17:33:16,535:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## 1. Butterworth analytical targets
@@ -184,7 +184,7 @@ print(f"\nPort node indices: {port_nodes}")
 ```
 
     System size: 6 unknowns
-    Port map: {'C1,p1': 1, 'L1,p2': 1, 'L2,p1': 1, 'C1,p2': 0, 'Rp1,p2': 0, 'GND,p1': 0, 'Rp2,p2': 0, 'Rp1,p1': 2, 'L1,p1': 2, 'L2,p2': 3, 'Rp2,p1': 3, 'L1,i_L': 4, 'L2,i_L': 5}
+    Port map: {'L1,p2': 1, 'L2,p1': 1, 'C1,p1': 1, 'Rp2,p2': 0, 'GND,p1': 0, 'C1,p2': 0, 'Rp1,p2': 0, 'L1,p1': 2, 'Rp1,p1': 2, 'Rp2,p1': 3, 'L2,p2': 3, 'L1,i_L': 4, 'L2,i_L': 5}
 
     Component groups: ['resistor', 'inductor', 'capacitor']
 

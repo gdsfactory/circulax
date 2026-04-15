@@ -64,7 +64,7 @@ pio.templates.default = "plotly_white"
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 16:19:25,983:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-15 17:32:47,520:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Van der Pol component
@@ -190,7 +190,7 @@ print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (
 
 
     System size : 3 unknowns
-    Node map    : {'C1,p1': 1, 'L1,p1': 1, 'VDP,p1': 1, 'Rdamp,p1': 1, 'C1,p2': 0, 'VDP,p2': 0, 'L1,p2': 0, 'GND,p1': 0, 'Rdamp,p2': 0, 'L1,i_L': 2}
+    Node map    : {'L1,p1': 1, 'C1,p1': 1, 'VDP,p1': 1, 'Rdamp,p1': 1, 'Rdamp,p2': 0, 'VDP,p2': 0, 'L1,p2': 0, 'GND,p1': 0, 'C1,p2': 0, 'L1,i_L': 2}
     Groups      : ['vdp', 'inductor', 'capacitor', 'resistor']
     Oscillator node index: 1
 

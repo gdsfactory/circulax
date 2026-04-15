@@ -24,7 +24,7 @@ from circulax.components.electronic import Resistor, VoltageSource
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 16:19:20,844:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-15 17:32:44,528:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -137,11 +137,11 @@ else:
        System Size: 6 variables
 
     2. Solving DC Operating Point...
-    Time take = 0.1890s
+
+
+    Time take = 0.2656s
 
     3. Verification:
-
-
        V_REF:    8.0 V
        Node 1:   4.0000 V  (Expected: 4.0000 V)
        Node 2:   2.0000 V  (Expected: 2.0000 V)
