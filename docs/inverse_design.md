@@ -19,15 +19,25 @@ With finite differences you re-run the simulation once per parameter. With back-
 ```python
 import jax
 import optax
+from circulax.utils import update_params_dict
+
+# compile once — the circuit topology is fixed
+circuit = compile_circuit(netlist, models)
+groups  = circuit.groups
 
 def loss_fn(params):
-    circuit = compile_circuit(netlist, models, params=params)
-    sol = simulate(circuit)
+    # update component values inside the compiled groups (no recompilation)
+    g = update_params_dict(groups, "capacitor", "C1", "C", params[0])
+    g = update_params_dict(g,      "inductor",  "L1", "L", params[1])
+    sol = simulate(g)
     return jnp.mean((sol - target) ** 2)
 
-grads = jax.grad(loss_fn)(params)          # exact gradients, one pass
 optimizer = optax.adam(1e-3)
-params = optax.apply_updates(params, optimizer.update(grads, opt_state))
+opt_state = optimizer.init(params)
+
+grads = jax.grad(loss_fn)(params)          # exact gradients, one pass
+updates, opt_state = optimizer.update(grads, opt_state)
+params = optax.apply_updates(params, updates)
 ```
 
 ## Examples
