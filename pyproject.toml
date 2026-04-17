@@ -190,9 +190,9 @@ bench_lc_ladder  = { cmd = ["python", "benchmarking/lc_ladder_testbench.py"],   
 default = { features = ["py313", "dev"], solve-group = "py313" }
 
 # CI matrix — minimal, no dev extras
-py311 = { features = ["py311", "test"], solve-group = "py311" }
-py312 = { features = ["py312", "test"], solve-group = "py312" }
-py313 = { features = ["py313", "test"], solve-group = "py313" }
+py311 = { features = ["py311", "dev"], solve-group = "py311" }
+py312 = { features = ["py312", "dev"], solve-group = "py312" }
+py313 = { features = ["py313", "dev"], solve-group = "py313" }
 
 # Benchmark environment — includes NGSpice for accuracy comparisons
 benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }
