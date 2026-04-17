@@ -98,11 +98,6 @@ def test_short_transient_runs_complex(simple_optical_netlist, backend):
 def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  # noqa: ANN001
     """FactorizedTransientSolver (frozen-Jacobian) should produce the same trajectory
     as VectorizedTransientSolver (full Newton) on a linear LRC circuit."""
-    from circulax.solvers.linear import split_solver_available
-
-    if not split_solver_available:
-        pytest.skip("requires klujax KLUHandleManager")
-
     from circulax.solvers.transient import FactorizedTransientSolver
 
     net_dict, models_map = simple_lrc_netlist
@@ -147,11 +142,6 @@ def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  #
 def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:  # noqa: ANN001
     """RefactoringTransientSolver (klu_refactor) should produce the same trajectory
     as VectorizedTransientSolver (full Newton) on a linear LRC circuit."""
-    from circulax.solvers.linear import split_refactor_available
-
-    if not split_refactor_available:
-        pytest.skip("requires klujax refactor interface")
-
     from circulax.solvers.transient import RefactoringTransientSolver
 
     net_dict, models_map = simple_lrc_netlist
@@ -259,11 +249,6 @@ def test_bdf2_vectorized_runs_complex(simple_optical_netlist, backend):
 
 def test_bdf2_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     """BDF2FactorizedTransientSolver should match BDF2VectorizedTransientSolver on a linear LRC circuit."""
-    from circulax.solvers.linear import split_solver_available
-
-    if not split_solver_available:
-        pytest.skip("requires klujax KLUHandleManager")
-
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
@@ -336,11 +321,6 @@ def test_sdirk3_vectorized_runs_float(simple_lrc_netlist, backend):
 
 def test_sdirk3_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     """SDIRK3FactorizedTransientSolver should match SDIRK3VectorizedTransientSolver on a linear LRC circuit."""
-    from circulax.solvers.linear import split_solver_available
-
-    if not split_solver_available:
-        pytest.skip("requires klujax KLUHandleManager")
-
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 

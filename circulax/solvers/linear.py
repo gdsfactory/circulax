@@ -31,23 +31,17 @@ DAMPING_FACTOR: float = 0.5
 DAMPING_EPS: float = 1e-9
 """Small additive epsilon that prevents division by zero in the damping formula."""
 
-# Check if split solver available — KLUHandleManager was added in a later version of klujax.
+# KLUHandleManager is available in klujax >= 5.0 (required).
 split_solver_available = True
-try:
-    from klujax import KLUHandleManager
+from klujax import KLUHandleManager
 
-    try:
-        import klujax_rs as klurs
-        from klujax_rs import KLUHandleManager as KLURSHandleManager
-    except ImportError:
-        # Silently falling back to klujax until package is ready
-        klurs = klujax
-        from klujax import KLUHandleManager as KLURSHandleManager
+try:
+    import klujax_rs as klurs
+    from klujax_rs import KLUHandleManager as KLURSHandleManager
 except ImportError:
-    split_solver_available = False
-    # Provide dummy sentinels so the eqx.field annotations below don't cause NameErrors
-    KLUHandleManager = object  # type: ignore[assignment,misc]
-    KLURSHandleManager = object  # type: ignore[assignment,misc]
+    # Silently falling back to klujax until package is ready
+    klurs = klujax
+    from klujax import KLUHandleManager as KLURSHandleManager
 
 split_refactor_available: bool = split_solver_available and hasattr(klujax, "refactor")
 split_rs_refactor_available: bool = split_solver_available and hasattr(klurs, "refactor")
@@ -995,34 +989,22 @@ class SparseSolver(CircuitLinearSolver):
 
 
 backends: dict[str, type[CircuitLinearSolver]] = {
-    "default": KLUSolver,
     "klu": KLUSolver,
     "dense": DenseSolver,
     "sparse": SparseSolver,
-}
-
-if split_solver_available:
-    backends["klu_split_linear"] = KLUSplitLinear
-    backends["klu_split"] = KLUSplitQuadratic if split_refactor_available else KLUSplitLinear
-    backends["klu_rs_split"] = KLURSplitQuadratic if split_rs_refactor_available else KlursSplitSolver
+    "klu_split_linear": KLUSplitLinear,
+    "klu_split": KLUSplitQuadratic if split_refactor_available else KLUSplitLinear,
+    "klu_rs_split": KLURSplitQuadratic if split_rs_refactor_available else KlursSplitSolver,
     # Legacy aliases
-    backends["klu_split_factor"] = KLUSplitLinear
-    backends["klu_split_refactor"] = KLUSplitQuadratic if split_refactor_available else KLUSplitLinear
+    "klu_split_factor": KLUSplitLinear,
+    "klu_split_refactor": KLUSplitQuadratic if split_refactor_available else KLUSplitLinear,
     # KLU-RS factor/refactor variants
-    backends["klu_rs_split_factor"] = KLURSplitLinear
-    backends["klu_rs_split_refactor"] = KLURSplitQuadratic if split_rs_refactor_available else KLURSplitLinear
-    # Default uses factor (BDF2FactorizedTransientSolver): wins for linear and mildly nonlinear
-    # circuits; use klu_split_refactor / klu_rs_split_refactor explicitly for strongly nonlinear.
-    backends["default"] = backends["klu_split_factor"]
-else:
-    # Silently fall back to KLUSolver when KLUHandleManager is not available
-    backends["klu_split"] = KLUSolver
-    backends["klu_split_linear"] = KLUSolver
-    backends["klu_split_factor"] = KLUSolver
-    backends["klu_split_refactor"] = KLUSolver
-    backends["klu_rs_split"] = KLUSolver
-    backends["klu_rs_split_factor"] = KLUSolver
-    backends["klu_rs_split_refactor"] = KLUSolver
+    "klu_rs_split_factor": KLURSplitLinear,
+    "klu_rs_split_refactor": KLURSplitQuadratic if split_rs_refactor_available else KLURSplitLinear,
+}
+# Default uses klu_split (split symbolic/numeric): wins for linear and mildly nonlinear
+# circuits; use klu_split_refactor / klu_rs_split_refactor explicitly for strongly nonlinear.
+backends["default"] = backends["klu_split_factor"]
 
 
 def analyze_circuit(
@@ -1030,16 +1012,8 @@ def analyze_circuit(
 ) -> CircuitLinearSolver:
     """Initializes a linear solver strategy for circuit analysis.
 
-    This function serves as a factory and wrapper to select and configure the
-    appropriate numerical backend for solving the linear system of equations
-    derived from a circuit's topology.
-
-    The available backends are
-
-    "default": KLUSolver,
-    "klu": KLUSolver,
-    "dense": DenseSolver,
-    "sparse": SparseSolver,
+    Factory that selects and configures the numerical backend for solving the
+    linear system derived from a circuit's topology.
 
     Args:
         groups (list): A list of component groups that define the circuit's
@@ -1047,7 +1021,7 @@ def analyze_circuit(
         num_vars (int): The total number of variables in the linear system.
         backend (str, optional): The name of the solver backend to use.
             Supported backends are 'klu', 'klu_split', 'dense', and 'sparse'.
-            Defaults to 'default', which uses the 'klu' solver.
+            Defaults to 'default', which uses 'klu_split'.
         is_complex (bool, optional): A flag indicating whether the circuit
             analysis involves complex numbers. Defaults to False.
 

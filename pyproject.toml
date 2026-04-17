@@ -27,7 +27,7 @@ dependencies = [
     "matplotlib",
     "typing-extensions>=4.13.2",
     "lineax",
-    "klujax>=0.4.8"
+    "klujax>=0.5.0"
 , "kaleido>=1.2.0,<2"]
 
 [project.optional-dependencies]

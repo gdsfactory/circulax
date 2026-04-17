@@ -4,20 +4,20 @@ Circulax separates the **linear algebra backend** from the simulation algorithm.
 The backend is selected when calling `compile_circuit`:
 
 ```python
-circuit = compile_circuit(net_dict, models_map, backend="klu")
+circuit = compile_circuit(net_dict, models_map, backend="klu_split")
 ```
 
 Four backends are available. All expose the same interface — you can swap them without changing the rest of your simulation code.
 
 ---
 
-## KLU *(default)*
+## KLU Split *(default)*
 
 ```python
-circuit = compile_circuit(net_dict, models_map, backend="klu")
+circuit = compile_circuit(net_dict, models_map, backend="klu_split")
 ```
 
-The same sparse direct solver (AMD ordering + LU) used in SPICE, Spectre, and HSPICE.
+Separates symbolic analysis (sparsity pattern, done once) from numeric factorisation (done each Newton step). Same AMD-ordered sparse LU as SPICE/Spectre/HSPICE, but avoids repeating the symbolic phase, giving a speedup when Newton needs many iterations.
 
 **When to use:** Any circuit on CPU. The right default for almost all simulations.
 
@@ -25,20 +25,17 @@ The same sparse direct solver (AMD ordering + LU) used in SPICE, Spectre, and HS
 
 ---
 
-## KLU Split *(experimental)*
+## KLU
 
 ```python
-backend="klu_split"
+backend="klu"
 ```
 
-Separates symbolic analysis (sparsity pattern, done once) from numeric factorisation (done each Newton step). Avoids repeating the symbolic phase, giving a speedup when Newton needs many iterations.
+Non-split KLU: performs symbolic + numeric factorisation together on every Newton step. Slightly simpler code path but slower than `klu_split` for circuits requiring many Newton iterations.
 
-!!! warning "Experimental"
-    Requires a custom `klujax` build exposing the split symbolic/numeric API (available in main branch). Falls back silently to `klu` if not present.
+**When to use:** Fallback if `klu_split` causes issues. Functionally identical results.
 
-**When to use:** Same cases as `klu`, but with many Newton iterations per timestep (strongly nonlinear devices).
-
-**Trade-offs:** Same as `klu`. Requires the extended `klujax` build.
+**Trade-offs:** Same as `klu_split`, but repeats symbolic analysis unnecessarily.
 
 ---
 
@@ -58,7 +55,7 @@ Assembles the full $N \times N$ Jacobian as a dense array and solves with JAX's 
 
 **Trade-offs:**
 
-Memory scales as $O(N^2)$ and runtime as $O(N^3)$, so it becomes impractical quickly. For any real circuit, `klu` will outperform `dense`.
+Memory scales as $O(N^2)$ and runtime as $O(N^3)$, so it becomes impractical quickly. For any real circuit, `klu_split` will outperform `dense`.
 
 ---
 
@@ -80,9 +77,9 @@ Iterative BiCGStab in pure JAX. Sparsity pattern is pre-computed at setup; only 
 
 | Backend | Best for | GPU | Requires |
 |---------|----------|-----|---------|
-| `klu` | All circuits on CPU — **default** | No | `klujax` |
-| `klu_split` | CPU, many Newton steps per timestep | No | custom `klujax` build |
+| `klu_split` | All circuits on CPU — **default** | No | `klujax >= 0.5.0` |
+| `klu` | Fallback (non-split) | No | `klujax` |
 | `dense` | $N \lesssim 50$, GPU, HB frequency sweeps | Yes | — |
 | `sparse` | Large $N$, GPU/TPU transient | Yes | — |
 
-Start with `klu`.
+Start with `klu_split` (the default).
