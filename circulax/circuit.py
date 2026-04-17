@@ -144,7 +144,7 @@ def compile_circuit(
             subclasses.
         backend: Linear solver backend. One of ``"default"``, ``"dense"``,
             ``"sparse"``, ``"klu"``, ``"klu_split"``. Defaults to
-            ``"default"`` (KLU when available).
+            ``"default"`` (``klu_split``).
         is_complex: If ``True``, treat the circuit as complex-valued (photonic).
             The solution vector will have length ``2 * sys_size``.
         g_leak: Leakage conductance for regularisation. Defaults to ``1e-9``.

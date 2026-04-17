@@ -66,9 +66,7 @@ def _compute_history(component_groups, y_c, t, num_vars) -> ArrayLike:
     return total_q
 
 
-# ==============================================================================
-# VECTORIZED TRANSIENT SOLVER
-# ==============================================================================
+# --- Transient Solvers ---
 
 
 class VectorizedTransientSolver(AbstractSolver):
@@ -95,58 +93,32 @@ class VectorizedTransientSolver(AbstractSolver):
         dt = t1 - t0
         y_prev_step, dt_prev = solver_state
 
-        # 0. Check Mode from Linear Solver Strategy
-        #    (We trust the strategy knows if it's 2N or N size)
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        # 1. Predictor (1st order extrapolation on Flat Vector)
         rate = (y0 - y_prev_step) / (dt_prev + 1e-30)
         y_pred = y0 + rate * dt
 
-        # 2. Compute History
-        #    _compute_history expects a Complex vector if physics is complex.
-        #    We reconstruct it temporarily here.
         y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
-
         q_prev = _compute_history(component_groups, y_c, t0, num_vars)
-
-        # Assemble Jacobian at y_pred for solver setup (e.g. factorization)
-        # if is_complex:
-        #     _, _, init_vals = assemble_system_complex(y_pred, component_groups, t1, dt)
-        # else:
-        #     _, _, init_vals = assemble_system_real(y_pred, component_groups, t1, dt)
-
-        # solver_callable = self.linear_solver.get_transient_callable(init_vals)
-
-        # 3. Define One Newton Step
 
         def newton_update_step(y, _) -> float:
             if is_complex:
                 total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, dt)
-                ground_indices = [0, num_vars]  # Real and Imag ground nodes
+                ground_indices = [0, num_vars]
             else:
                 total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, dt)
                 ground_indices = [0]
 
-            # B. Transient Residual: I + dQ/dt
             residual = total_f + (total_q - q_prev) / dt
-
-            # C. Apply Ground Constraints (RHS)
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
-            # D. Solve Linear System
-            #    Strategy handles the flat 2N system automatically
             sol = self.linear_solver._solve_impl(all_vals, -residual)  # noqa: SLF001
             delta = sol.value
-
-            # E. Damping
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-
             return y + delta * damping
 
-        # 4. Run Newton Loop (On Flat Vectors)
         solver = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, solver, y_pred, max_steps=20, throw=False)
 
@@ -200,16 +172,12 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
 
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        # 1. Predictor
         rate = (y0 - y_prev_step) / (dt_prev + 1e-30)
         y_pred = y0 + rate * dt
 
-        # 2. Compute History
         y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
-
         q_prev = _compute_history(component_groups, y_c, t0, num_vars)
 
-        # 3. Assemble and Factor ONCE at the predicted state
         if is_complex:
             _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, dt)
             ground_indices = [0, num_vars]
@@ -219,7 +187,6 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
 
         numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
 
-        # 4. Newton iterations reusing the frozen Jacobian
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
             if is_complex:
                 total_f, total_q = assemble_residual_only_complex(y, component_groups, t1, dt)
@@ -227,19 +194,15 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
                 total_f, total_q = assemble_residual_only_real(y, component_groups, t1, dt)
 
             residual = total_f + (total_q - q_prev) / dt
-
             for idx in ground_indices:
                 residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
 
             sol = self.linear_solver.solve_with_frozen_jacobian(-residual, numeric_handle)
             delta = sol.value
-
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-
             return y + delta * damping
 
-        # 5. Run Newton Loop
         solver = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(
             newton_update_step,
@@ -249,7 +212,6 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
             throw=False,
         )
 
-        # 6. Free the numeric handle to prevent C++ memory leaks
         free_numeric(numeric_handle)
 
         y_next = sol.value
@@ -292,15 +254,12 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
 
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        # 1. Predictor
         rate = (y0 - y_prev_step) / (dt_prev + 1e-30)
         y_pred = y0 + rate * dt
 
-        # 2. Compute History
         y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
         q_prev = _compute_history(component_groups, y_c, t0, num_vars)
 
-        # 3. Factor ONCE at predicted state (allocates and initialises the numeric handle)
         if is_complex:
             _, _, init_vals = assemble_system_complex(y_pred, component_groups, t1, dt)
             ground_indices = [0, num_vars]
@@ -310,7 +269,6 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
 
         numeric_handle = self.linear_solver.factor_jacobian(init_vals)
 
-        # 4. Newton loop: refactor J(y_k) in-place each iteration, then solve
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
             if is_complex:
                 total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, dt)
@@ -327,13 +285,10 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
                 refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
                 sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
             delta = sol.value
-
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-
             return y + delta * damping
 
-        # 5. Run Newton loop
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(
             newton_update_step,
@@ -343,7 +298,6 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             throw=False,
         )
 
-        # 6. Free the numeric handle to prevent C++ memory leaks
         free_numeric(numeric_handle)
 
         y_next = sol.value

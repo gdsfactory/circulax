@@ -21,12 +21,13 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from circulax.compiler import compile_netlist
+from circulax import compile_circuit
 from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
-from circulax.solvers import analyze_circuit, setup_transient
+from circulax.solvers import setup_transient
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-17 17:32:56,782:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -50,7 +51,7 @@ net_dict = {
 
 
 
-![svg](LCR_files/LCR_3_0.svg)
+![svg](lcr_transient_files/lcr_transient_3_0.svg)
 
 
 
@@ -65,7 +66,7 @@ draw_circuit_graph(netlist=net_dict);
 
 
 
-![png](LCR_files/LCR_5_0.png)
+![png](lcr_transient_files/lcr_transient_5_0.png)
 
 
 
@@ -83,12 +84,12 @@ models_map = {
 }
 
 print("Compiling...")
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
+circuit = compile_circuit(net_dict, models_map)
 
-print(port_map)
+print(circuit.port_map)
 
-print(f"Total System Size: {sys_size}")
-for g_name, g in groups.items():
+print(f"Total System Size: {circuit.sys_size}")
+for g_name, g in circuit.groups.items():
     print(f"Group: {g_name}")
     print(f"  Count: {g.var_indices.shape[0]}")
     print(f"  Var Indices Shape: {g.var_indices.shape}")
@@ -96,14 +97,9 @@ for g_name, g in groups.items():
     print(f"  Jacobian Rows Length: {len(g.jac_rows)}")
 
 print("2. Solving DC Operating Point...")
-linear_strat = analyze_circuit(groups, sys_size, is_complex=False)
+y_op = circuit()
 
-y_guess = jnp.zeros(sys_size)
-y_op = linear_strat.solve_dc(groups, y_guess)
-
-transient_sim = setup_transient(groups=groups, linear_strategy=linear_strat)
-term = diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y))
-
+transient_sim = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
 
 t_max = 3e-9
 saveat = diffrax.SaveAt(ts=jnp.linspace(0, t_max, 500))
@@ -119,35 +115,49 @@ sol = transient_sim(
 )
 
 ts = sol.ts
-v_src = sol.ys[:, port_map["V1,p1"]]
-v_cap = sol.ys[:, port_map["C1,p1"]]
+v_src = circuit.get_port_field(sol.ys, "V1,p1")
+v_cap = circuit.get_port_field(sol.ys, "C1,p1")
 i_ind = sol.ys[:, 5]
 
-print("4. Plotting...")
-fig, ax1 = plt.subplots(figsize=(8, 5))
-ax1.plot(ts, v_src, "g--", linewidth=2.5, label="Source V")
-ax1.plot(ts, v_cap, "b-", linewidth=2.5, label="Capacitor V")
-ax1.set_xlabel("Time (s)")
-ax1.set_ylabel("Voltage (V)")
-ax1.legend(loc="upper left")
+plt.rcParams.update({
+    "figure.figsize": (9, 4),
+    "axes.grid": True,
+    "text.color": "grey",
+    "axes.facecolor": "white",
+    "axes.edgecolor": "grey",
+    "axes.labelcolor": "grey",
+    "xtick.color": "grey",
+    "ytick.color": "grey",
+    "grid.color": "#e0e0e0",
+    "figure.facecolor": "white",
+    "font.family": "sans-serif",
+})
 
+ts_ns = ts * 1e9  # convert to nanoseconds
+
+fig, ax1 = plt.subplots(figsize=(9, 4))
 ax2 = ax1.twinx()
-ax2.plot(ts, i_ind, "r:", label="Inductor I")
-ax2.set_ylabel("Current (A)")
-ax2.legend(loc="upper right")
-
-ax2_ticks = ax2.get_yticks()
-ax1_ticks = ax1.get_yticks()
-ax2.set_yticks(jnp.linspace(ax2_ticks[0], ax2_ticks[-1], len(ax1_ticks)))
-ax1.set_yticks(jnp.linspace(ax1_ticks[0], ax1_ticks[-1], len(ax1_ticks)))
-
-plt.title("Impulse Response of LCR circuit")
-plt.grid(True)
+ln1 = ax1.plot(ts_ns, v_src, color="#2ca02c", linewidth=2, linestyle="--", label="Source V")
+ln2 = ax1.plot(ts_ns, v_cap, color="#1f77b4", linewidth=2.5, label="Capacitor V")
+ln3 = ax2.plot(ts_ns, i_ind, color="#d62728", linewidth=2, linestyle=":", label="Inductor I")
+ax1.set_xlabel("Time (ns)")
+ax1.set_ylabel("Voltage (V)", color="#1f77b4")
+ax2.set_ylabel("Current (A)", color="#d62728")
+ax1.tick_params(axis="y", labelcolor="#1f77b4")
+ax2.tick_params(axis="y", labelcolor="#d62728")
+lines = ln1 + ln2 + ln3
+ax1.legend(lines, [l.get_label() for l in lines], loc="upper right", fontsize=9,
+           framealpha=0.9, edgecolor="grey")
+ax1.set_title("LCR Impulse Response — underdamped ringing at ~1 GHz", color="grey", pad=10)
+fig.tight_layout()
 plt.show()
+
 ```
 
     Compiling...
-    {'C1,p1': 1, 'L1,p2': 1, 'GND,p1': 0, 'V1,p2': 0, 'C1,p2': 0, 'R1,p2': 2, 'L1,p1': 2, 'V1,p1': 3, 'R1,p1': 3, 'V1,i_src': 4, 'L1,i_L': 5}
+
+
+    {'L1,p2': 1, 'C1,p1': 1, 'GND,p1': 0, 'V1,p2': 0, 'C1,p2': 0, 'L1,p1': 2, 'R1,p2': 2, 'V1,p1': 3, 'R1,p1': 3, 'V1,i_src': 4, 'L1,i_L': 5}
     Total System Size: 6
     Group: source_voltage
       Count: 1
@@ -175,12 +185,9 @@ plt.show()
     3. Running Simulation...
 
 
-    4. Plotting...
 
 
-
-
-![png](LCR_files/LCR_6_3.png)
+![png](lcr_transient_files/lcr_transient_6_3.png)
 
 
 

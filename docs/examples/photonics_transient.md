@@ -17,15 +17,15 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from circulax.compiler import compile_netlist
+from circulax import compile_circuit
 from circulax.components.base_component import PhysicsReturn, Signals, States, component
 from circulax.components.electronic import Resistor
 from circulax.components.photonic import OpticalSourcePulse
-from circulax.solvers import analyze_circuit, setup_transient
-
+from circulax.solvers import setup_transient
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-17 17:32:40,679:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -55,18 +55,14 @@ net_dict = {
 }
 
 print("1. Compiling...")
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-
-linear_strat = analyze_circuit(groups, sys_size, is_complex=True)
+circuit = compile_circuit(net_dict, models_map, is_complex=True)
 
 print("2. Solving DC Operating Point...")
-
-y_guess_flat = jnp.zeros(sys_size * 2, dtype=jnp.float64)
-y_op_flat = linear_strat.solve_dc(groups, y_guess_flat)
+y_op_flat = circuit()
 
 print(f"   DC Converged. Norm: {jnp.linalg.norm(y_op_flat):.2e}")
 
-transient_sim = setup_transient(groups=groups, linear_strategy=linear_strat)
+transient_sim = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
 
 t_max = 1.0e-9
 saveat = diffrax.SaveAt(ts=jnp.linspace(0, t_max, 500))
@@ -77,7 +73,7 @@ sol = transient_sim(
     t1=t_max,
     dt0=1e-13,
     y0=y_op_flat,
-    args=(groups, sys_size),
+    args=(circuit.groups, circuit.sys_size),
     saveat=saveat,
     max_steps=100000,
     throw=False,
@@ -89,14 +85,8 @@ if sol.result == diffrax.RESULTS.successful:
 
     ts = sol.ts * 1e9
 
-    ys_flat = sol.ys
-    ys_complex = ys_flat[:, :sys_size] + 1j * ys_flat[:, sys_size:]
-
-    node_in_idx = port_map["I1,p1"]
-    node_out_idx = port_map["R1,p1"]
-
-    v_in = ys_complex[:, node_in_idx]
-    v_out = ys_complex[:, node_out_idx]
+    v_in = circuit.get_port_field(sol.ys, "I1,p1")
+    v_out = circuit.get_port_field(sol.ys, "R1,p1")
 
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 6))
     axes = axes.ravel()
@@ -126,6 +116,8 @@ else:
 
     --- DEMO: Photonic Transient (Flat Vector Fix) ---
     1. Compiling...
+
+
     2. Solving DC Operating Point...
 
 
@@ -138,4 +130,4 @@ else:
 
 
 
-![png](photonics_transient_files/photonics_transient_4_3.png)
+![png](photonics_transient_files/photonics_transient_4_4.png)

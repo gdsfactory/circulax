@@ -10,4 +10,8 @@ circulax_workspace.code-workspace
 docs/references/
 *code-workspace
 site/*
+docs/examples/*_files
+docs/images/lcr_animation.gif
+docs/examples/*.gif
+examples/**/*.gif
 circulax/_version.py

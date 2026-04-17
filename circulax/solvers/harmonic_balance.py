@@ -116,7 +116,6 @@ def _hb_residual(
                 contrib = jnp.zeros(sys_size, dtype=jnp.complex128)
                 return contrib.at[group.eq_indices].add(i_ports)
 
-            # Evaluate over all harmonics simultaneously.
             fdomain_R_k = jax.vmap(_fdomain_contrib)(y_freq, freqs)  # (N_harm+1, sys_size)
             R_k = R_k + fdomain_R_k
 
@@ -138,35 +137,27 @@ def setup_harmonic_balance(
     *,
     is_complex: bool = False,
     g_leak: float = 1e-9,
+    osc_node: int | None = None,
+    amplitude_tries: Array | None = None,
 ) -> Callable[[Array], tuple[Array, Array]]:
-    """Configure and return a callable for Harmonic Balance analysis.
-
-    This is the primary entry point for HB analysis, mirroring the pattern of
-    :func:`~circulax.solvers.setup_transient`: circuit-specific data (groups,
-    frequency, number of harmonics) are captured at setup time; the returned
-    callable takes only the DC operating point and solver options.
+    """Configure and return a Harmonic Balance callable.
 
     Args:
-        groups: Compiled component groups returned by
-            :func:`~circulax.compiler.compile_netlist`.
-        num_vars: Total number of state variables (second return value of
-            :func:`~circulax.compiler.compile_netlist`).
-        freq: Fundamental frequency in Hz of the periodic drive.
-        num_harmonics: Number of harmonics to include. The solver uses
-            K = 2*num_harmonics + 1 time points. More harmonics improve
-            accuracy for strongly nonlinear circuits at the cost of a larger
-            Jacobian (K*sys_size x K*sys_size).
-        is_complex: Set ``True`` for photonic (complex-valued) circuits.
-            The state vector is stored in unrolled ``[re | im]`` block format
-            of length ``2 * num_vars``.
-        g_leak: Small leakage conductance added to the Jacobian diagonal for
-            regularisation. Prevents singular matrices when floating nodes
-            have no DC path to ground.
+        groups: Compiled component groups from :func:`~circulax.compiler.compile_netlist`.
+        num_vars: Total number of state variables.
+        freq: Fundamental frequency in Hz.
+        num_harmonics: Number of harmonics; uses K = 2*N+1 time points.
+        is_complex: ``True`` for photonic circuits (unrolled ``[re | im]`` state).
+        g_leak: Diagonal regularisation to prevent singular Jacobians at floating nodes.
+        osc_node: State-vector index of the oscillator node (from ``net_map``).
+            Enables automatic multi-start across ``amplitude_tries``. No effect
+            if ``y_flat_init`` is supplied.
+        amplitude_tries: Amplitudes (V) to try when ``osc_node`` is set.
+            Defaults to ``[0.3, 0.7, 1.5, 3.0, 7.0, 20.0]``.
 
     Returns:
-        A callable ``run_hb(y_dc, *, max_iter=50, tol=1e-6) -> (y_time, y_freq)``
-        that finds the periodic steady state starting from the DC operating
-        point ``y_dc``. Compatible with ``jax.jit``.
+        ``run_hb(y_dc, *, y_flat_init=None, max_iter=50, tol=1e-6) -> (y_time, y_freq)``,
+        compatible with ``jax.jit``.
 
     """
     _, _, ground_idxs, sys_size = _build_index_arrays(groups, num_vars, is_complex=is_complex)
@@ -176,9 +167,17 @@ def setup_harmonic_balance(
     omega = 2.0 * jnp.pi * freq
     t_points = jnp.linspace(0.0, 1.0 / freq, K, endpoint=False)
 
+    _amplitude_tries: Array = (
+        amplitude_tries
+        if amplitude_tries is not None
+        else jnp.array([0.3, 0.7, 1.5, 3.0, 7.0, 20.0], dtype=jnp.float64)
+    )
+    _phase = 2.0 * jnp.pi * jnp.arange(K, dtype=jnp.float64) / K  # (K,)
+
     def run_hb(
         y_dc: Array,
         *,
+        y_flat_init: Array | None = None,
         max_iter: int = 50,
         tol: float = 1e-6,
     ) -> tuple[Array, Array]:
@@ -188,6 +187,9 @@ def setup_harmonic_balance(
             y_dc: DC operating point, shape ``(sys_size,)``. Used as the
                 initial guess (zero AC amplitude). Obtain from
                 :meth:`~circulax.solvers.CircuitLinearSolver.solve_dc`.
+            y_flat_init: Optional flat initial waveform, shape ``(K * sys_size,)``.
+                Overrides the automatic multi-start strategy even when
+                ``osc_node`` was set at setup time.
             max_iter: Maximum number of Newton iterations.
             tol: Convergence tolerance on the infinity norm of the residual.
 
@@ -202,16 +204,15 @@ def setup_harmonic_balance(
               Two-sided amplitude at harmonic k>=1 is ``2 * |y_freq[k]|``.
 
         """
-        # Initial guess: DC solution repeated at every time point (zero AC).
-        y_flat = jnp.tile(y_dc, K)  # shape (K * sys_size,)
 
-        def residual_fn(y_flat: Array) -> Array:
-            y_time = y_flat.reshape(K, sys_size)
-            return _hb_residual(y_time, groups, t_points, omega, ground_indices, is_complex=is_complex).flatten()
+        def newton_step(y_flat: Array, grps: Any) -> Array:
+            def _res(y: Array) -> Array:
+                return _hb_residual(
+                    y.reshape(K, sys_size), grps, t_points, omega, ground_indices, is_complex=is_complex
+                ).flatten()
 
-        def newton_step(y_flat: Array, _: Any) -> Array:
-            r = residual_fn(y_flat)
-            J = jax.jacobian(residual_fn)(y_flat)
+            r = _res(y_flat)
+            J = jax.jacobian(_res)(y_flat)
             # Regularise: prevents singular Jacobian when floating nodes have
             # no DC path to ground (mirrors the DC solver's g_leak).
             J = J + g_leak * jnp.eye(J.shape[0], dtype=J.dtype)
@@ -222,15 +223,34 @@ def setup_harmonic_balance(
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
             return y_flat + delta * damping
 
-        # optx.FixedPointIteration uses jax.lax.while_loop internally —
-        # this makes run_hb compatible with jax.jit.
-        hb_solver = optx.FixedPointIteration(rtol=tol, atol=tol)
-        sol = optx.fixed_point(newton_step, hb_solver, y_flat, max_steps=max_iter, throw=False)
-        y_flat = sol.value
+        def _solve(y_flat: Array) -> tuple[Array, Array]:
+            # groups MUST be passed via args= — ImplicitAdjoint differentiates
+            # only through explicit args; closure-captured variables give zero gradients.
+            hb_solver = optx.FixedPointIteration(rtol=tol, atol=tol)
+            sol = optx.fixed_point(
+                newton_step, hb_solver, y_flat, args=groups,
+                max_steps=max_iter, throw=False,
+            )
+            y_flat_sol = sol.value
+            y_time_sol = y_flat_sol.reshape(K, sys_size)
+            # Normalise by K so that y_freq[k] is the true complex amplitude.
+            y_freq_sol = jnp.fft.rfft(y_time_sol, axis=0) / K
+            return y_time_sol, y_freq_sol
 
-        y_time = y_flat.reshape(K, sys_size)
-        # Normalise by K so that y_freq[k] is the true complex amplitude.
-        y_freq = jnp.fft.rfft(y_time, axis=0) / K
-        return y_time, y_freq
+        # Autonomous multi-start: y=0 is always a trivial fixed point for oscillators,
+        # so low-amplitude starts converge to zero. Try several amplitudes and keep
+        # the one with the largest fundamental — at least one will be above the basin.
+        if osc_node is not None and y_flat_init is None:
+            def _single_start(A: Array) -> tuple[Array, Array]:
+                y0 = (jnp.zeros(K * sys_size, dtype=jnp.float64)
+                      .at[jnp.arange(K) * sys_size + osc_node].set(A * jnp.sin(_phase)))
+                return _solve(y0)
+
+            y_times, y_freqs = jax.vmap(_single_start)(_amplitude_tries)
+            best = jnp.argmax(jnp.abs(y_freqs[:, 1, osc_node]))
+            return jnp.take(y_times, best, axis=0), jnp.take(y_freqs, best, axis=0)
+
+        y_flat = y_flat_init if y_flat_init is not None else jnp.tile(y_dc, K)
+        return _solve(y_flat)
 
     return run_hb

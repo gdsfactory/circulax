@@ -16,16 +16,15 @@ The Analytical Benchmark: Due to the recursive nature of the equivalent resistan
 import time
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from circulax.compiler import compile_netlist
+from circulax import compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource
-from circulax.solvers import analyze_circuit
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-17 17:32:59,543:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -68,27 +67,21 @@ models_map = {
     "ground": lambda: 0,
 }
 
-
 print("1. Compiling Circuit...")
-groups, num_vars, port_map = compile_netlist(net_dict, models_map)
-print(f"   System Size: {num_vars} variables")
-
-linear_strategy = analyze_circuit(groups, num_vars)
+circuit = compile_circuit(net_dict, models_map)
+print(f"   System Size: {circuit.sys_size} variables")
 
 print("\n2. Solving DC Operating Point...")
 
-y_guess = jnp.zeros(num_vars)
-
 start = time.time()
-y_dc = linear_strategy.solve_dc(component_groups=groups, y_guess=y_guess)
+y_dc = circuit()
 print(f"Time take = {time.time() - start:.4f}s")
 
 print("\n3. Verification:")
 
 
 def get_v(name):
-    idx = port_map[name]
-    return float(y_dc[idx])
+    return float(circuit.get_port_field(y_dc, name))
 
 
 v_n1 = get_v("R_S1,p2")
@@ -112,9 +105,7 @@ x = np.arange(len(nodes))
 width = 0.35
 
 plt.bar(x - width / 2, expected, width, label="Theoretical", color="gray", alpha=0.5)
-plt.bar(
-    x + width / 2, voltages, width, label="Solver Output", color="tab:blue", alpha=0.8
-)
+plt.bar(x + width / 2, voltages, width, label="Solver Output", color="tab:blue", alpha=0.8)
 
 plt.ylabel("Voltage (V)")
 plt.title("DC Solver Accuracy Test (R-2R Ladder)")
@@ -148,7 +139,7 @@ else:
     2. Solving DC Operating Point...
 
 
-    Time take = 0.2000s
+    Time take = 0.2672s
 
     3. Verification:
        V_REF:    8.0 V
@@ -166,3 +157,9 @@ else:
 
 
     ✅ DC Solver PASSED
+
+
+
+```python
+
+```

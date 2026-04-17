@@ -156,7 +156,6 @@ def _circuit_loop(
     # ------------------------------------------------------------------
 
     def body_fun(state: CircuitState) -> CircuitState:
-        # 1. Take a numerical step
         # made_jump is always False for circuits (no discontinuities in input)
         (y, y_error, dense_info, solver_state, solver_result) = solver.step(
             terms,
@@ -168,11 +167,9 @@ def _circuit_loop(
             False,  # made_jump – static, never traced
         )
 
-        # Guard against NaN errors producing inf so the step-size controller
-        # can handle them gracefully (avoids cascading NaNs).
+        # NaN → inf so the step-size controller can reject gracefully without cascading NaNs.
         y_error = jtu.tree_map(lambda x: jnp.where(jnp.isnan(x), jnp.inf, x), y_error)
 
-        # 2. Adapt step size
         error_order = solver.error_order(terms)
         (
             keep_step,
@@ -192,27 +189,21 @@ def _circuit_loop(
             state.controller_state,
         )
 
-        # 3. Clip tnext to t1
         tprev = jnp.minimum(tprev, t1)
         tnext = _clip_to_end(tprev, tnext, t1, t1_clip_floor, keep_step)
 
-        # 4. Accept / reject
         keep = lambda a, b: jnp.where(keep_step, a, b)
         y = jtu.tree_map(keep, y, state.y)
         solver_state = jtu.tree_map(keep, solver_state, state.solver_state)
         solver_result = RESULTS.where(keep_step, solver_result, RESULTS.successful)
 
-        # 5. Accumulate result (first error wins)
         result = RESULTS.where(is_okay(state.result), solver_result, state.result)
         result = RESULTS.where(is_okay(result), stepsize_controller_result, result)
 
-        # 6. Step counters
         num_steps = state.num_steps + 1
         num_accepted_steps = state.num_accepted_steps + jnp.where(keep_step, 1, 0)
         num_rejected_steps = state.num_rejected_steps + jnp.where(keep_step, 0, 1)
 
-        # 7. Save outputs at requested ts
-        #    Build an interpolator for this step (needed when SaveAt(ts=...) is used).
         interpolator = solver.interpolation_cls(t0=state.tprev, t1=state.tnext, **dense_info)
 
         save_state = state.save_state
