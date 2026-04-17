@@ -201,31 +201,49 @@ def _generate_lcr_animation() -> None:
     v_cap = circuit.get_port_field(sol.ys, "C1,p1")
     i_ind = sol.ys[:, 5]
 
+    plt.rcParams.update({
+        "figure.figsize": (9, 4),
+        "axes.grid": True,
+        "text.color": "grey",
+        "axes.facecolor": "white",
+        "axes.edgecolor": "grey",
+        "axes.labelcolor": "grey",
+        "xtick.color": "grey",
+        "ytick.color": "grey",
+        "grid.color": "#e0e0e0",
+        "figure.facecolor": "white",
+        "font.family": "sans-serif",
+    })
+
+    ts_ns = ts * 1e9  # convert to nanoseconds for readability
+
     fig, ax1 = plt.subplots(figsize=(9, 4))
     ax2 = ax1.twinx()
-    (ln1,) = ax1.plot([], [], "b-",  linewidth=2.5, label="Capacitor V")
-    (ln2,) = ax1.plot([], [], "g--", linewidth=2,   label="Source V")
-    (ln3,) = ax2.plot([], [], "r:",  linewidth=2,   label="Inductor I")
-    ax1.set_xlim(0, float(t_max))
+    (ln1,) = ax1.plot([], [], color="#1f77b4", linewidth=2.5, label="Capacitor V")
+    (ln2,) = ax1.plot([], [], color="#2ca02c", linewidth=2, linestyle="--", label="Source V")
+    (ln3,) = ax2.plot([], [], color="#d62728", linewidth=2, linestyle=":", label="Inductor I")
+    ax1.set_xlim(0, float(ts_ns[-1]))
     ax1.set_ylim(float(v_cap.min()) - 0.1, float(v_cap.max()) + 0.2)
     ax2.set_ylim(float(i_ind.min()) - 0.005, float(i_ind.max()) + 0.005)
-    ax1.set_xlabel("Time (s)")
-    ax1.set_ylabel("Voltage (V)")
-    ax2.set_ylabel("Current (A)")
-    ax1.legend(loc="upper left")
-    ax2.legend(loc="upper right")
-    ax1.set_title("LCR Impulse Response — underdamped ringing at ~1 GHz")
-    ax1.grid(True)
+    ax1.set_xlabel("Time (ns)")
+    ax1.set_ylabel("Voltage (V)", color="#1f77b4")
+    ax2.set_ylabel("Current (A)", color="#d62728")
+    ax1.tick_params(axis="y", labelcolor="#1f77b4")
+    ax2.tick_params(axis="y", labelcolor="#d62728")
+    lines = [ln1, ln2, ln3]
+    ax1.legend(lines, [l.get_label() for l in lines], loc="upper right", fontsize=9,
+               framealpha=0.9, edgecolor="grey")
+    ax1.set_title("LCR Impulse Response — underdamped ringing at ~1 GHz", color="grey", pad=10)
     fig.tight_layout()
 
     def _frame(i: int):
         n = max(2, i * 5)
         for ln, y in [(ln1, v_cap), (ln2, v_src), (ln3, i_ind)]:
-            ln.set_data(ts[:n], y[:n])
+            ln.set_data(ts_ns[:n], y[:n])
         return ln1, ln2, ln3
 
-    ani = animation.FuncAnimation(fig, _frame, frames=100, interval=40, blit=True)
-    ani.save(str(out_path), writer="pillow", fps=25)
+    ani = animation.FuncAnimation(fig, _frame, frames=100, interval=20, blit=True)
+    ani.save(str(out_path), writer="pillow", fps=50)
     plt.close(fig)
 
 

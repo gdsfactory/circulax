@@ -12,4 +12,6 @@ docs/references/
 site/*
 docs/examples/*_files
 docs/images/lcr_animation.gif
+docs/examples/*.gif
+examples/**/*.gif
 circulax/_version.py
