@@ -35,6 +35,7 @@ test = [
     "papermill",
     "ipykernel>=6.29.5",   # required by papermill to execute notebooks
     "schemdraw",
+    "jupyter-dash",        # pulls plotly + dash; used by inverse_design notebooks
 ]
 docs = [
     "ipykernel>=6.29.5",
