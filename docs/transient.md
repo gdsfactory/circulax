@@ -54,13 +54,11 @@ sol = transient_sim(
 )
 ```
 
-This is simple and JIT-compiles efficiently, but requires you to choose a `dt0` that is small enough for accuracy across the whole simulation.
+Simple and JIT-compiles efficiently, but requires a `dt0` small enough for accuracy across the whole simulation.
 
 ### Adaptive step size with PIDController
 
-For circuits with widely varying timescales — fast switching events followed by slow settling — an adaptive step size controller dramatically reduces the number of steps while maintaining accuracy.
-
-Pass a `diffrax.PIDController` as the `stepsize_controller` argument:
+For circuits with widely varying timescales (fast switching followed by slow settling), pass a `diffrax.PIDController`:
 
 ```python
 import diffrax

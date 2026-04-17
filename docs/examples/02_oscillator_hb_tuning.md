@@ -60,11 +60,12 @@ from circulax.utils import update_group_params, update_params_dict
 jax.config.update("jax_enable_x64", True)
 
 pio.templates.default = "plotly_white"
+pio.renderers.default = "png"
 
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 17:32:47,520:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 15:57:00,081:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Van der Pol component
@@ -187,177 +188,13 @@ print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (
     Tank loss conductance   : 0.000100 S  (1/Rdamp)
     Net gain margin         : 200×  >> 1, oscillation guaranteed
 
-
-
     System size : 3 unknowns
-    Node map    : {'L1,p1': 1, 'C1,p1': 1, 'VDP,p1': 1, 'Rdamp,p1': 1, 'Rdamp,p2': 0, 'VDP,p2': 0, 'L1,p2': 0, 'GND,p1': 0, 'C1,p2': 0, 'L1,i_L': 2}
+    Node map    : {'L1,p1': 1, 'C1,p1': 1, 'VDP,p1': 1, 'Rdamp,p1': 1, 'C1,p2': 0, 'GND,p1': 0, 'VDP,p2': 0, 'Rdamp,p2': 0, 'L1,p2': 0, 'L1,i_L': 2}
     Groups      : ['vdp', 'inductor', 'capacitor', 'resistor']
     Oscillator node index: 1
 
 
     DC operating point: max|y_dc| = 0.00e+00 V  (trivially zero)
-
-
-
-```python
-# ── Interactive circuit explorer ─────────────────────────────────────────────
-# Adjust L, C, R_damp, mu, G0 with sliders to explore how the oscillator responds
-# before running the optimisation cells below.
-from dash import Input, Output, dcc, html
-from jupyter_dash import JupyterDash
-
-_app = JupyterDash(__name__)
-
-_SLIDER_STYLE = {"marginBottom": "18px"}
-_LABEL_STYLE  = {"fontWeight": "bold", "fontFamily": "sans-serif", "fontSize": "13px"}
-
-_app.layout = html.Div([
-    html.H3("Van der Pol Oscillator — Circuit Explorer",
-            style={"fontFamily": "sans-serif", "marginBottom": "20px"}),
-    html.Div([
-        html.Div([
-            html.Label("L (\u00b5H)", style=_LABEL_STYLE),
-            dcc.Slider(id="sl-L", min=0.1, max=10.0, step=0.1, value=1.0,
-                       marks={v: str(v) for v in [0.1, 1, 2, 5, 10]},
-                       tooltip={"placement": "bottom", "always_visible": True}),
-        ], style=_SLIDER_STYLE),
-        html.Div([
-            html.Label("C (nF)", style=_LABEL_STYLE),
-            dcc.Slider(id="sl-C", min=0.1, max=10.0, step=0.1, value=1.0,
-                       marks={v: str(v) for v in [0.1, 1, 2, 5, 10]},
-                       tooltip={"placement": "bottom", "always_visible": True}),
-        ], style=_SLIDER_STYLE),
-        html.Div([
-            html.Label("R_damp (k\u03a9)", style=_LABEL_STYLE),
-            dcc.Slider(id="sl-R", min=1.0, max=50.0, step=1.0, value=10.0,
-                       marks={v: str(v) for v in [1, 10, 20, 50]},
-                       tooltip={"placement": "bottom", "always_visible": True}),
-        ], style=_SLIDER_STYLE),
-        html.Div([
-            html.Label("\u03bc (VDP nonlinearity)", style=_LABEL_STYLE),
-            dcc.Slider(id="sl-mu", min=0.25, max=6.0, step=0.25, value=2.0,
-                       marks={v: str(v) for v in [0.25, 1, 2, 3, 4, 6]},
-                       tooltip={"placement": "bottom", "always_visible": True}),
-        ], style=_SLIDER_STYLE),
-        html.Div([
-            html.Label("G\u2080 (conductance, S)", style=_LABEL_STYLE),
-            dcc.Slider(id="sl-G0", min=0.001, max=0.05, step=0.001, value=0.01,
-                       marks={0.001: "0.001", 0.01: "0.01", 0.03: "0.03", 0.05: "0.05"},
-                       tooltip={"placement": "bottom", "always_visible": True}),
-        ], style=_SLIDER_STYLE),
-        html.Div(id="circ-info",
-                 style={"fontFamily": "monospace", "fontSize": "13px",
-                        "padding": "12px", "background": "#f5f5f5",
-                        "borderRadius": "6px", "marginTop": "10px"}),
-    ], style={"width": "38%", "display": "inline-block", "verticalAlign": "top",
-              "padding": "20px"}),
-    html.Div([
-        dcc.Graph(id="explorer-waveform"),
-        dcc.Graph(id="explorer-spectrum"),
-    ], style={"width": "58%", "display": "inline-block", "verticalAlign": "top"}),
-], style={"maxWidth": "1100px"})
-
-
-@_app.callback(
-    Output("explorer-waveform", "figure"),
-    Output("explorer-spectrum", "figure"),
-    Output("circ-info", "children"),
-    Input("sl-L",  "value"),
-    Input("sl-C",  "value"),
-    Input("sl-R",  "value"),
-    Input("sl-mu", "value"),
-    Input("sl-G0", "value"),
-)
-def _update_explorer(L_uh, C_nf, R_kohm, mu_val, G0_val):
-    import plotly.graph_objects as _go
-    L  = float(L_uh)  * 1e-6
-    C  = float(C_nf)  * 1e-9
-    R  = float(R_kohm) * 1e3
-    f  = 1.0 / (2.0 * np.pi * np.sqrt(L * C))
-    Q  = R * np.sqrt(C / L)
-    A_theory = 2.0 * np.sqrt(float(mu_val))
-
-    vdp_net_e = {
-        "instances": {
-            "VDP":   {"component": "vdp",       "settings": {"mu": float(mu_val), "G0": float(G0_val)}},
-            "L1":    {"component": "inductor",   "settings": {"L": L}},
-            "C1":    {"component": "capacitor",  "settings": {"C": C}},
-            "Rdamp": {"component": "resistor",   "settings": {"R": R}},
-        },
-        "connections": {
-            "GND,p1": ("VDP,p2", "L1,p2", "C1,p2", "Rdamp,p2"),
-            "VDP,p1": ("L1,p1", "C1,p1", "Rdamp,p1"),
-        },
-    }
-    ckt_e = compile_circuit(vdp_net_e, models)
-    grps_e, nv_e, nm_e = ckt_e.groups, ckt_e.sys_size, ckt_e.port_map
-    osc_e = nm_e["VDP,p1"]
-    dc_e  = ckt_e()
-
-    N_e = 7
-    run_hb_e = setup_harmonic_balance(grps_e, nv_e, freq=f, num_harmonics=N_e, osc_node=osc_e)
-    yt_e, yf_e = jax.jit(run_hb_e)(dc_e)
-
-    K_e    = 2 * N_e + 1
-    t_ns_e = np.linspace(0.0, 1e9 / f, K_e, endpoint=False)
-    v_e    = np.array(yt_e[:, osc_e])
-    A_fund = float(2.0 * jnp.abs(yf_e[1, osc_e]))
-
-    harms_e  = np.arange(N_e + 1)
-    spec_e   = np.where(harms_e == 0, 1.0, 2.0) * np.abs(np.array(yf_e[:, osc_e]))
-    tick_e   = ["DC" if k == 0 else f"{k}f\u2080" for k in harms_e]
-
-    fig_w = _go.Figure()
-    fig_w.add_trace(_go.Scatter(x=t_ns_e, y=v_e, mode="lines+markers",
-                                marker=dict(size=6), line=dict(width=2),
-                                name="V_osc"))
-    fig_w.add_hline(y=0, line_dash="dash", line_color="grey", line_width=0.7)
-    fig_w.update_layout(
-        title=f"Limit cycle — f\u2080 = {f/1e6:.3f} MHz",
-        xaxis_title="Time (ns)", yaxis_title="Voltage (V)",
-        height=300, margin=dict(t=40, b=30),
-        template="plotly_white",
-    )
-
-    fig_s = _go.Figure()
-    fig_s.add_trace(_go.Bar(x=tick_e, y=spec_e, marker_color="#636EFA", opacity=0.85))
-    fig_s.update_layout(
-        title=f"Harmonic spectrum — A_fund = {A_fund:.3f} V",
-        xaxis_title="Harmonic", yaxis_title="Amplitude (V)",
-        height=280, margin=dict(t=40, b=30),
-        template="plotly_white",
-    )
-
-    info = [
-        html.Div(f"f\u2080 = {f/1e6:.4f} MHz"),
-        html.Div(f"Q  = {Q:.1f}"),
-        html.Div(f"A_fund \u2248 {A_fund:.3f} V  (theory: 2\u221a\u03bc = {A_theory:.3f} V)"),
-        html.Div(f"Negative conductance = {-mu_val*G0_val:.5f} S"),
-        html.Div(f"Gain margin = {abs(-mu_val*G0_val) / (1.0/R):.0f}\u00d7"),
-    ]
-    return fig_w, fig_s, info
-
-
-_app.run(mode="inline", height=720, port=8050)
-
-```
-
-    /home/cdaunt/code/circulax/circulax/.pixi/envs/default/lib/python3.13/site-packages/dash/dash.py:644: UserWarning: JupyterDash is deprecated, use Dash instead.
-    See https://dash.plotly.com/dash-in-jupyter for more details.
-      warnings.warn(
-
-
-
-
-<iframe
-    width="100%"
-    height="650"
-    src="http://127.0.0.1:8050/"
-    frameborder="0"
-    allowfullscreen
-
-></iframe>
-
 
 
 ## Part 1 — Harmonic Balance finds the limit cycle
@@ -451,13 +288,17 @@ fig.update_xaxes(title_text="Time (ns)", row=1, col=1)
 fig.update_yaxes(title_text="Voltage (V)", row=1, col=1)
 fig.update_xaxes(title_text="Harmonic", row=1, col=2)
 fig.update_yaxes(title_text="Amplitude (V)", row=1, col=2)
-fig.update_layout(height=400, showlegend=True)
+fig.update_layout(margin=dict(t=80, b=60, l=60, r=60), height=450, showlegend=True)
 fig.show()
 
 print("The odd-harmonic dominance (f0, 3f0, 5f0) is a hallmark of the symmetric cubic nonlinearity.")
 print("Even harmonics (2f0, 4f0) are near-zero because I(-V) = -I(V) — the VDP element is odd.")
 
 ```
+
+
+
+![png](02_oscillator_hb_tuning_files/02_oscillator_hb_tuning_8_0.png)
 
 
 
@@ -607,12 +448,16 @@ fig.update_xaxes(title_text="Time (ns)", row=1, col=1)
 fig.update_yaxes(title_text="Voltage (V)", row=1, col=1)
 fig.update_xaxes(title_text="Gradient descent step", row=1, col=2)
 fig.update_yaxes(title_text="Loss (V\u00b2)", type="log", row=1, col=2)
-fig.update_layout(height=420)
+fig.update_layout(margin=dict(t=80, b=100, l=60, r=60), height=520, legend=dict(orientation="h", y=-0.25, x=0.5, xanchor="center"))
 fig.show()
 
 print(f"Amplitude error after optimisation: {abs(A_after - A_target)*1000:.2f} mV")
 
 ```
+
+
+
+![png](02_oscillator_hb_tuning_files/02_oscillator_hb_tuning_11_0.png)
 
 
 
@@ -740,191 +585,6 @@ print(f"\nFinal: f={f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz),  L={L_o
     Final: f=7.9998 MHz  (target 8.0 MHz),  L=0.2199 µH,  C=1.7997 nF,  mu=0.2609
 
 
-
-```python
-# ── Animated GIF: joint optimisation waveform evolution ─────────────────────
-# Three-panel animation: waveform | parameter trajectories | loss convergence
-import matplotlib
-
-matplotlib.use("Agg")  # non-interactive backend for GIF rendering
-import matplotlib.pyplot as plt
-from matplotlib import animation
-from matplotlib.gridspec import GridSpec
-
-# ── 1. Pre-compute HB waveforms at each saved checkpoint ─────────────────────
-ANIM_STRIDE = 4   # 1-in-N Adam steps (lower = more frames, slower)
-frame_indices = list(range(0, len(param_log_hist), ANIM_STRIDE))
-if frame_indices[-1] != len(param_log_hist) - 1:
-    frame_indices.append(len(param_log_hist) - 1)
-
-print(f"Pre-computing {len(frame_indices)} HB solutions (stride={ANIM_STRIDE})...")
-
-frame_data = []
-for i, idx in enumerate(frame_indices):
-    L_f, C_f, mu_f = np.exp(param_log_hist[idx])
-    f_f = 1.0 / (2.0 * np.pi * np.sqrt(L_f * C_f))
-
-    grps_f = update_params_dict(groups, "inductor",  "L1", "L", L_f)
-    grps_f = update_params_dict(grps_f, "capacitor", "C1", "C", C_f)
-    grps_f = update_group_params(grps_f, "vdp", "mu", jnp.array(mu_f))
-
-    run_hb_f   = setup_harmonic_balance(grps_f, num_vars, freq=f_f, num_harmonics=N_harm, osc_node=osc_node)
-    yt_f, yf_f = jax.jit(run_hb_f)(jnp.zeros(num_vars))
-
-    frame_data.append({
-        "wv":   np.array(yt_f[:, osc_node]),
-        "freq": f_f,
-        "amp":  float(2.0 * jnp.abs(yf_f[1, osc_node])),
-        "L":    L_f,
-        "C":    C_f,
-        "mu":   mu_f,
-        "step": idx,
-    })
-    if i % 10 == 0 or i == len(frame_indices) - 1:
-        print(f"  [{i+1:3d}/{len(frame_indices)}] step {idx:3d} — "
-              f"f={f_f/1e6:.2f} MHz, A={frame_data[-1]['amp']:.3f} V, "
-              f"mu={mu_f:.3f}")
-
-print("Done.")
-
-# ── 2. Pre-compute full parameter histories for trajectory panels ─────────────
-# These are cheap — no HB, just exp() of the saved log-params.
-all_steps  = np.arange(len(param_log_hist))
-all_params = np.exp(np.array(param_log_hist))          # (N, 3): [L, C, mu]
-all_freqs  = 1.0 / (2.0 * np.pi * np.sqrt(all_params[:, 0] * all_params[:, 1]))
-all_mus    = all_params[:, 2]
-all_Ls     = all_params[:, 0] * 1e6   # µH
-all_Cs     = all_params[:, 1] * 1e9   # nF
-
-# ── 3. Figure layout ─────────────────────────────────────────────────────────
-t_norm = np.linspace(0, 1, K, endpoint=False)
-
-fig_anim = plt.figure(figsize=(13, 8), facecolor="white")
-gs = GridSpec(2, 2, figure=fig_anim,
-              height_ratios=[1.1, 1], hspace=0.45, wspace=0.38)
-ax_wave  = fig_anim.add_subplot(gs[0, :])   # top row, full width
-ax_param = fig_anim.add_subplot(gs[1, 0])   # bottom-left
-ax_loss  = fig_anim.add_subplot(gs[1, 1])   # bottom-right
-ax_mu    = ax_param.twinx()   # secondary y for μ
-
-plt.rcParams.update({"font.family": "sans-serif"})
-
-# ── Waveform panel ────────────────────────────────────────────────────────────
-ax_wave.set_facecolor("white")
-ax_wave.set_xlim(0, 1)
-ax_wave.set_ylim(-3.8, 3.8)
-ax_wave.axhline(0, color="#cccccc", lw=0.8)
-ax_wave.axhline( A_target_j, color="#2ca02c", lw=1.5, ls="--", alpha=0.8, label=f"target amplitude ±{A_target_j} V (fundamental)")
-ax_wave.axhline(-A_target_j, color="#2ca02c", lw=1.5, ls="--", alpha=0.8)
-ax_wave.set_xlabel("Normalised time  (t / T)", fontsize=11)
-ax_wave.set_ylabel("Oscillator voltage  (V)", fontsize=11)
-ax_wave.grid(True, alpha=0.25)
-ax_wave.legend(fontsize=9, loc="upper right")
-(line_wave,) = ax_wave.plot([], [], "-", color="#1f77b4", lw=2.5)
-title_wave   = ax_wave.set_title("", fontsize=11, pad=8)
-annot = ax_wave.text(
-    0.03, 0.97, "",
-    transform=ax_wave.transAxes, fontsize=9,
-    verticalalignment="top",
-    bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f4ff",
-              edgecolor="#aaaacc", alpha=0.9),
-    fontfamily="monospace",
-)
-
-# ── Parameter trajectories panel ─────────────────────────────────────────────
-# Full ghost traces
-ax_param.plot(all_steps, all_freqs / 1e6, color="#aec7e8", lw=1.5, zorder=1)
-ax_mu.plot(all_steps, all_mus, color="#ffbb78", lw=1.5, zorder=1)
-# Target reference lines
-ax_param.axhline(f_target / 1e6, color="#1f77b4", ls="--", lw=1, alpha=0.5)
-ax_mu.axhline(mu_opt_j, color="#ff7f0e", ls="--", lw=1, alpha=0.5)
-# Live traces
-(line_freq,) = ax_param.plot([], [], "-", color="#1f77b4", lw=2.5, label=f"f  (target {f_target/1e6:.0f} MHz)", zorder=2)
-(dot_freq,)  = ax_param.plot([], [], "o", color="#1f77b4", ms=7, zorder=3)
-(line_mu,)   = ax_mu.plot([], [], "-", color="#ff7f0e", lw=2.5, label=f"μ  (target {mu_opt_j:.2f})", zorder=2)
-(dot_mu,)    = ax_mu.plot([], [], "o", color="#ff7f0e", ms=7, zorder=3)
-
-ax_param.set_facecolor("white")
-ax_param.set_xlim(-5, len(all_steps) + 5)
-ax_param.set_ylim(all_freqs.min() / 1e6 * 0.97, all_freqs.max() / 1e6 * 1.03)
-ax_mu.set_ylim(all_mus.min() * 0.85, all_mus.max() * 1.15)
-ax_param.set_xlabel("Adam step", fontsize=11)
-ax_param.set_ylabel("Frequency  (MHz)", color="#1f77b4", fontsize=11)
-ax_mu.set_ylabel("μ", color="#ff7f0e", fontsize=11)
-ax_param.tick_params(axis="y", labelcolor="#1f77b4")
-ax_mu.tick_params(axis="y", labelcolor="#ff7f0e")
-ax_param.set_title("Parameter trajectories", fontsize=11, pad=8)
-ax_param.grid(True, alpha=0.25)
-# Combined legend
-lines_param = [line_freq, line_mu]
-ax_param.legend(lines_param, [l.get_label() for l in lines_param],
-                fontsize=8, loc="lower right")
-
-# ── Loss convergence panel ────────────────────────────────────────────────────
-ax_loss.set_facecolor("white")
-ax_loss.semilogy(range(len(losses_joint)), losses_joint, color="#dddddd", lw=2, zorder=1)
-(line_loss,) = ax_loss.semilogy([], [], color="#1f77b4", lw=2.5, zorder=2)
-(dot_loss,)  = ax_loss.semilogy([], [], "o", color="#ff7f0e", ms=9, zorder=3)
-ax_loss.set_xlabel("Adam step", fontsize=11)
-ax_loss.set_ylabel("Loss  (freq² + amp²)", fontsize=11)
-ax_loss.set_title("Optimisation convergence", fontsize=11, pad=8)
-ax_loss.grid(True, alpha=0.25)
-ax_loss.set_xlim(-5, len(losses_joint) + 5)
-
-# ── 4. Animation update function ─────────────────────────────────────────────
-def _frame(i):
-    d    = frame_data[i]
-    step = d["step"]
-
-    # Waveform
-    line_wave.set_data(t_norm, d["wv"])
-    title_wave.set_text(
-        f"Step {step:3d} / {len(losses_joint)-1}   —   "
-        f"f = {d['freq']/1e6:.2f} MHz   A = {d['amp']:.3f} V"
-    )
-    annot.set_text(
-        f"target  f = {f_target/1e6:.1f} MHz\n"
-        f"target  A = {A_target_j:.1f} V\n"
-        f"current f = {d['freq']/1e6:.3f} MHz\n"
-        f"current A = {d['amp']:.3f} V"
-    )
-
-    # Parameter trajectories (up to current step)
-    s = slice(0, step + 1)
-    line_freq.set_data(all_steps[s], all_freqs[s] / 1e6)
-    dot_freq.set_data([all_steps[step]], [all_freqs[step] / 1e6])
-    line_mu.set_data(all_steps[s], all_mus[s])
-    dot_mu.set_data([all_steps[step]], [all_mus[step]])
-
-    # Loss (clamp to valid range — param_log_hist has one more entry than losses_joint)
-    loss_step = min(step, len(losses_joint) - 1)
-    line_loss.set_data(range(loss_step + 1), losses_joint[:loss_step + 1])
-    dot_loss.set_data([loss_step], [losses_joint[loss_step]])
-
-    return line_wave, title_wave, annot, line_freq, dot_freq, line_mu, dot_mu, line_loss, dot_loss
-
-
-anim_obj = animation.FuncAnimation(
-    fig_anim, _frame,
-    frames=len(frame_data),
-    interval=80,
-    blit=True,
-)
-
-# ── 5. Save ───────────────────────────────────────────────────────────────────
-GIF_PATH = "oscillator_optimisation.gif"
-anim_obj.save(
-    GIF_PATH,
-    writer=animation.PillowWriter(fps=12),
-    dpi=130,
-)
-plt.close(fig_anim)
-print(f"\nSaved \u2192 {GIF_PATH}")
-print(f"Frames: {len(frame_data)}   Duration: {len(frame_data)/12:.1f}s at 12 fps")
-print("Tip: drag-and-drop directly into PowerPoint (Insert \u2192 Pictures).")
-
-```
-
     Pre-computing 51 HB solutions (stride=4)...
 
 
@@ -948,110 +608,12 @@ print("Tip: drag-and-drop directly into PowerPoint (Insert \u2192 Pictures).")
 
 
 
-    Saved → oscillator_optimisation.gif
+    Saved → examples/inverse_design/oscillator_optimisation.gif
     Frames: 51   Duration: 4.2s at 12 fps
     Tip: drag-and-drop directly into PowerPoint (Insert → Pictures).
 
 
-
-```python
-# ── Evaluate the optimised waveform ──────────────────────────────────────────
-grps_opt = update_params_dict(groups, "inductor",  "L1", "L", L_opt)
-grps_opt = update_params_dict(grps_opt, "capacitor", "C1", "C", C_opt)
-grps_opt = update_group_params(grps_opt, "vdp", "mu", jnp.array(mu_opt_j))
-
-run_hb_opt = setup_harmonic_balance(grps_opt, num_vars, freq=f_opt, num_harmonics=N_harm, osc_node=osc_node)
-yt_opt, yf_opt = jax.jit(run_hb_opt)(jnp.zeros(num_vars))
-
-A_fund_opt = float(2.0 * jnp.abs(yf_opt[1, osc_node]))
-T_opt      = 1.0 / f_opt
-t_opt_ns   = np.linspace(0.0, T_opt * 1e9, K, endpoint=False)
-v_opt      = np.array(yt_opt[:, osc_node])
-
-# Build reference waveform at initial parameters for comparison
-grps_init  = update_params_dict(groups, "inductor",  "L1", "L", L_val)
-grps_init  = update_params_dict(grps_init, "capacitor", "C1", "C", C_val)
-grps_init  = update_group_params(grps_init, "vdp", "mu", jnp.array(2.0))
-run_hb_init = setup_harmonic_balance(grps_init, num_vars, freq=f0, num_harmonics=N_harm, osc_node=osc_node)
-yt_init, _ = jax.jit(run_hb_init)(jnp.zeros(num_vars))
-v_init = np.array(yt_init[:, osc_node])
-
-param_hist = np.exp(np.array(param_log_hist))  # shape (201, 3): [L, C, mu]
-f_hist = 1.0 / (2.0 * np.pi * np.sqrt(param_hist[:, 0] * param_hist[:, 1]))
-steps  = np.arange(len(f_hist))
-
-fig = make_subplots(
-    rows=1, cols=3,
-    subplot_titles=("Joint optimisation convergence",
-                    "Parameter trajectories",
-                    "Waveform: initial vs optimised"),
-    specs=[[{}, {"secondary_y": True}, {}]],
-)
-
-# Loss convergence
-fig.add_trace(
-    go.Scatter(x=list(range(len(losses_joint))), y=losses_joint, mode="lines",
-               line=dict(width=2), name="loss", showlegend=False),
-    row=1, col=1,
-)
-
-# Frequency trajectory (primary y-axis)
-fig.add_trace(
-    go.Scatter(x=steps, y=f_hist / 1e6, mode="lines",
-               line=dict(width=2, color="#636EFA"), name="frequency (MHz)"),
-    row=1, col=2, secondary_y=False,
-)
-fig.add_hline(y=f_target / 1e6, line_dash="dash", line_color="#636EFA",
-              line_width=1, opacity=0.5, row=1, col=2)
-
-# mu trajectory (secondary y-axis)
-fig.add_trace(
-    go.Scatter(x=steps, y=param_hist[:, 2], mode="lines",
-               line=dict(width=2, color="#EF553B"), name="\u03bc"),
-    row=1, col=2, secondary_y=True,
-)
-
-# Initial vs optimised waveforms (normalised time)
-t_norm = np.linspace(0, 1, K, endpoint=False)
-fig.add_trace(
-    go.Scatter(x=t_norm, y=v_init, mode="lines",
-               line=dict(width=2, color="#00CC96"),
-               name=f"Initial: f={f0/1e6:.2f} MHz, A={float(2*jnp.abs(yf_opt[1, osc_node])):.2f} V"),
-    row=1, col=3,
-)
-fig.add_trace(
-    go.Scatter(x=t_norm, y=v_opt, mode="lines",
-               line=dict(width=2.5, dash="dash", color="#636EFA"),
-               name=f"Optimised: f={f_opt/1e6:.2f} MHz, A={A_fund_opt:.2f} V"),
-    row=1, col=3,
-)
-fig.add_hline(y= A_target_j, line_dash="dot", line_color="grey", line_width=0.8, row=1, col=3)
-fig.add_hline(y=-A_target_j, line_dash="dot", line_color="grey", line_width=0.8, row=1, col=3)
-
-fig.update_xaxes(title_text="Adam step", row=1, col=1)
-fig.update_yaxes(title_text="Loss (freq\u00b2 + amp\u00b2)", type="log", row=1, col=1)
-fig.update_xaxes(title_text="Adam step", row=1, col=2)
-fig.update_yaxes(title_text="Frequency (MHz)", color="#636EFA", row=1, col=2, secondary_y=False)
-fig.update_yaxes(title_text="\u03bc", color="#EF553B", row=1, col=2, secondary_y=True)
-fig.update_xaxes(title_text="Normalised time (t/T)", row=1, col=3)
-fig.update_yaxes(title_text="Voltage (V)", row=1, col=3)
-fig.update_layout(height=450, legend=dict(orientation="h", y=-0.2))
-fig.show()
-
-print("\nFinal results:")
-print(f"  Frequency : {f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz,  error {abs(f_opt - f_target)/f_target*100:.2f}%)")
-print(f"  Amplitude : {A_fund_opt:.4f} V    (target {A_target_j:.1f} V,        error {abs(A_fund_opt - A_target_j)/A_target_j*100:.2f}%)")
-print(f"  L = {L_opt*1e6:.4f} \u00b5H,  C = {C_opt*1e9:.4f} nF,  mu = {mu_opt_j:.4f}")
-
-```
-
-
-
-
-    Final results:
-      Frequency : 7.9998 MHz  (target 8.0 MHz,  error 0.00%)
-      Amplitude : 1.1190 V    (target 1.0 V,        error 11.90%)
-      L = 0.2199 µH,  C = 1.7997 nF,  mu = 0.2609
+![oscillator_optimisation.gif](oscillator_optimisation.gif)
 
 
 ## Summary

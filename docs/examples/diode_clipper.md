@@ -23,7 +23,7 @@ jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 17:32:34,880:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 15:56:48,330:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Netlist
@@ -150,7 +150,7 @@ else:
 
 
        System Size: 4 variables
-       Port Map: {'D2,p2': 1, 'R1,p2': 1, 'D1,p1': 1, 'D1,p2': 0, 'GND,p1': 0, 'Vin,p2': 0, 'D2,p1': 0, 'Vin,p1': 2, 'R1,p1': 2, 'Vin,i_src': 3}
+       Port Map: {'D1,p1': 1, 'R1,p2': 1, 'D2,p2': 1, 'D2,p1': 0, 'GND,p1': 0, 'Vin,p2': 0, 'D1,p2': 0, 'R1,p1': 2, 'Vin,p1': 2, 'Vin,i_src': 3}
     2. Initializing Solver Strategy...
     3. Solving DC Operating Point...
 
@@ -160,7 +160,7 @@ else:
 
 
        ✅ Simulation Successful
-    Performed 591 steps performed in 0.67 seconds
+    Performed 591 steps performed in 0.59 seconds
 
 
 

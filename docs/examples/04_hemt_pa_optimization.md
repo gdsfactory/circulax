@@ -42,14 +42,13 @@ from circulax.utils import update_params_dict
 jax.config.update("jax_enable_x64", True)
 
 pio.templates.default = "plotly_white"
+pio.renderers.default = "png"
 print("JAX backend:", jax.default_backend())
 
 ```
 
     KLUJAX_RS DEBUG MODE.
-
-
-    WARNING:2026-04-15 17:32:56,951:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 15:57:07,737:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
     JAX backend: cpu
@@ -195,11 +194,15 @@ fig.update_xaxes(title_text="Vds (V)", row=1, col=1)
 fig.update_yaxes(title_text="Ids (mA)", row=1, col=1)
 fig.update_xaxes(title_text="Vgs (V)", row=1, col=2)
 fig.update_yaxes(title_text="gm (mS)", row=1, col=2)
-fig.update_layout(height=400, width=900, legend=dict(tracegroupgap=0))
+fig.update_layout(margin=dict(t=80, b=60, l=60, r=60), height=400, width=900, legend=dict(tracegroupgap=0))
 fig.show()
 print("No kinks or discontinuities → Jacobian is well-defined everywhere.")
 
 ```
+
+
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_4_0.png)
 
 
 
@@ -208,21 +211,6 @@ print("No kinks or discontinuities → Jacobian is well-defined everywhere.")
 
 ## Phase 2 — PA Circuit Architecture
 
-```
-            Rs_src        L_in             R_bias   Vgg
-50Ω source ──/\/\/\/──┬──LLLLLL──┬──────────/\/\/\/──+──(Vgg)──GND
-                    |          |
- Vs (5 GHz AC)    (Vs)        C_in         Q1 (HEMT)
-                    |          |           G   D   S
-                   GND        GND          |   |   |
-                                           |   |  GND
-         Vdd ───────────────────────── L_choke
-                                           |
-                                        C_block ── L_out ──┬── R_load ── GND
-                                                           C_out
-                                                            |
-                                                           GND
-```
 
 **Component roles:**
 
@@ -238,6 +226,12 @@ print("No kinks or discontinuities → Jacobian is well-defined everywhere.")
 
 The optimal load resistance for maximum class-A output power is `Ropt ≈ (Vdd − Vknee) / (2 Idq)`.
 The matching networks are initialised deliberately off-resonance; the optimizer will tune them.
+
+
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_6_0.png)
+
+
 
 
 ```python
@@ -330,88 +324,6 @@ print(f"\nKey indices: drain={osc_node_drain}, gate={osc_node_gate}, "
     Net map     : {'C_block,p1': 1, 'C_block,p2': 2, 'C_in,p1': 3, 'C_in,p2': 0, 'C_out,p1': 4, 'C_out,p2': 0, 'GND,p1': 0, 'L_choke,i_L': 11, 'L_choke,p1': 5, 'L_choke,p2': 1, 'L_in,i_L': 10, 'L_in,p1': 6, 'L_in,p2': 3, 'L_out,i_L': 12, 'L_out,p1': 2, 'L_out,p2': 4, 'Q1,d': 1, 'Q1,g': 3, 'Q1,s': 0, 'R_bias,p1': 3, 'R_bias,p2': 7, 'R_load,p1': 4, 'R_load,p2': 0, 'Rs_src,p1': 8, 'Rs_src,p2': 6, 'Vdd,i_src': 14, 'Vdd,p1': 5, 'Vdd,p2': 0, 'Vgg,i_src': 13, 'Vgg,p1': 7, 'Vgg,p2': 0, 'Vs,i_src': 9, 'Vs,p1': 8, 'Vs,p2': 0}
 
     Key indices: drain=1, gate=3, load=4, choke_iL=11
-
-
-
-```python
-import matplotlib.pyplot as plt
-import schemdraw
-import schemdraw.elements as elm
-
-fig, ax = plt.subplots(figsize=(12, 6))
-ax.axis("off")
-ax.set_title("5 GHz Class-A HEMT PA — Circuit Topology", fontsize=12, pad=6)
-
-with schemdraw.Drawing(canvas=ax) as d:
-    d.config(unit=2.8, fontsize=10)
-
-    # ── Input source ────────────────────────────────────────────
-    d.add(elm.Ground())
-    d.add(elm.SourceSin().up().label("$V_s$", loc="top"))
-    d.add(elm.Line().right(0.4))
-    d.add(elm.Resistor().right().label("$R_s$\n50 Ω", loc="top"))
-    d.add(elm.Line().right(0.4))
-
-    # Gate bias taps off here (before L_in)
-    pre_lin = d.here
-    d.add(elm.Dot())
-    d.add(elm.Line().right(0.4))
-    d.add(elm.Inductor2(loops=2).right().label("$L_{in}$\n(opt)", loc="top"))
-    d.add(elm.Line().right(0.5))
-
-    gate_node = d.here
-    d.add(elm.Dot())
-
-    # ── HEMT (reverse=True → gate on left, drain top, source bottom) ────────
-    Q1 = d.add(elm.AnalogNFet(arrow=True, reverse=True).anchor("gate").at(gate_node))
-    mid_y = (Q1.drain[1] + Q1.source[1]) / 2
-    d.add(elm.Label().at((Q1.drain[0] + 0.5, mid_y)).label("Q1\n(HEMT)"))
-
-    d.add(elm.Line().down().at(Q1.source).length(0.5))
-    d.add(elm.Ground())
-
-    # ── Gate shunt C_in ───────────────────────────────────────────
-    d.add(elm.Line().down().at(gate_node).length(0.5))
-    d.add(elm.Capacitor().down().label("$C_{in}$\n(opt)", loc="top"))
-    d.add(elm.Ground())
-
-    # ── Gate bias: R_bias + Vgg ───────────────────────────────────────
-    d.add(elm.Line().up().at(pre_lin).length(0.4))
-    d.add(elm.Resistor().up().label(f"$R_{{bias}}$\n{R_bias_val/1e3:.0f} kΩ", loc="top"))
-    d.add(elm.SourceV().up().reverse().label(f"$V_{{gg}}$\n{Vgg_val} V", loc="top"))
-    d.add(elm.Ground().left())
-
-    # ── Drain: L_choke (RF choke) → Vdd ────────────────────────────
-    drain_node = Q1.drain
-    d.add(elm.Dot().at(drain_node))
-    d.add(elm.Inductor2(loops=2).up().at(drain_node)
-          .label(f"$L_{{choke}}$\n{L_choke_val*1e9:.0f} nH", loc="top"))
-    d.add(elm.Vdd().label(f"$V_{{dd}}$ = {Vdd_val} V"))
-
-    # ── Output matching: C_block (DC block) → L_out → C_out (shunt) ────────
-    d.add(elm.Line().right(0.5).at(drain_node))
-    d.add(elm.Capacitor().right().label(f"$C_{{block}}$\n{C_block_val*1e12:.0f} pF", loc="top"))
-    d.add(elm.Inductor2(loops=2).right().label("$L_{out}$\n(opt)", loc="top"))
-    d.add(elm.Line().right(0.5))
-
-    out_node = d.here
-    d.add(elm.Dot())
-    d.add(elm.Line().down().at(out_node).length(0.5))
-    d.add(elm.Capacitor().down().label("$C_{out}$\n(opt)", loc="top"))
-    d.add(elm.Ground())
-
-    # ── 50 Ω load ────────────────────────────────────────────────────
-    d.add(elm.Resistor().right().at(out_node).label("$R_{load}$\n50 Ω", loc="top"))
-    d.add(elm.Dot(open=True).label("$V_{out}$", loc="right"))
-
-plt.tight_layout()
-
-```
-
-
-
-![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_7_0.png)
-
 
 
 
@@ -619,124 +531,14 @@ fig.update_yaxes(title_text="Gain (dB)", row=1, col=2)
 fig.update_xaxes(title_text="Pin (dBm)", row=1, col=3)
 fig.update_yaxes(title_text="PAE (%)", rangemode="tozero", row=1, col=3)
 
-fig.update_layout(height=420, width=1200)
+fig.update_layout(margin=dict(t=80, b=60, l=60, r=60), height=420, width=1200)
 fig.show()
 
 ```
 
 
 
-
-```python
-# ── Interactive matching-network explorer ─────────────────────────────────────
-import plotly.graph_objects as go
-from dash import dcc, html
-from dash.dependencies import Input, Output
-from jupyter_dash import JupyterDash
-from plotly.subplots import make_subplots
-
-V_target = float(jnp.sqrt(8.0 * 50.0 * 10.0 ** (12.0 / 10.0) * 1e-3))
-
-_app = JupyterDash(__name__)
-
-_slider_style = {"marginBottom": "6px"}
-
-_app.layout = html.Div([
-    html.H4("Matching Network Explorer  (+12 dBm input)", style={"fontFamily": "sans-serif"}),
-    html.Div([
-        html.Div([
-            html.Label("L_in (nH)"), dcc.Slider(0.1, 5.0, 0.1, value=1.0, id="sl-lin",
-                marks={v: str(v) for v in [0.1, 1, 2, 3, 4, 5]}, tooltip={"placement": "bottom"}),
-        ], style=_slider_style),
-        html.Div([
-            html.Label("C_in (pF)"), dcc.Slider(0.1, 5.0, 0.1, value=1.0, id="sl-cin",
-                marks={v: str(v) for v in [0.1, 1, 2, 3, 4, 5]}, tooltip={"placement": "bottom"}),
-        ], style=_slider_style),
-        html.Div([
-            html.Label("L_out (nH)"), dcc.Slider(0.1, 5.0, 0.1, value=1.0, id="sl-lout",
-                marks={v: str(v) for v in [0.1, 1, 2, 3, 4, 5]}, tooltip={"placement": "bottom"}),
-        ], style=_slider_style),
-        html.Div([
-            html.Label("C_out (pF)"), dcc.Slider(0.1, 5.0, 0.1, value=1.0, id="sl-cout",
-                marks={v: str(v) for v in [0.1, 1, 2, 3, 4, 5]}, tooltip={"placement": "bottom"}),
-        ], style=_slider_style),
-    ], style={"maxWidth": "650px", "padding": "12px"}),
-    dcc.Graph(id="wf-graph", style={"height": "360px"}),
-    html.Div(id="info-panel", style={"fontFamily": "monospace", "padding": "8px", "fontSize": "14px"}),
-])
-
-
-@_app.callback(
-    Output("wf-graph", "figure"),
-    Output("info-panel", "children"),
-    Input("sl-lin",  "value"),
-    Input("sl-cin",  "value"),
-    Input("sl-lout", "value"),
-    Input("sl-cout", "value"),
-)
-def _update(L_in_nH, C_in_pF, L_out_nH, C_out_pF):
-    L_in_si  = L_in_nH  * 1e-9
-    C_in_si  = C_in_pF  * 1e-12
-    L_out_si = L_out_nH * 1e-9
-    C_out_si = C_out_pF * 1e-12
-
-    grps = update_params_dict(groups,    "inductor",        "L_in",  "L", L_in_si)
-    grps = update_params_dict(grps,      "capacitor",       "C_in",  "C", C_in_si)
-    grps = update_params_dict(grps,      "inductor",        "L_out", "L", L_out_si)
-    grps = update_params_dict(grps,      "capacitor",       "C_out", "C", C_out_si)
-    grps = update_params_dict(grps,      "voltagesourceac", "Vs",    "V", V_target)
-
-    run_hb_i = setup_harmonic_balance(grps, num_vars, freq=F0, num_harmonics=N_HARM)
-    y_time_i, y_freq_i = jax.jit(run_hb_i)(y_dc, y_flat_init=jnp.tile(y_dc, K))
-
-    T_val   = 1.0 / F0
-    t_ps_i  = np.linspace(0, T_val * 1e12, K, endpoint=False)
-    v_gate_i  = np.real(np.array(y_time_i[:, osc_node_gate]))
-    v_drain_i = np.real(np.array(y_time_i[:, osc_node_drain]))
-
-    Pout_i, Gain_i, PAE_i = compute_powers(y_freq_i, V_target, Vdd_val)
-
-    fig_i = make_subplots(rows=1, cols=2,
-                          subplot_titles=("Gate Voltage", "Drain Voltage"))
-    fig_i.add_trace(go.Scatter(x=list(t_ps_i), y=list(v_gate_i),
-                               mode="lines", name="Gate (V)",
-                               line=dict(color="#1f77b4")), row=1, col=1)
-    fig_i.add_trace(go.Scatter(x=list(t_ps_i), y=list(v_drain_i),
-                               mode="lines", name="Drain (V)",
-                               line=dict(color="#ff7f0e")), row=1, col=2)
-    fig_i.update_xaxes(title_text="Time (ps)", row=1, col=1)
-    fig_i.update_yaxes(title_text="Voltage (V)", row=1, col=1)
-    fig_i.update_xaxes(title_text="Time (ps)", row=1, col=2)
-    fig_i.update_yaxes(title_text="Voltage (V)", row=1, col=2)
-    fig_i.update_layout(template="plotly_white", height=340)
-
-    info = (
-        f"Pout = {float(Pout_i):.1f} dBm  |  "
-        f"Gain = {float(Gain_i):.1f} dB  |  "
-        f"PAE  = {float(PAE_i)*100:.1f}%"
-    )
-    return fig_i, info
-
-
-_app.run(mode="inline", height=650, port=8051)
-
-```
-
-    /home/cdaunt/code/circulax/circulax/.pixi/envs/default/lib/python3.13/site-packages/dash/dash.py:644: UserWarning: JupyterDash is deprecated, use Dash instead.
-    See https://dash.plotly.com/dash-in-jupyter for more details.
-      warnings.warn(
-
-
-
-
-<iframe
-    width="100%"
-    height="650"
-    src="http://127.0.0.1:8051/"
-    frameborder="0"
-    allowfullscreen
-
-></iframe>
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_12_0.png)
 
 
 
@@ -993,10 +795,14 @@ fig.update_yaxes(title_text="Capacitance (pF)", row=1, col=2, secondary_y=True)
 fig.update_xaxes(title_text="Pin (dBm)", row=1, col=3)
 fig.update_yaxes(title_text="PAE (%)", rangemode="tozero", row=1, col=3)
 
-fig.update_layout(height=460, width=1400)
+fig.update_layout(margin=dict(t=80, b=60, l=60, r=60), height=460, width=1400)
 fig.show()
 
 ```
+
+
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_16_0.png)
 
 
 
@@ -1070,7 +876,7 @@ fig.update_xaxes(title_text="Time (ps)", row=1, col=2)
 fig.update_yaxes(title_text="Drain current (mA)", row=1, col=2)
 fig.update_yaxes(title_text="Amplitude (mV)", row=1, col=3)
 
-fig.update_layout(height=440, width=1400)
+fig.update_layout(margin=dict(t=80, b=60, l=60, r=60), height=440, width=1400)
 fig.show()
 
 print("\nOptimised PA — final performance at +12 dBm input:")
@@ -1082,189 +888,16 @@ print(f"  PAE  = {float(PAE_opt_val)*100:.1f}%")
 
 
 
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_17_0.png)
+
+
+
 
     Optimised PA — final performance at +12 dBm input:
       Pout = 19.3 dBm
       Gain = 7.3 dB
       PAE  = 29.3%
 
-
-
-```python
-# ── Animated GIF: optimisation progress ──────────────────────────────────────
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib import gridspec
-from matplotlib.animation import FuncAnimation, PillowWriter
-
-plt.style.use("dark_background")
-
-ANIM_STRIDE = 5
-FPS         = 10
-DPI         = 120
-GIF_PATH    = "pa_optimisation.gif"
-
-param_arr = np.array(param_history)   # (N_steps+1, 4): [L_in, C_in, L_out, C_out]
-pae_arr   = np.array(pae_history)     # (N_steps,)
-n_steps   = len(pae_arr)
-
-frame_indices = list(range(0, n_steps, ANIM_STRIDE))
-if (n_steps - 1) not in frame_indices:
-    frame_indices.append(n_steps - 1)
-
-steps_full = np.arange(n_steps)
-steps_p    = np.arange(len(param_arr))
-
-# ── Pre-compute full PAE vs Pin sweep at each frame checkpoint ────────────────
-# Each frame needs its own sweep so the curve evolves — not just a dot.
-# Runs HB at len(frame_indices) x len(Pin_dBm_vals) points.
-print(f"Pre-computing {len(frame_indices)} PAE sweeps x {len(Pin_dBm_vals)} Pin points...")
-
-@jax.jit
-def _pae_single(L_in, C_in, L_out, C_out, V_in):
-    grps = update_params_dict(groups,    "inductor",        "L_in",  "L", L_in)
-    grps = update_params_dict(grps,      "capacitor",       "C_in",  "C", C_in)
-    grps = update_params_dict(grps,      "inductor",        "L_out", "L", L_out)
-    grps = update_params_dict(grps,      "capacitor",       "C_out", "C", C_out)
-    grps = update_params_dict(grps,      "voltagesourceac", "Vs",    "V", V_in)
-    run_hb_i = setup_harmonic_balance(grps, num_vars, freq=F0, num_harmonics=N_HARM)
-    _, y_freq_i = run_hb_i(y_dc, y_flat_init=jnp.tile(y_dc, K))
-    _, _, PAE = compute_powers(y_freq_i, V_in, Vdd_val)
-    return PAE * 100.0
-
-frame_pae_sweeps = []
-for fi, idx in enumerate(frame_indices):
-    L_in_f, C_in_f, L_out_f, C_out_f = param_arr[idx]
-    sweep = []
-    for V_in in V_amp_vals:
-        sweep.append(float(_pae_single(
-            jnp.array(L_in_f), jnp.array(C_in_f),
-            jnp.array(L_out_f), jnp.array(C_out_f),
-            jnp.array(V_in),
-        )))
-    frame_pae_sweeps.append(sweep)
-    if fi % 5 == 0 or fi == len(frame_indices) - 1:
-        print(f"  [{fi+1:3d}/{len(frame_indices)}] step {idx:3d} — "
-              f"PAE@+12dBm = {sweep[np.argmin(np.abs(Pin_dBm_vals - 12))]:.1f}%")
-
-print("Done.")
-
-# ── Figure layout ─────────────────────────────────────────────────────────────
-fig_a = plt.figure(figsize=(13, 7), facecolor="#111111")
-gs    = gridspec.GridSpec(2, 2, figure=fig_a,
-                          width_ratios=[1, 1], height_ratios=[1, 1.1],
-                          hspace=0.28, wspace=0.30)
-
-ax_top  = fig_a.add_subplot(gs[0, :])
-ax_bl   = fig_a.add_subplot(gs[1, 0])
-ax_br   = fig_a.add_subplot(gs[1, 1])
-ax_bl_r = ax_bl.twinx()
-
-for ax in (ax_top, ax_bl, ax_br):
-    ax.set_facecolor("#1a1a1a")
-    ax.grid(True, alpha=0.2, color="#555555", zorder=0)
-ax_bl_r.grid(False)
-
-# ── Static ghost traces ───────────────────────────────────────────────────────
-ax_top.plot(steps_full, pae_arr, color="#555555", lw=1.2, zorder=1)
-ax_top.axhline(pae_arr[-1], color="#888888", lw=1, ls="--", zorder=1,
-               label=f"Final PAE = {pae_arr[-1]:.1f}%")
-ax_top.set_xlim(-2, n_steps + 2)
-ax_top.set_ylim(bottom=0)
-ax_top.set_xlabel("Adam step", fontsize=11)
-ax_top.set_ylabel("PAE (%)", fontsize=11)
-ax_top.legend(fontsize=9, loc="lower right")
-
-ax_bl.plot(steps_p, param_arr[:, 0] * 1e9, color="#4a90c4", lw=1, zorder=1)
-ax_bl.plot(steps_p, param_arr[:, 2] * 1e9, color="#e8a44a", lw=1, zorder=1)
-ax_bl_r.plot(steps_p, param_arr[:, 1] * 1e12, color="#4a90c4", lw=1, ls="--", zorder=1)
-ax_bl_r.plot(steps_p, param_arr[:, 3] * 1e12, color="#e8a44a", lw=1, ls="--", zorder=1)
-ax_bl.set_xlim(-2, len(param_arr) + 2)
-ax_bl.set_xlabel("Step", fontsize=11)
-ax_bl.set_ylabel("Inductance (nH)", color="#4a90c4", fontsize=11)
-ax_bl_r.set_ylabel("Capacitance (pF)", color="#e8a44a", fontsize=11)
-ax_bl.tick_params(axis="y", labelcolor="#4a90c4")
-ax_bl_r.tick_params(axis="y", labelcolor="#e8a44a")
-ax_bl.set_title("Parameter Trajectories", fontsize=11)
-
-# Initial and final PAE sweeps as reference in the bottom-right
-ax_br.plot(Pin_dBm_vals, frame_pae_sweeps[0],  color="#4a90c4", lw=1.2, ls="--",
-           alpha=0.4, label="Initial", zorder=1)
-ax_br.plot(Pin_dBm_vals, frame_pae_sweeps[-1], color="#5cb85c", lw=1.2, ls="-",
-           alpha=0.4, label="Final", zorder=1)
-ax_br.axvline(12, color="#888888", lw=1, ls=":", zorder=1)
-ax_br.set_xlabel("Pin (dBm)", fontsize=11)
-ax_br.set_ylabel("PAE (%)", fontsize=11)
-ax_br.set_title("PAE vs Pin", fontsize=11)
-_pae_max = max(max(s) for s in frame_pae_sweeps)
-ax_br.set_ylim(bottom=0, top=_pae_max * 1.12)
-ax_br.set_xlim(Pin_dBm_vals[0] - 1, Pin_dBm_vals[-1] + 1)
-ax_br.legend(fontsize=8, loc="upper left")
-
-# ── Live artists ──────────────────────────────────────────────────────────────
-live_pae_line,  = ax_top.plot([], [], color="#4a90c4", lw=2.5, zorder=2)
-live_pae_dot,   = ax_top.plot([], [], "o", color="orange", ms=9, zorder=3)
-title_txt = ax_top.set_title("", fontsize=11, pad=8)
-
-live_lin_line,  = ax_bl.plot([], [], color="#4a90c4", lw=2.5, zorder=2, label="L_in (nH)")
-live_lout_line, = ax_bl.plot([], [], color="#ff7f0e", lw=2.5, zorder=2, label="L_out (nH)")
-live_lin_dot,   = ax_bl.plot([], [], "o", color="#4a90c4", ms=7, zorder=3)
-live_lout_dot,  = ax_bl.plot([], [], "o", color="#ff7f0e", ms=7, zorder=3)
-live_cin_line,  = ax_bl_r.plot([], [], color="#4a90c4", lw=1.8, ls="--", zorder=2, label="C_in (pF)")
-live_cout_line, = ax_bl_r.plot([], [], color="#ff7f0e", lw=1.8, ls="--", zorder=2, label="C_out (pF)")
-live_cin_dot,   = ax_bl_r.plot([], [], "o", color="#4a90c4", ms=7, zorder=3)
-live_cout_dot,  = ax_bl_r.plot([], [], "o", color="#ff7f0e", ms=7, zorder=3)
-
-lines_bl = [live_lin_line, live_lout_line, live_cin_line, live_cout_line]
-ax_bl.legend(lines_bl, [l.get_label() for l in lines_bl], fontsize=7, loc="upper right")
-
-# Evolving PAE sweep curve + dot at target
-live_pae_sweep, = ax_br.plot([], [], color="#ff7f0e", lw=2.5, zorder=2)
-live_dot_br,    = ax_br.plot([], [], "o", color="orange", ms=9, zorder=3)
-
-# ── Animation function ────────────────────────────────────────────────────────
-def _animate(fi):
-    step     = frame_indices[fi]
-    pae_step = min(step, n_steps - 1)
-
-    # Top: PAE convergence
-    live_pae_line.set_data(steps_full[:pae_step + 1], pae_arr[:pae_step + 1])
-    live_pae_dot.set_data([pae_step], [pae_arr[pae_step]])
-    title_txt.set_text(f"Optimisation Convergence — step {step} / {n_steps}")
-
-    # Bottom-left: parameter trajectories
-    p_end = min(step + 1, len(param_arr))
-    xp = steps_p[:p_end]
-    live_lin_line.set_data(xp, param_arr[:p_end, 0] * 1e9)
-    live_lout_line.set_data(xp, param_arr[:p_end, 2] * 1e9)
-    live_cin_line.set_data(xp, param_arr[:p_end, 1] * 1e12)
-    live_cout_line.set_data(xp, param_arr[:p_end, 3] * 1e12)
-    live_lin_dot.set_data([xp[-1]], [param_arr[p_end - 1, 0] * 1e9])
-    live_lout_dot.set_data([xp[-1]], [param_arr[p_end - 1, 2] * 1e9])
-    live_cin_dot.set_data([xp[-1]], [param_arr[p_end - 1, 1] * 1e12])
-    live_cout_dot.set_data([xp[-1]], [param_arr[p_end - 1, 3] * 1e12])
-
-    # Bottom-right: full evolving PAE sweep + dot at +12 dBm
-    sweep = frame_pae_sweeps[fi]
-    live_pae_sweep.set_data(Pin_dBm_vals, sweep)
-    pin12_idx = int(np.argmin(np.abs(Pin_dBm_vals - 12.0)))
-    live_dot_br.set_data([Pin_dBm_vals[pin12_idx]], [sweep[pin12_idx]])
-
-
-anim = FuncAnimation(
-    fig_a, _animate,
-    frames=len(frame_indices),
-    interval=1000 // FPS,
-    blit=False,
-)
-
-anim.save(GIF_PATH, writer=PillowWriter(fps=FPS), dpi=DPI)
-plt.close(fig_a)
-print(f"Saved \u2192 {GIF_PATH}")
-print(f"Frames: {len(frame_indices)}   Duration: {len(frame_indices)/FPS:.1f}s at {FPS} fps")
-```
 
     Pre-computing 41 PAE sweeps x 17 Pin points...
 
@@ -1297,20 +930,23 @@ print(f"Frames: {len(frame_indices)}   Duration: {len(frame_indices)/FPS:.1f}s a
     Done.
 
 
-    Saved → pa_optimisation.gif
+    Saved → examples/inverse_design/pa_optimisation.gif
     Frames: 41   Duration: 4.1s at 10 fps
+
+
+![pa_optimisation.gif](pa_optimisation.gif)
 
 
 ## Summary
 
 ### Matching Network — Initial vs Optimised
 
-| Component | Initial | Optimised | Role |
-|-----------|---------|-----------|------|
-| `L_in`  | 0.3 nH | see Cell 14 output | Input L-match shunt arm |
-| `C_in`  | 0.5 pF | see Cell 14 output | Input L-match series arm |
-| `L_out` | 0.3 nH | see Cell 14 output | Output L-match shunt arm |
-| `C_out` | 0.5 pF | see Cell 14 output | Output L-match series arm |
+| Component | Initial | Role |
+|-----------|---------|------|
+| `L_in`  | 0.3 nH | Input L-match shunt arm |
+| `C_in`  | 0.5 pF | Input L-match series arm |
+| `L_out` | 0.3 nH | Output L-match shunt arm |
+| `C_out` | 0.5 pF | Output L-match series arm |
 
 ### What made this possible
 

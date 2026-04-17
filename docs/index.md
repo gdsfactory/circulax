@@ -6,9 +6,9 @@
 </picture>
 
 **A differentiable circuit simulator built on JAX.**
-Define netlists, run transient / DC / AC / harmonic-balance analysis, and differentiate through the solver for gradient-based optimization and inverse design. Circulax aims to be flexible multi-diciplined circuit simulator [SAX](https://github.com/flaport/sax).
+Define netlists, run transient / DC / AC / harmonic-balance analysis, and differentiate through the solver for gradient-based optimization and inverse design. Circulax aims to be flexible multi-diciplined circuit simulator and offering a similar interface to the linear simulator [SAX](https://github.com/flaport/sax).
 
-**[Documentation](https://cdaunt.github.io/circulax/)**
+**[Read the Documentation here](https://cdaunt.github.io/circulax/)**
 
 ## Installation
 ```sh

@@ -6,73 +6,16 @@ This notebook demonstrates how a **Cascaded Mach-Zehnder (CMZ) lattice filter** 
 
 A single-stage MZI has a sinusoidal transfer function — its passband rolls off gradually, so channels at the passband edges leak into neighbouring detectors. The CMZ topology replaces the root splitter node with a **multi-stage lattice filter**: a chain of directional couplers interleaved with waveguide arm pairs of increasing path-length difference. This creates a Chebyshev-like response with a flat top and sharp skirts.
 
-## Device topology (Horst et al. 4-channel design)
-
-```
-                     Root (2-stage lattice)
- Laser ── DC_r1 ─── WG_r1a ── DC_r2 ─── WG_r2a ── DC_r3
-                └── WG_r1b ──┘      └── WG_r2b ──┘   │
-                                                       ├── Leaf A (1-stage MZI)
-                                                       │    DC_a1 ─ WG_a1 ─ DC_a2 ─ Det_1 (1285 nm)
-                                                       │        └── WG_a2 ─┘     └── Det_3 (1315 nm)
-                                                       │
-                                                       └── Leaf B (1-stage MZI)
-                                                            DC_b1 ─ WG_b1 ─ DC_b2 ─ Det_2 (1300 nm)
-                                                                └── WG_b2 ─┘     └── Det_4 (1330 nm)
-```
-
-## Trainable parameters (11 total)
-
-- **7 DC coupling coefficients**: `k_r1, k_r2, k_r3` (root) + `k_a1, k_a2` (leaf A) + `k_b1, k_b2` (leaf B)
-- **4 long arm lengths**: `L_r1a, L_r2a` (root stages) + `L_a1` (leaf A) + `L_b1` (leaf B)
-
-Paper-derived initial values use coupling `(0.5, 0.29, 0.08)` for the root — designed analytically for a flat Chebyshev passband — and equal-split (0.5) for leaves.
-
-## Why backpropagation is essential
-
-With 11 tunable parameters, finite-difference gradient estimation costs **12 circuit solves** per gradient step. `jax.grad` computes the exact gradient for all 11 parameters in **~2 solves** (forward + backward). For a photonic integrated circuit with 100+ elements, backprop is the only practical route to optimisation.
+## Schematic
 
 
-```python
-import jax
-import jax.numpy as jnp
-import matplotlib.pyplot as plt
-import numpy as np
-import optax
 
-from circulax import compile_circuit
-from circulax.components.electronic import Resistor
-from circulax.components.photonic import DirectionalCoupler, OpticalSource, OpticalWaveguide
-from circulax.utils import update_group_params, update_params_dict
-
-# 64-bit precision is critical for photonic circuits: small phase differences
-# between arm lengths produce small field changes, and gradients can be tiny.
-jax.config.update("jax_enable_x64", True)
-
-plt.rcParams.update({
-    "figure.figsize": (8, 3.5),
-    "axes.grid": True,
-    "lines.color": "grey",
-    "patch.edgecolor": "grey",
-    "text.color": "grey",
-    "axes.facecolor": "white",
-    "axes.edgecolor": "grey",
-    "axes.labelcolor": "grey",
-    "xtick.color": "grey",
-    "ytick.color": "grey",
-    "grid.color": "grey",
-    "figure.facecolor": "white",
-    "figure.edgecolor": "white",
-    "savefig.facecolor": "white",
-    "savefig.edgecolor": "white",
-})
-```
-
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 17:32:50,168:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_1_0.png)
 
 
-## CMZ topology in detail
+
+
+
 
 ### Design equations (Horst et al. 2013)
 
@@ -92,162 +35,33 @@ $$\Delta L_{\rm FS} = \frac{\lambda_c}{n_{\rm eff}} = \frac{1307.5}{2.4 \times 1
 The root coupling coefficients `(0.5, 0.29, 0.08)` are the Horst et al. analytic optimum for a flat-top 2-stage Chebyshev filter response.
 
 
-```python
-import matplotlib.pyplot as plt
-import schemdraw
-import schemdraw.elements as elm
-from schemdraw.segments import SegmentArc, SegmentPoly
+## Trainable parameters (11 total)
 
+- **7 DC coupling coefficients**: `k_r1, k_r2, k_r3` (root) + `k_a1, k_a2` (leaf A) + `k_b1, k_b2` (leaf B)
+- **4 long arm lengths**: `L_r1a, L_r2a` (root stages) + `L_a1` (leaf A) + `L_b1` (leaf B)
 
-class DirectionalCouplerSymbol(elm.Element):
-    """2×2 Directional Coupler.
-    Anchors: p1=top-left, p2=bot-left, p3=top-right, p4=bot-right.
-    """
+Paper-derived initial values use coupling `(0.5, 0.29, 0.08)` for the root — designed analytically for a flat Chebyshev passband — and equal-split (0.5) for leaves.
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        w, h = 0.5, 0.3
-        self.segments.append(
-            SegmentPoly(
-                [(-0.5*w, -0.5*h), (0.5*w, -0.5*h), (0.5*w, 0.5*h), (-0.5*w, 0.5*h)],
-                color="firebrick", fill="white", zorder=4,
-            )
-        )
-        self.segments.append(
-            SegmentArc(
-                center=(0, 0.25*h), width=0.8*w, height=-h*0.45, angle=0,
-                theta1=0, theta2=180, color="firebrick", zorder=5,
-            )
-        )
-        self.segments.append(
-            SegmentArc(
-                center=(0, -0.25*h), width=0.8*w, height=h*0.45,angle=180,
-                theta1=180, theta2=0, color="firebrick", zorder=5,
-            )
-        )
-        self.anchors["p1"] = (-0.5*w, 0.35*h)
-        self.anchors["p2"] = (-0.5*w, -0.35*h)
-        self.anchors["p3"] = (0.5*w, 0.35*h)
-        self.anchors["p4"] = (0.5*w, -0.35*h)
-        self.params["drop"] = self.anchors["p3"]
+## Backpropagation implementation
 
-
-WC  = "firebrick"
-WLW = 2.5
-ARM = 2.4   # arm length between DCs
-VRT = 1.5   # vertical routing offset root → leaf
-HST = 1.2   # horizontal routing offset root → leaf
-DHH = 0.5   # DC box half-height
-
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.axis("off")
-ax.set_title("CMZ Lattice Filter — 4-Channel Demultiplexer", color="grey", pad=12)
-
-with schemdraw.Drawing(canvas=ax) as d:
-    d.config(fontsize=8, unit=3, inches_per_unit=0.52)
-
-    # ── Root stage ────────────────────────────────────────────────────────
-    dc_r1 = d.add(DirectionalCouplerSymbol().at((0, 0)).label("DC_r1\nk=0.50", loc="top"))
-    d.add(
-        elm.Line().left().length(1.4).at(dc_r1.p1).color(WC).linewidth(WLW).label("Laser", loc="left")
-    )
-
-    wg_r1a = d.add(
-        elm.Line().right().length(ARM).at(dc_r1.p3).color(WC).linewidth(WLW)
-        .label("WG_r1a  264 µm", loc="top")
-    )
-    d.add(
-        elm.Line().right().length(ARM).at(dc_r1.p4).color(WC).linewidth(WLW)
-        .label("WG_r1b  250 µm", loc="bottom")
-    )
-
-    dc_r2 = d.add(
-        DirectionalCouplerSymbol().at(wg_r1a.end).anchor("p1").label("DC_r2\nk=0.29", loc="top")
-    )
-
-    wg_r2a = d.add(
-        elm.Line().right().length(ARM).at(dc_r2.p3).color(WC).linewidth(WLW)
-        .label("WG_r2a  278 µm", loc="top")
-    )
-    d.add(
-        elm.Line().right().length(ARM).at(dc_r2.p4).color(WC).linewidth(WLW)
-        .label("WG_r2b  250 µm", loc="bottom")
-    )
-
-    dc_r3 = d.add(
-        DirectionalCouplerSymbol().at(wg_r2a.end).anchor("p1").label("DC_r3\nk=0.08", loc="top")
-    )
-
-    # ── Leaf A: λ₁=1285 nm · λ₃=1315 nm ─────────────────────────────────
-    rh_a0 = d.add(elm.Line().right().length(0.5*HST).at(dc_r3.p3).color(WC).linewidth(WLW))
-    up_a = d.add(elm.Line().up().length(VRT - DHH).at(rh_a0.end).color(WC).linewidth(WLW))
-    rh_a = d.add(elm.Line().right().length(0.5*HST).at(up_a.end).color(WC).linewidth(WLW))
-
-    dc_a1 = d.add(
-        DirectionalCouplerSymbol().at(rh_a.end).anchor("p2").label("DC_a1\nk=0.50", loc="top")
-    )
-    wg_a1 = d.add(
-        elm.Line().right().length(ARM).at(dc_a1.p3).color(WC).linewidth(WLW)
-        .label("WG_a1  257 µm", loc="top")
-    )
-    d.add(
-        elm.Line().right().length(ARM).at(dc_a1.p4).color(WC).linewidth(WLW)
-        .label("WG_a2  250 µm", loc="bottom")
-    )
-
-    dc_a2 = d.add(
-        DirectionalCouplerSymbol().at(wg_a1.end).anchor("p1").label("DC_a2\nk=0.50", loc="top")
-    )
-    d.add(
-        elm.Line().right().length(1.2).at(dc_a2.p3).color(WC).linewidth(WLW)
-        .label("Det_1  1285 nm", loc="right")
-    )
-    d.add(
-        elm.Line().right().length(1.2).at(dc_a2.p4).color(WC).linewidth(WLW)
-        .label("Det_3  1315 nm", loc="right")
-    )
-
-    # ── Leaf B: λ₂=1300 nm · λ₄=1330 nm ─────────────────────────────────
-    rh_b0 = d.add(elm.Line().right().length(0.5*HST).at(dc_r3.p4).color(WC).linewidth(WLW))
-    dn_b = d.add(elm.Line().down().length(VRT - DHH).at(rh_b0.end).color(WC).linewidth(WLW))
-    rh_b = d.add(elm.Line().right().length(0.5*HST).at(dn_b.end).color(WC).linewidth(WLW))
-
-    dc_b1 = d.add(
-        DirectionalCouplerSymbol().at(rh_b.end).anchor("p1").label("DC_b1\nk=0.50", loc="bottom")
-    )
-    wg_b1 = d.add(
-        elm.Line().right().length(ARM).at(dc_b1.p3).color(WC).linewidth(WLW)
-        .label("WG_b1  258 µm", loc="top")
-    )
-    d.add(
-        elm.Line().right().length(ARM).at(dc_b1.p4).color(WC).linewidth(WLW)
-        .label("WG_b2  250 µm", loc="bottom")
-    )
-
-    dc_b2 = d.add(
-        DirectionalCouplerSymbol().at(wg_b1.end).anchor("p1").label("DC_b2\nk=0.50", loc="bottom")
-    )
-    d.add(
-        elm.Line().right().length(1.2).at(dc_b2.p3).color(WC).linewidth(WLW)
-        .label("Det_2  1300 nm", loc="right")
-    )
-    d.add(
-        elm.Line().right().length(1.2).at(dc_b2.p4).color(WC).linewidth(WLW)
-        .label("Det_4  1330 nm", loc="right")
-    )
-
-
-
-```
-
-
-
-![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_3_0.png)
-
-
+With 11 tunable parameters, finite-difference gradient estimation costs **12 circuit solves** per gradient step. `jax.grad` computes the exact gradient for all 11 parameters in **~2 solves** (forward + backward). For a photonic integrated circuit with 100+ elements, backprop is the only practical route to optimisation.
 
 
 ```python
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from circulax import compile_circuit
+from circulax.components.electronic import Resistor
+from circulax.components.photonic import DirectionalCoupler, OpticalSource, OpticalWaveguide
+from circulax.utils import update_group_params, update_params_dict
+
+# 64-bit precision is critical for photonic circuits: small phase differences
+# between arm lengths produce small field changes, and gradients can be tiny.
+jax.config.update("jax_enable_x64", True)
+
+
 # ── Component model registry ──────────────────────────────────────────────
 models = {
     "ground":    lambda: 0,
@@ -358,6 +172,10 @@ TARGET_WLS = jnp.array([1285.0, 1300.0, 1315.0, 1330.0])   # nm
 det_nodes  = jnp.array([port_map[f"Det_{i+1},p1"] for i in range(4)])
 Y_GUESS    = jnp.ones(sys_size * 2)   # flat initial guess for Newton-Raphson
 ```
+
+    KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-17 15:57:02,073:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
 
     System size: 25 real nodes  (50 complex DOFs)
     Component groups: ['source', 'dc', 'waveguide', 'resistor']
@@ -572,7 +390,7 @@ print("starting point. Backpropagation will find the arm lengths that make them 
 
 
 
-![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_8_0.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_7_0.png)
 
 
 
@@ -755,12 +573,37 @@ plt.show()
 
 
 
-![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_11_0.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_10_0.png)
 
 
 
 
 ```python
+sweep_wls = jnp.linspace(1260.0, 1360.0, 300)
+
+def get_raw_power_sweep(params, wavelengths):
+    """N*4 unnormalised power matrix for a wavelength sweep."""
+    k_r1, k_r2, k_r3, k_a1, k_a2, k_b1, k_b2, L_r1a, L_r2a, L_a1, L_b1 = params
+    grps = update_params_dict(groups, "dc", "DC_r1", "coupling", k_r1)
+    grps = update_params_dict(grps,   "dc", "DC_r2", "coupling", k_r2)
+    grps = update_params_dict(grps,   "dc", "DC_r3", "coupling", k_r3)
+    grps = update_params_dict(grps,   "dc", "DC_a1", "coupling", k_a1)
+    grps = update_params_dict(grps,   "dc", "DC_a2", "coupling", k_a2)
+    grps = update_params_dict(grps,   "dc", "DC_b1", "coupling", k_b1)
+    grps = update_params_dict(grps,   "dc", "DC_b2", "coupling", k_b2)
+    grps = update_params_dict(grps,   "waveguide", "WG_r1a", "length_um", L_r1a)
+    grps = update_params_dict(grps,   "waveguide", "WG_r2a", "length_um", L_r2a)
+    grps = update_params_dict(grps,   "waveguide", "WG_a1",  "length_um", L_a1)
+    grps = update_params_dict(grps,   "waveguide", "WG_b1",  "length_um", L_b1)
+
+    def solve_wl(wl):
+        grps_wl = update_group_params(grps, "waveguide", "wavelength_nm", wl)
+        y_flat  = circuit.solver.solve_dc(grps_wl, Y_GUESS)
+        E_det   = y_flat[det_nodes] + 1j * y_flat[det_nodes + sys_size]
+        return jnp.abs(E_det) ** 2
+
+    return jax.vmap(solve_wl)(wavelengths)
+
 # ── Final power routing matrix ─────────────────────────────────────────────
 
 print("Computing final power routing matrix...")
@@ -781,6 +624,7 @@ for i, (wl, p) in enumerate(zip([1285, 1300, 1315, 1330], diag_final)):
 print(f"  Mean contrast: {np.mean(diag_final)*100:.1f}%")
 print()
 print(f"Improvement: {diag_init.mean()*100:.1f}% -> {np.mean(diag_final)*100:.1f}%")
+
 ```
 
     Computing final power routing matrix...
@@ -788,7 +632,7 @@ print(f"Improvement: {diag_init.mean()*100:.1f}% -> {np.mean(diag_final)*100:.1f
 
 
 
-![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_12_1.png)
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_11_1.png)
 
 
 
@@ -803,103 +647,27 @@ print(f"Improvement: {diag_init.mean()*100:.1f}% -> {np.mean(diag_final)*100:.1f
     Improvement: 6.9% -> 100.0%
 
 
-
-```python
-# ── Wavelength sweep: transmission spectra ─────────────────────────────────
-#
-# Sweep 300 wavelengths across a 100 nm window to reveal the passband shapes.
-# The CMZ lattice filter should show flat-topped passbands with steep transitions.
-
-sweep_wls = jnp.linspace(1260.0, 1360.0, 300)
-
-def get_raw_power_sweep(params, wavelengths):
-    """N×4 unnormalised power matrix for a wavelength sweep."""
-    k_r1, k_r2, k_r3, k_a1, k_a2, k_b1, k_b2, L_r1a, L_r2a, L_a1, L_b1 = params
-    grps = update_params_dict(groups, "dc", "DC_r1", "coupling", k_r1)
-    grps = update_params_dict(grps,   "dc", "DC_r2", "coupling", k_r2)
-    grps = update_params_dict(grps,   "dc", "DC_r3", "coupling", k_r3)
-    grps = update_params_dict(grps,   "dc", "DC_a1", "coupling", k_a1)
-    grps = update_params_dict(grps,   "dc", "DC_a2", "coupling", k_a2)
-    grps = update_params_dict(grps,   "dc", "DC_b1", "coupling", k_b1)
-    grps = update_params_dict(grps,   "dc", "DC_b2", "coupling", k_b2)
-    grps = update_params_dict(grps,   "waveguide", "WG_r1a", "length_um", L_r1a)
-    grps = update_params_dict(grps,   "waveguide", "WG_r2a", "length_um", L_r2a)
-    grps = update_params_dict(grps,   "waveguide", "WG_a1",  "length_um", L_a1)
-    grps = update_params_dict(grps,   "waveguide", "WG_b1",  "length_um", L_b1)
-
-    def solve_wl(wl):
-        grps_wl = update_group_params(grps, "waveguide", "wavelength_nm", wl)
-        y_flat  = circuit.solver.solve_dc(grps_wl, Y_GUESS)
-        E_det   = y_flat[det_nodes] + 1j * y_flat[det_nodes + sys_size]
-        return jnp.abs(E_det) ** 2
-
-    return jax.vmap(solve_wl)(wavelengths)   # shape: (N_wl, 4)
+    Pre-computing 44 wavelength sweeps for animation...
 
 
-print("Running wavelength sweep (vmap over 300 wavelengths)...")
-sweep_power = jax.jit(get_raw_power_sweep)(params, sweep_wls)
-print("Done.")
+      [  1/44] step 0
 
-fig, ax = plt.subplots(figsize=(10, 4))
-sweep_wls_np   = np.array(sweep_wls)
-sweep_power_np = np.array(sweep_power)   # shape: (300, 4)
-total_power    = sweep_power_np.sum(axis=1, keepdims=True) + 1e-12
-sweep_norm     = sweep_power_np / total_power
 
-det_labels  = ["Det_1 (1285 nm)", "Det_2 (1300 nm)", "Det_3 (1315 nm)", "Det_4 (1330 nm)"]
-target_wls  = [1285, 1300, 1315, 1330]
-line_colors = ["C0", "C1", "C2", "C3"]
+      [ 16/44] step 25
 
-for i, (label, color, wl_t) in enumerate(zip(det_labels, line_colors, target_wls)):
-    ax.plot(sweep_wls_np, sweep_norm[:, i], color=color, lw=2, label=label)
-    ax.axvline(wl_t, color=color, ls=":", lw=0.8, alpha=0.6)
 
-ax.set_xlabel("Wavelength (nm)")
-ax.set_ylabel("Normalised power")
-ax.set_title("CMZ Demux — Transmission Spectra (after training)")
-ax.legend(fontsize=9)
-ax.set_xlim(1260, 1360)
-ax.set_ylim(-0.05, 1.1)
-plt.tight_layout()
-plt.show()
-
-# Compute -3 dB bandwidth for each channel
-print("\nApproximate -3 dB passband widths:")
-for i, (label, wl_t) in enumerate(zip(det_labels, target_wls)):
-    chan = sweep_norm[:, i]
-    peak = chan.max()
-    half_power = peak / 2
-    mask = chan >= half_power
-    if mask.sum() > 1:
-        bw = sweep_wls_np[mask][-1] - sweep_wls_np[mask][0]
-        print(f"  {label}: ~{bw:.1f} nm")
-    else:
-        print(f"  {label}: <resolution")
-```
-
-    Running wavelength sweep (vmap over 300 wavelengths)...
+      [ 31/44] step 266
 
 
     Done.
 
 
+    Saved → examples/inverse_design/cmz_optimisation.gif  (44 frames)
 
 
-![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_13_2.png)
+![cmz_optimisation.gif](cmz_optimisation.gif)
 
 
-
-
-    Approximate -3 dB passband widths:
-      Det_1 (1285 nm): ~74.9 nm
-      Det_2 (1300 nm): ~66.9 nm
-      Det_3 (1315 nm): ~61.9 nm
-      Det_4 (1330 nm): ~72.9 nm
-
-
-## Summary
-
-We trained a **Cascaded Mach-Zehnder (CMZ) lattice filter** wavelength demultiplexer using gradient-based optimisation, achieving near-perfect wavelength routing.
 
 ### Key results
 
@@ -920,6 +688,6 @@ We trained a **Cascaded Mach-Zehnder (CMZ) lattice filter** wavelength demultipl
 
 ### Backpropagation scaling
 
-With 11 parameters, backpropagation computes all gradients in ~2 circuit solves per step — versus 12 solves for finite differences. For a production photonic IC with 100+ phase elements, backprop is the only viable optimisation strategy.
+With 11 parameters, backpropagation computes all gradients in ~2 circuit solves per step — versus 12 solves for finite differences. For a production photonic IC with 100+ phase elements, backprop enables a viable way to optimize such a circuit.
 
-The key insight is that `jax.grad` works through the entire circulax pipeline — netlist compilation, sparse linear solve, complex field assembly — without any special-casing of the photonic physics.
+The key point is that `jax.grad` works through the entire circulax solver — sparse linear solve, complex field assembly — without any special-casing of the photonic physics. Currently, circuit topology is **not** part of this differentiable flow as JAX requires functions should have floating numbers in and out to be auto-differentiable

@@ -27,7 +27,7 @@ jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-15 17:32:29,307:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 15:56:43,027:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -123,7 +123,7 @@ plt.show()
     Sweeping DC Operating Point (with Continuation)...
 
 
-    Simulation Time: 0.351s
+    Simulation Time: 0.313s
 
 
 

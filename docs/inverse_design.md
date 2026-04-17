@@ -1,18 +1,17 @@
 # Inverse Design
 
-Circulax is fully differentiable — gradients flow from a scalar loss function back through the solver and into every component parameter. This enables **gradient-based inverse design**: define a target, write a loss, and let `jax.grad` + an optimizer find the circuit parameters automatically.
+Circulax is fully differentiable: `jax.grad` computes exact gradients from any scalar loss back through the solver into component parameters.
 
 ## Back-propagation vs Traditional Methods
 
 | | Finite Differences | Adjoint / Sensitivity | Back-propagation (AD) |
 |---|---|---|---|
-| Gradient cost | O(N) simulations per step | O(1) but requires manual derivation | O(1), fully automatic |
+| Gradient cost | O(N) simulations per step | O(1) but requires manual derivation | O(1), automatic |
 | Accuracy | Approximate (step-size dependent) | Exact (if correctly derived) | Exact (machine precision) |
-| Implementation | Trivial but slow | Complex, error-prone | Zero effort — `jax.grad` handles it |
-| Scales to | ~10 parameters | Large, if hand-derived | Arbitrary — 10 or 10,000 parameters |
+| Scales to | ~10 parameters | Large, if hand-derived | Arbitrary |
 | Non-linear models | Works but expensive | Requires linearisation | Works on arbitrary non-linearities |
 
-With finite differences you re-run the simulation once per parameter. With back-propagation the cost is essentially **one forward + one backward pass**, regardless of parameter count. This makes it practical to optimise circuits with hundreds of design variables — something infeasible with parameter sweeps.
+Finite differences costs one simulation per parameter. Back-propagation costs one forward + one backward pass regardless of parameter count.
 
 ## How it works in circulax
 
