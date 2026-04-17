@@ -23,7 +23,7 @@ jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:56:49,752:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:32:50,875:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ---
@@ -117,7 +117,7 @@ print(f"Node map: {net_map}")
 ```
 
     System size: 6 variables
-    Node map: {'L1,p2': 1, 'C1,p1': 1, 'Vs,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'L1,p1': 2, 'R1,p2': 2, 'Vs,p1': 3, 'R1,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
+    Node map: {'L1,p2': 1, 'C1,p1': 1, 'Vs,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'R1,p2': 2, 'L1,p1': 2, 'R1,p1': 3, 'Vs,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
 
 
 

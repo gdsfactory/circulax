@@ -27,7 +27,7 @@ from circulax.solvers import setup_transient
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:56:54,019:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:32:56,782:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -155,7 +155,9 @@ plt.show()
 ```
 
     Compiling...
-    {'C1,p1': 1, 'L1,p2': 1, 'C1,p2': 0, 'V1,p2': 0, 'GND,p1': 0, 'L1,p1': 2, 'R1,p2': 2, 'R1,p1': 3, 'V1,p1': 3, 'V1,i_src': 4, 'L1,i_L': 5}
+
+
+    {'L1,p2': 1, 'C1,p1': 1, 'GND,p1': 0, 'V1,p2': 0, 'C1,p2': 0, 'L1,p1': 2, 'R1,p2': 2, 'V1,p1': 3, 'R1,p1': 3, 'V1,i_src': 4, 'L1,i_L': 5}
     Total System Size: 6
     Group: source_voltage
       Count: 1
@@ -185,7 +187,7 @@ plt.show()
 
 
 
-![png](lcr_transient_files/lcr_transient_6_2.png)
+![png](lcr_transient_files/lcr_transient_6_3.png)
 
 
 

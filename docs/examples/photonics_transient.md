@@ -25,7 +25,7 @@ from circulax.solvers import setup_transient
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:56:43,106:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:32:40,679:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -116,6 +116,8 @@ else:
 
     --- DEMO: Photonic Transient (Flat Vector Fix) ---
     1. Compiling...
+
+
     2. Solving DC Operating Point...
 
 
@@ -128,4 +130,4 @@ else:
 
 
 
-![png](photonics_transient_files/photonics_transient_4_3.png)
+![png](photonics_transient_files/photonics_transient_4_4.png)

@@ -73,7 +73,7 @@ plt.rcParams.update({
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:57:47,929:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:33:54,597:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## 1. Butterworth analytical targets
@@ -184,7 +184,7 @@ print(f"\nPort node indices: {port_nodes}")
 ```
 
     System size: 6 unknowns
-    Port map: {'C1,p1': 1, 'L1,p2': 1, 'L2,p1': 1, 'Rp2,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'Rp1,p2': 0, 'L1,p1': 2, 'Rp1,p1': 2, 'Rp2,p1': 3, 'L2,p2': 3, 'L1,i_L': 4, 'L2,i_L': 5}
+    Port map: {'L1,p2': 1, 'C1,p1': 1, 'L2,p1': 1, 'Rp1,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'Rp2,p2': 0, 'Rp1,p1': 2, 'L1,p1': 2, 'Rp2,p1': 3, 'L2,p2': 3, 'L1,i_L': 4, 'L2,i_L': 5}
 
     Component groups: ['resistor', 'inductor', 'capacitor']
 
@@ -301,11 +301,13 @@ L1_opt, C1_opt, L2_opt = np.exp(np.array(log_params))
 
     Step   1: loss=0.057315  L1=26.28 nH  C1=190.25 pF  L2=26.28 nH
     Step  50: loss=0.000136  L1=90.66 nH  C1=57.51 pF  L2=90.66 nH
-
-
     Step 100: loss=0.000002  L1=80.49 nH  C1=63.10 pF  L2=80.49 nH
+
+
     Step 150: loss=0.000000  L1=79.50 nH  C1=63.71 pF  L2=79.50 nH
     Step 200: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
+
+
     Step 250: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
     Step 300: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
 
@@ -418,8 +420,6 @@ print(f"\nPassivity check: max(|S11|² + |S21|²) = {float(jnp.max(power_sum)):.
       L1: 79.58 nH  vs  79.58 nH  (0.0% error)
       C1: 63.66 pF  vs  63.66 pF  (0.0% error)
       L2: 79.58 nH  vs  79.58 nH  (0.0% error)
-
-
 
     Passivity check: max(|S11|² + |S21|²) = 1.000000  (must be ≤ 1.0)
 

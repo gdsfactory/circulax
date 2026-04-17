@@ -66,7 +66,7 @@ jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:56:43,039:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:32:40,326:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Component definitions

@@ -39,7 +39,7 @@ jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:56:50,008:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:32:50,834:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -207,7 +207,7 @@ else:
     Generating 500-stage LC Ladder...
 
 
-    Compilation finished in 0.5431s
+    Compilation finished in 0.5545s
     System Matrix Size: 1004x1004 (1008016 elements)
     Solving DC Operating Point...
 
@@ -216,7 +216,7 @@ else:
 
 
        ✅ Simulation Successful
-    Simulation completed in 1.4279s
+    Simulation completed in 1.8144s
     Total Steps: 3172
 
 

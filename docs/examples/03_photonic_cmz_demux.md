@@ -174,7 +174,7 @@ Y_GUESS    = jnp.ones(sys_size * 2)   # flat initial guess for Newton-Raphson
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:57:02,073:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:33:05,397:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
     System size: 25 real nodes  (50 complex DOFs)

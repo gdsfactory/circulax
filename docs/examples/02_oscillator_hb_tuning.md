@@ -65,7 +65,7 @@ pio.renderers.default = "png"
 ```
 
     KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 15:57:00,081:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-04-17 17:33:04,338:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Van der Pol component
@@ -188,8 +188,10 @@ print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (
     Tank loss conductance   : 0.000100 S  (1/Rdamp)
     Net gain margin         : 200×  >> 1, oscillation guaranteed
 
+
+
     System size : 3 unknowns
-    Node map    : {'L1,p1': 1, 'C1,p1': 1, 'VDP,p1': 1, 'Rdamp,p1': 1, 'C1,p2': 0, 'GND,p1': 0, 'VDP,p2': 0, 'Rdamp,p2': 0, 'L1,p2': 0, 'L1,i_L': 2}
+    Node map    : {'VDP,p1': 1, 'C1,p1': 1, 'Rdamp,p1': 1, 'L1,p1': 1, 'C1,p2': 0, 'VDP,p2': 0, 'GND,p1': 0, 'Rdamp,p2': 0, 'L1,p2': 0, 'L1,i_L': 2}
     Groups      : ['vdp', 'inductor', 'capacitor', 'resistor']
     Oscillator node index: 1
 
