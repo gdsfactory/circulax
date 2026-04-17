@@ -22,7 +22,7 @@ Usage
   pixi run -e benchmark python benchmarking/lc_ladder_testbench.py
   pixi run -e benchmark python benchmarking/lc_ladder_testbench.py --sections 100 1000
   pixi run -e benchmark python benchmarking/lc_ladder_testbench.py \
-      --sections 100 --backends klu_split_refactor klu_rs_split_refactor
+      --sections 100 --backends klu_split_refactor klu_split_factor
 """
 
 from __future__ import annotations
@@ -92,12 +92,9 @@ MODELS_MAP = {
 # Default sweep — override with --sections / --backends
 SWEEP_SECTIONS = [100, 500, 2000]
 BACKENDS_TO_COMPARE = [
-    "klu_rs_split_refactor",
-    "klu_rs_split_factor",
-    "klu_rs_split",
     "klu_split_factor",
     "klu_split_refactor",
-    "klu_split"
+    "klu_split",
 ]
 
 
@@ -279,30 +276,6 @@ def _print_backend_summaries(results: dict[str, dict[int, dict]], sections: list
     hdr_cols = f"  {'N':>7}  {'sys_size':>9}  {'compile':>8}  {'warmup':>7}"
     hdr_cols += f"  {'sim':>7}  {'steps':>7}  {'µs/step':>9}  {'V_out@T_MAX':>12}"
     for backend in backends:
-        print(f"\n── {backend} ──────────────────────────────────────────────────────")  # noqa: T201
-        print(hdr_cols)  # noqa: T201
-        print("  " + "─" * (len(hdr_cols) - 2))  # noqa: T201
-        for n in sections:
-            r = results[backend].get(n, {})
-            if "error" in r:
-                print(f"  {n:>7,}  ERROR: {r['error']}")  # noqa: T201
-                continue
-            status = "" if r.get("converged") else "  FAILED"
-            print(  # noqa: T201
-                f"  {r['n_sections']:>7,}  "
-                f"{r['sys_size']:>9,}  "
-                f"{r['compile_time']:>7.3f}s  "
-                f"{r['warmup_time']:>6.3f}s  "
-                f"{r['elapsed']:>6.2f}s  "
-                f"{r['n_steps']:>7,}  "
-                f"{r['us_per_step']:>8.2f}µs  "
-                f"{r['v_out_final']:>11.4f}V"
-                f"{status}"
-            )
-
-
-def main() -> None:
-    """Parse CLI arguments and run the multi-backend LC ladder benchmark."""
         print(f"\n── {backend} ──────────────────────────────────────────────────────")  # noqa: T201
         print(hdr_cols)  # noqa: T201
         print("  " + "─" * (len(hdr_cols) - 2))  # noqa: T201

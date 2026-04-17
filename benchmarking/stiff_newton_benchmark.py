@@ -31,7 +31,7 @@ Usage::
   pixi run -e benchmark python benchmarking/stiff_newton_benchmark.py
   pixi run -e benchmark python benchmarking/stiff_newton_benchmark.py \\
       --stages 5 10 20 --dt 1e-6 5e-6 10e-6 20e-6 \\
-      --backends klu_rs_split_factor klu_rs_split_refactor klu_split_factor klu_split_refactor
+      --backends klu_split_factor klu_split_refactor
 """
 
 from __future__ import annotations
@@ -122,12 +122,10 @@ NEWTON_ATOL = 1e-8
 NEWTON_MAX_STEPS = 100
 
 BACKENDS_TO_COMPARE = [
-    "klu_rs_split_factor",
-    "klu_rs_split_refactor",
     "klu_split_factor",
     "klu_split_refactor",
 ]
-REFERENCE_BACKEND = "klu_rs_split_refactor"
+REFERENCE_BACKEND = "klu_split_refactor"
 
 DEFAULT_DT_VALUES = [1e-6, 5e-6, 10e-6, 20e-6]   # 5%, 25%, 50%, 100% of LC period
 

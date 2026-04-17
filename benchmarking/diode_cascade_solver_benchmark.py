@@ -32,7 +32,7 @@ Usage
   pixi run -e benchmark python benchmarking/diode_cascade_solver_benchmark.py \\
       --circuit ladder --stages 10 50 200
   pixi run -e benchmark python benchmarking/diode_cascade_solver_benchmark.py \\
-      --backends klu_split_factor klu_split_refactor klu_rs_split_factor klu_rs_split_refactor
+      --backends klu_split_factor klu_split_refactor klu_split
 """
 
 from __future__ import annotations
@@ -144,14 +144,12 @@ MODELS_MAP = {
 }
 
 BACKENDS_TO_COMPARE = [
-    "klu_rs_split_refactor",
-    "klu_rs_split_factor",
     "klu_split_factor",
     "klu_split_refactor",
-    "klu_rs_split",
+    "klu_split",
 ]
 
-REFERENCE_BACKEND = "klu_rs_split_refactor"
+REFERENCE_BACKEND = "klu_split_refactor"
 
 
 # ---------------------------------------------------------------------------

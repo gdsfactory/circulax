@@ -1,5 +1,6 @@
 """circulax: A differentiable, JAX based circuit simulator."""
 
+from circulax._version import __version__
 from circulax.circuit import Circuit, compile_circuit
 from circulax.compiler import compile_netlist
 from circulax.netlist import build_net_map, netlist

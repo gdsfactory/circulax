@@ -21,9 +21,9 @@ except ImportError:
 def free_numeric(handle, dependency=None):  # noqa: ANN001, ANN201, ARG001
     """Dispatch free to the correct backend based on handle type.
 
-    Both ``klujax.KLUHandleManager`` and ``klujax_rs.KLUHandleManager`` expose ``.close()``,
-    which calls their respective backend's FFI free function.  Duck-typing is used so that
-    handles from either backend are freed correctly without cross-module ``isinstance`` checks.
+    ``klujax.KLUHandleManager`` exposes ``.close()``, which calls the backend's FFI free
+    function.  Duck-typing is used so handles are freed correctly without ``isinstance``
+    checks against concrete backend types.
     """
     if hasattr(handle, "close"):
         handle.close()

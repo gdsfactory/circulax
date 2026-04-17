@@ -35,17 +35,7 @@ DAMPING_EPS: float = 1e-9
 split_solver_available = True
 from klujax import KLUHandleManager
 
-try:
-    import klujax_rs as klurs
-    from klujax_rs import KLUHandleManager as KLURSHandleManager
-except ImportError:
-    # Silently falling back to klujax until package is ready
-    klurs = klujax
-    from klujax import KLUHandleManager as KLURSHandleManager
-
 split_refactor_available: bool = split_solver_available and hasattr(klujax, "refactor")
-split_rs_refactor_available: bool = split_solver_available and hasattr(klurs, "refactor")
-split_rs_fused_available: bool = split_solver_available and hasattr(klurs, "refactor_and_solve")
 
 
 # ---------------------------------------------------------------------------
@@ -537,62 +527,6 @@ class KLUSplitSolver(CircuitLinearSolver):
         )
 
 
-class KlursSplitSolver(KLUSplitSolver):
-    """Solves the system using the rust wrapped KLU sparse solver (via `klu-rs`) with split interface.
-
-    This solver performs symbolic analysis ONCE during initialization and reuses
-    the symbolic handle for subsequent solves, significantly speeding up non-linear
-    simulations (Newton-Raphson iterations).
-
-    Best For:
-        - Large circuits (N > 5000) running on CPU.
-        - DC Operating Points of massive meshes.
-
-    Attributes:
-        Bp, Bi: CSC format indices (fixed structure).
-        csc_map_idx: Mapping from raw value indices to CSC value vector.
-        symbolic_handle: Pointer to the pre-computed KLU symbolic analysis.
-
-
-    """
-
-    _handle_wrapper: KLURSHandleManager = eqx.field(static=True)
-
-    def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-        solution = klurs.solve_with_symbol(
-            self.u_rows,
-            self.u_cols,
-            coalesced_vals,
-            residual,
-            self._handle_wrapper.handle,
-        )
-        return lx.Solution(value=solution, result=lx.RESULTS.successful, state=None, stats={})
-
-    @classmethod
-    def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
-    ) -> "KlursSplitSolver":
-        """Factory method to pre-hash indices for sparse coalescence."""
-        rows, cols, ground_idxs, sys_size = _build_index_arrays(component_groups, num_vars, is_complex)
-        u_rows, u_cols, map_idx, n_unique = _klu_deduplicate(rows, cols, ground_idxs, sys_size)
-        symbol = klurs.analyze(u_rows, u_cols, sys_size)
-        return cls(
-            u_rows=jnp.array(u_rows),
-            u_cols=jnp.array(u_cols),
-            map_idx=jnp.array(map_idx),
-            n_unique=n_unique,
-            _handle_wrapper=symbol,
-            ground_indices=jnp.array(ground_idxs),
-            sys_size=sys_size,
-            is_complex=is_complex,
-            g_leak=g_leak,
-        )
-
-
 class KLUSplitLinear(KLUSplitSolver):
     """KLU split solver paired with Modified Newton (frozen-Jacobian) for linear convergence.
 
@@ -705,166 +639,6 @@ class KLUSplitQuadratic(KLUSplitLinear):
     def from_component_groups(
         cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
     ) -> "KLUSplitQuadratic":
-        """Factory — delegates to :meth:`KLUSplitSolver.from_component_groups`."""
-        return super().from_component_groups(  # type: ignore[return-value]
-            component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
-        )
-
-
-class KLURSplitLinear(KlursSplitSolver):
-    """KLU-RS split solver paired with Modified Newton (frozen-Jacobian) for linear convergence.
-
-    Extends :class:`KlursSplitSolver` with an explicit numeric factorization step so the
-    Jacobian can be **factored once per time step** and reused across all Newton iterations
-    within that step (Modified Newton / frozen-Jacobian scheme).  Use together with
-    :class:`~circulax.solvers.transient.FactorizedTransientSolver`.
-
-    Best For:
-        - Large circuits (N > 5000) running on CPU where the Jacobian changes slowly.
-        - Transient simulations with many Newton iterations per step.
-
-    """
-
-    def cleanup(self) -> None:  # noqa: D102
-        del self._handle_wrapper
-
-    def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
-        """Full factor + solve in one call (used by DC solver)."""
-        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
-        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-
-        numeric = klurs.factor(self.u_rows, self.u_cols, coalesced_vals, self._handle_wrapper.handle)
-        solution = klurs.solve_with_numeric(numeric, residual)
-        klurs.free_numeric(numeric)
-        return lx.Solution(
-            value=solution.reshape(residual.shape),
-            result=lx.RESULTS.successful,
-            state=None,
-            stats={},
-        )
-
-    def factor_jacobian(self, all_vals: jax.Array) -> jax.Array:
-        """Factor the Jacobian and return a numeric handle for repeated solves.
-
-        Args:
-            all_vals: Flattened non-zero Jacobian values (COO format).
-
-        Returns:
-            Numeric handle to pass to :meth:`solve_with_frozen_jacobian`.
-            Must be freed after use to avoid C++ memory leaks.
-
-        """
-        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
-        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-
-        return klurs.factor(self.u_rows, self.u_cols, coalesced_vals, self._handle_wrapper.handle)
-
-    def solve_with_frozen_jacobian(self, residual: jax.Array, numeric: jax.Array) -> lx.Solution:
-        """Solve using a pre-computed numeric factorization.
-
-        Args:
-            residual: The right-hand side vector ``-F(y)``.
-            numeric: Handle returned by :meth:`factor_jacobian`.
-
-        Returns:
-            :class:`lineax.Solution` with the Newton step ``δy``.
-
-        """
-        solution = klurs.solve_with_numeric(numeric, residual)
-        return lx.Solution(
-            value=solution.reshape(residual.shape),
-            result=lx.RESULTS.successful,
-            state=None,
-            stats={},
-        )
-
-    @classmethod
-    def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
-    ) -> "KLURSplitLinear":
-        """Factory — delegates to :meth:`KlursSplitSolver.from_component_groups`."""
-        return super().from_component_groups(  # type: ignore[return-value]
-            component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
-        )
-
-
-class KLURSplitQuadratic(KLURSplitLinear):
-    """KLURs split solver paired with full Newton for quadratic convergence via ``klu_refactor``.
-
-    Extends :class:`KLUSplitLinear` with :meth:`refactor_jacobian`, which updates the numeric
-    LU factorization in-place using ``klujax.refactor``.  The sparsity pattern is fixed for a
-    given circuit topology, so KLU reuses the existing memory allocation and fill-reducing
-    permutation — only the L/U values are recomputed.  This gives full Newton (quadratic)
-    convergence at a fraction of the cost of re-calling ``klu_factor`` at every iteration.
-
-    Use together with :class:`~circulax.solvers.transient.RefactoringTransientSolver`.
-
-    Best For:
-        - Large circuits on CPU with nonlinear devices where quadratic convergence is desired.
-        - Transient simulations where the Jacobian changes significantly between Newton iterates.
-
-    """
-
-    def refactor_jacobian(self, all_vals: jax.Array, numeric: jax.Array) -> jax.Array:
-        """Update the numeric factorization in-place with new Jacobian values.
-
-        Reuses the existing memory allocation and fill-reducing permutation from the
-        symbolic analysis; only the L/U values are recomputed.  Faster than calling
-        :meth:`~KLUSplitLinear.factor_jacobian` from scratch each Newton iteration.
-
-        Args:
-            all_vals: Flattened non-zero Jacobian values (COO format).
-            numeric: Existing handle returned by :meth:`~KLUSplitLinear.factor_jacobian`.
-
-        Returns:
-            Refreshed numeric handle (same underlying C++ object, now connected in the
-            XLA computation graph so the refactor cannot be eliminated as dead code).
-
-        """
-        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-        return klurs.refactor(self.u_rows, self.u_cols, coalesced_vals, numeric, self._handle_wrapper.handle)
-
-    if split_rs_fused_available:
-
-        def refactor_and_solve_jacobian(
-            self, all_vals: jax.Array, residual: jax.Array, numeric: jax.Array
-        ) -> tuple["lx.Solution", jax.Array]:
-            """Fused refactor + solve: one XLA custom call instead of two.
-
-            Args:
-                all_vals: Flattened non-zero Jacobian values (COO format).
-                residual: The right-hand side vector ``-F(y)`` (pass ``-residual``).
-                numeric: Handle returned by :meth:`~KLURSplitLinear.factor_jacobian`.
-
-            Returns:
-                ``(solution, refreshed_numeric)`` where ``refreshed_numeric`` is a
-                non-owning alias of ``numeric`` — safe to discard with ``_`` since
-                ``numeric_handle`` is closure-captured and the Newton loop does not
-                thread the handle through its carry state.
-
-            """
-            g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-            l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-            raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-            coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-            x, refreshed = _klurs_refactor_and_solve(
-                self.u_rows, self.u_cols, coalesced_vals, residual, numeric, self._handle_wrapper.handle
-            )
-            return lx.Solution(value=x.reshape(residual.shape), result=lx.RESULTS.successful, state=None, stats={}), refreshed
-
-    @classmethod
-    def from_component_groups(
-        cls, component_groups: dict[str, Any], num_vars: int, *, is_complex: bool = False, g_leak: float = 1e-9
-    ) -> "KLURSplitQuadratic":
         """Factory — delegates to :meth:`KLUSplitSolver.from_component_groups`."""
         return super().from_component_groups(  # type: ignore[return-value]
             component_groups, num_vars, is_complex=is_complex, g_leak=g_leak
@@ -994,16 +768,12 @@ backends: dict[str, type[CircuitLinearSolver]] = {
     "sparse": SparseSolver,
     "klu_split_linear": KLUSplitLinear,
     "klu_split": KLUSplitQuadratic if split_refactor_available else KLUSplitLinear,
-    "klu_rs_split": KLURSplitQuadratic if split_rs_refactor_available else KlursSplitSolver,
     # Legacy aliases
     "klu_split_factor": KLUSplitLinear,
     "klu_split_refactor": KLUSplitQuadratic if split_refactor_available else KLUSplitLinear,
-    # KLU-RS factor/refactor variants
-    "klu_rs_split_factor": KLURSplitLinear,
-    "klu_rs_split_refactor": KLURSplitQuadratic if split_rs_refactor_available else KLURSplitLinear,
 }
 # Default uses klu_split (split symbolic/numeric): wins for linear and mildly nonlinear
-# circuits; use klu_split_refactor / klu_rs_split_refactor explicitly for strongly nonlinear.
+# circuits; use klu_split_refactor explicitly for strongly nonlinear.
 backends["default"] = backends["klu_split_factor"]
 
 
