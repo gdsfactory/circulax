@@ -149,13 +149,13 @@ def _generate_lcr_animation() -> None:
     if out_path.exists():
         return  # already generated; skip during incremental rebuilds
 
+    import diffrax
     import jax
     import jax.numpy as jnp
-    import diffrax
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
+    from matplotlib import animation
 
     from circulax import compile_circuit
     from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
