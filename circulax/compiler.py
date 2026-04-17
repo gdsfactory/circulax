@@ -104,7 +104,7 @@ def _get_default_params_cached(func: callable) -> dict[str, Any]:
 
 
 def get_default_params(func: callable) -> dict[str, Any]:
-    """Return a copy so callers can’t mutate the cache."""
+    """Return a copy so callers can't mutate the cache."""
     return dict(_get_default_params_cached(func))
 
 

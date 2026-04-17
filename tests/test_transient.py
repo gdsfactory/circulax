@@ -98,11 +98,6 @@ def test_short_transient_runs_complex(simple_optical_netlist, backend):
 def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  # noqa: ANN001
     """FactorizedTransientSolver (frozen-Jacobian) should produce the same trajectory
     as VectorizedTransientSolver (full Newton) on a linear LRC circuit."""
-    from circulax.solvers.linear import split_solver_available
-
-    if not split_solver_available:
-        pytest.skip("requires klujax KLUHandleManager")
-
     from circulax.solvers.transient import FactorizedTransientSolver
 
     net_dict, models_map = simple_lrc_netlist
@@ -118,16 +113,26 @@ def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  #
     sol_full = diffrax.diffeqsolve(
         term,
         VectorizedTransientSolver(linear_solver=strat_full),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
     sol_factor = diffrax.diffeqsolve(
         term,
         FactorizedTransientSolver(linear_solver=strat_factor),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_factor.ys.shape == sol_full.ys.shape
@@ -137,11 +142,6 @@ def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  #
 def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:  # noqa: ANN001
     """RefactoringTransientSolver (klu_refactor) should produce the same trajectory
     as VectorizedTransientSolver (full Newton) on a linear LRC circuit."""
-    from circulax.solvers.linear import split_refactor_available
-
-    if not split_refactor_available:
-        pytest.skip("requires klujax refactor interface")
-
     from circulax.solvers.transient import RefactoringTransientSolver
 
     net_dict, models_map = simple_lrc_netlist
@@ -157,15 +157,25 @@ def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:  
     sol_full = diffrax.diffeqsolve(
         term,
         VectorizedTransientSolver(linear_solver=strat),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     sol_refactor = diffrax.diffeqsolve(
         term,
         RefactoringTransientSolver(linear_solver=strat),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_refactor.ys.shape == sol_full.ys.shape
@@ -239,11 +249,6 @@ def test_bdf2_vectorized_runs_complex(simple_optical_netlist, backend):
 
 def test_bdf2_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     """BDF2FactorizedTransientSolver should match BDF2VectorizedTransientSolver on a linear LRC circuit."""
-    from circulax.solvers.linear import split_solver_available
-
-    if not split_solver_available:
-        pytest.skip("requires klujax KLUHandleManager")
-
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
@@ -257,16 +262,26 @@ def test_bdf2_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     sol_vec = diffrax.diffeqsolve(
         term,
         BDF2VectorizedTransientSolver(linear_solver=strat_full),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
     sol_factor = diffrax.diffeqsolve(
         term,
         BDF2FactorizedTransientSolver(linear_solver=strat_factor),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_factor.ys.shape == sol_vec.ys.shape
@@ -306,11 +321,6 @@ def test_sdirk3_vectorized_runs_float(simple_lrc_netlist, backend):
 
 def test_sdirk3_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     """SDIRK3FactorizedTransientSolver should match SDIRK3VectorizedTransientSolver on a linear LRC circuit."""
-    from circulax.solvers.linear import split_solver_available
-
-    if not split_solver_available:
-        pytest.skip("requires klujax KLUHandleManager")
-
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
@@ -324,16 +334,26 @@ def test_sdirk3_factorized_matches_vectorized(simple_lrc_netlist) -> None:
     sol_vec = diffrax.diffeqsolve(
         term,
         SDIRK3VectorizedTransientSolver(linear_solver=strat_full),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     strat_factor = analyze_circuit(groups, sys_size, backend="klu_split_linear")
     sol_factor = diffrax.diffeqsolve(
         term,
         SDIRK3FactorizedTransientSolver(linear_solver=strat_factor),
-        t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        args=(groups, sys_size), saveat=saveat, max_steps=1000,
+        t0=0.0,
+        t1=t_max,
+        dt0=1e-3 * t_max,
+        y0=y_op,
+        args=(groups, sys_size),
+        saveat=saveat,
+        max_steps=1000,
     )
 
     assert sol_factor.ys.shape == sol_vec.ys.shape

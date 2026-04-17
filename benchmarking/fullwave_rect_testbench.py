@@ -52,9 +52,12 @@ from bench_utils.runner import SolverFn, SolverResult, run_benchmark  # noqa: E4
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.base_component import PhysicsReturn, Signals, States, component  # noqa: E402
 from circulax.components.electronic import (  # noqa: E402
-    Capacitor, Resistor, VoltageSourceAC, _junction_charge,
+    Capacitor,
+    Resistor,
+    VoltageSourceAC,
+    _junction_charge,
 )
-from circulax.solvers import analyze_circuit, setup_transient, BDF2RefactoringTransientSolver  # noqa: E402
+from circulax.solvers import BDF2RefactoringTransientSolver, analyze_circuit, setup_transient  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # DiodeLimited — clamped Shockley + SPICE junction capacitance
@@ -65,9 +68,14 @@ EXP_CAP = 40.0
 
 @component(ports=("p1", "p2"))
 def DiodeLimited(
-    signals: Signals, s: States,
-    Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85e-3,
-    Cj0: float = 0.0, Vj: float = 1.0, m: float = 0.5,
+    signals: Signals,
+    s: States,
+    Is: float = 1e-12,
+    n: float = 1.0,
+    Vt: float = 25.85e-3,
+    Cj0: float = 0.0,
+    Vj: float = 1.0,
+    m: float = 0.5,
 ) -> PhysicsReturn:
     """Shockley diode with clamped exponent and SPICE junction capacitance."""
     vd = signals.p1 - signals.p2
@@ -80,34 +88,39 @@ def DiodeLimited(
 # ---------------------------------------------------------------------------
 # Circuit parameters — must match circuits/fullwave_rect.cir exactly
 # ---------------------------------------------------------------------------
-V_AMP  = 20.0
-F_SRC  = 50.0
-RS_D   = 0.042
-IS_D   = 76.9e-12
-N_D    = 1.45
-CJ0_D  = 26.5e-12
-VJ_D   = 1.0
-M_D    = 0.333
+V_AMP = 20.0
+F_SRC = 50.0
+RS_D = 0.042
+IS_D = 76.9e-12
+N_D = 1.45
+CJ0_D = 26.5e-12
+VJ_D = 1.0
+M_D = 0.333
 C_LOAD = 100e-6
 R_LOAD = 1e3
-R_GND  = 1e6
+R_GND = 1e6
 
-T_END   = 1.0
-DT      = 1e-6
+T_END = 1.0
+DT = 1e-6
 N_STEPS = int(T_END / DT)
 WARMUP_STEPS = 2
 WARMUP_T_END = WARMUP_STEPS * DT
 
 STEP_CONTROLLER = diffrax.PIDController(
-    rtol=1e-3, atol=1e-4,
-    pcoeff=0.2, icoeff=0.5, dcoeff=0.0,
-    force_dtmin=True, dtmin=1E-6*DT, dtmax=DT,
+    rtol=1e-3,
+    atol=1e-4,
+    pcoeff=0.2,
+    icoeff=0.5,
+    dcoeff=0.0,
+    force_dtmin=True,
+    dtmin=1e-6 * DT,
+    dtmax=DT,
     error_order=2,
 )
 
-HERE        = pathlib.Path(__file__).parent
-CIR_FILE    = HERE / "circuits" / "fullwave_rect.cir"
-NG_OUTPUT   = pathlib.Path("/tmp/ngspice_fullwave_rect.dat")
+HERE = pathlib.Path(__file__).parent
+CIR_FILE = HERE / "circuits" / "fullwave_rect.cir"
+NG_OUTPUT = pathlib.Path("/tmp/ngspice_fullwave_rect.dat")
 PLOT_OUTPUT = HERE / "fullwave_rect_comparison.png"
 
 NODES = ["v(outp)", "v(outn)"]
@@ -116,6 +129,7 @@ NODES = ["v(outp)", "v(outn)"]
 # ---------------------------------------------------------------------------
 # Solvers
 # ---------------------------------------------------------------------------
+
 
 def solver_ngspice() -> SolverResult:
     run_ngspice(CIR_FILE, NODES, output_path=NG_OUTPUT)  # warmup
@@ -137,59 +151,58 @@ def solver_circulax(n_save: int = 10_001) -> SolverResult:
     t0 = time.perf_counter()
     net_dict = {
         "instances": {
-            "GND":    {"component": "ground"},
-            "VS":     {"component": "ac_source", "settings": {"V": V_AMP, "freq": F_SRC}},
-            "RS1":    {"component": "resistor",  "settings": {"R": RS_D}},
-            "D1":     {"component": "diode",     "settings": d_settings},
-            "RS2":    {"component": "resistor",  "settings": {"R": RS_D}},
-            "D2":     {"component": "diode",     "settings": d_settings},
-            "RS3":    {"component": "resistor",  "settings": {"R": RS_D}},
-            "D3":     {"component": "diode",     "settings": d_settings},
-            "RS4":    {"component": "resistor",  "settings": {"R": RS_D}},
-            "D4":     {"component": "diode",     "settings": d_settings},
-            "CL":     {"component": "capacitor", "settings": {"C": C_LOAD}},
-            "RL":     {"component": "resistor",  "settings": {"R": R_LOAD}},
-            "RBIAS1": {"component": "resistor",  "settings": {"R": R_GND}},
-            "RBIAS2": {"component": "resistor",  "settings": {"R": R_GND}},
+            "GND": {"component": "ground"},
+            "VS": {"component": "ac_source", "settings": {"V": V_AMP, "freq": F_SRC}},
+            "RS1": {"component": "resistor", "settings": {"R": RS_D}},
+            "D1": {"component": "diode", "settings": d_settings},
+            "RS2": {"component": "resistor", "settings": {"R": RS_D}},
+            "D2": {"component": "diode", "settings": d_settings},
+            "RS3": {"component": "resistor", "settings": {"R": RS_D}},
+            "D3": {"component": "diode", "settings": d_settings},
+            "RS4": {"component": "resistor", "settings": {"R": RS_D}},
+            "D4": {"component": "diode", "settings": d_settings},
+            "CL": {"component": "capacitor", "settings": {"C": C_LOAD}},
+            "RL": {"component": "resistor", "settings": {"R": R_LOAD}},
+            "RBIAS1": {"component": "resistor", "settings": {"R": R_GND}},
+            "RBIAS2": {"component": "resistor", "settings": {"R": R_GND}},
         },
         "connections": {
-            "GND,p1":  ("RBIAS1,p2", "RBIAS2,p2"),
-            "VS,p1":   ("RS1,p1", "D2,p2"),
-            "VS,p2":   ("RS3,p1", "D4,p2", "RBIAS1,p1"),
-            "D1,p2":   ("D3,p2", "CL,p1", "RL,p1"),
-            "RS2,p1":  ("RS4,p1", "CL,p2", "RL,p2", "RBIAS2,p1"),
-            "RS1,p2":  "D1,p1",
-            "RS2,p2":  "D2,p1",
-            "RS3,p2":  "D3,p1",
-            "RS4,p2":  "D4,p1",
+            "GND,p1": ("RBIAS1,p2", "RBIAS2,p2"),
+            "VS,p1": ("RS1,p1", "D2,p2"),
+            "VS,p2": ("RS3,p1", "D4,p2", "RBIAS1,p1"),
+            "D1,p2": ("D3,p2", "CL,p1", "RL,p1"),
+            "RS2,p1": ("RS4,p1", "CL,p2", "RL,p2", "RBIAS2,p1"),
+            "RS1,p2": "D1,p1",
+            "RS2,p2": "D2,p1",
+            "RS3,p2": "D3,p1",
+            "RS4,p2": "D4,p1",
         },
     }
     models_map = {
-        "ground":    lambda: 0,
+        "ground": lambda: 0,
         "ac_source": VoltageSourceAC,
-        "resistor":  Resistor,
+        "resistor": Resistor,
         "capacitor": Capacitor,
-        "diode":     DiodeLimited,
+        "diode": DiodeLimited,
     }
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
     linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="klu_split")
     y_op = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
-    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy,
-                                    transient_solver=BDF2RefactoringTransientSolver)
+    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy, transient_solver=BDF2RefactoringTransientSolver)
     compile_time = time.perf_counter() - t0
 
     t0 = time.perf_counter()
     saveat_w = diffrax.SaveAt(ts=jnp.linspace(0.0, WARMUP_T_END, 101))
-    transient_sim(t0=0.0, t1=WARMUP_T_END, dt0=DT, y0=y_op,
-                  saveat=saveat_w, max_steps=WARMUP_STEPS + 100,
-                  stepsize_controller=STEP_CONTROLLER).ys.block_until_ready()
+    transient_sim(
+        t0=0.0, t1=WARMUP_T_END, dt0=DT, y0=y_op, saveat=saveat_w, max_steps=WARMUP_STEPS + 100, stepsize_controller=STEP_CONTROLLER
+    ).ys.block_until_ready()
     warmup_time = time.perf_counter() - t0
 
     t0 = time.perf_counter()
     saveat = diffrax.SaveAt(ts=jnp.linspace(0.0, T_END, n_save))
-    sol = transient_sim(t0=0.0, t1=T_END, dt0=DT, y0=y_op,
-                        saveat=saveat, max_steps=N_STEPS * 10,
-                        stepsize_controller=STEP_CONTROLLER)
+    sol = transient_sim(
+        t0=0.0, t1=T_END, dt0=DT, y0=y_op, saveat=saveat, max_steps=N_STEPS * 10, stepsize_controller=STEP_CONTROLLER
+    )
     sol.ys.block_until_ready()
     elapsed = time.perf_counter() - t0
 
@@ -213,7 +226,7 @@ def solver_circulax(n_save: int = 10_001) -> SolverResult:
 # ---------------------------------------------------------------------------
 
 SOLVERS: dict[str, SolverFn] = {
-    "ngspice":  solver_ngspice,
+    "ngspice": solver_ngspice,
     "circulax": solver_circulax,
 }
 REFERENCE = "ngspice"
@@ -223,9 +236,10 @@ REFERENCE = "ngspice"
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Full-wave rectifier testbench")
-    parser.add_argument("--plot",   action="store_true")
+    parser.add_argument("--plot", action="store_true")
     parser.add_argument("--n-save", type=int, default=10_001)
     args = parser.parse_args()
 
@@ -239,8 +253,8 @@ def main() -> None:
         title=(
             f"Full-Wave Rectifier Testbench  "
             f"VS={V_AMP}V {F_SRC:.0f}Hz  4×D1N4007  "
-            f"CL={C_LOAD*1e6:.0f}µF  RL={R_LOAD/1e3:.0f}kΩ  "
-            f"T_end={T_END}s  dt={DT*1e6:.0f}µs"
+            f"CL={C_LOAD * 1e6:.0f}µF  RL={R_LOAD / 1e3:.0f}kΩ  "
+            f"T_end={T_END}s  dt={DT * 1e6:.0f}µs"
         ),
     )
 
@@ -253,18 +267,31 @@ def main() -> None:
         plot_comparison(
             ref_label="NGSpice (full D1N4007)",
             test_label="Circulax (DiodeLimited)",
-            time_scale=1.0, time_unit="s",
+            time_scale=1.0,
+            time_unit="s",
             panels=[
-                {"title": "V(outp) — positive rail",
-                 "ref_time": ref.time, "ref_signal": ref.signals["v(outp)"],
-                 "test_time": cx.time, "test_signal": cx.signals["v(outp)"]},
-                {"title": "V(outp, outn) — rectified output",
-                 "ref_time": ref.time, "ref_signal": ng_vdiff,
-                 "test_time": cx.time, "test_signal": cx_vdiff},
-                {"title": "Circulax − NGSpice  [V(outp,outn)]",
-                 "ref_time": cx.time, "ref_signal": err_diff,
-                 "test_time": cx.time, "test_signal": err_diff,
-                 "show_error": True},
+                {
+                    "title": "V(outp) — positive rail",
+                    "ref_time": ref.time,
+                    "ref_signal": ref.signals["v(outp)"],
+                    "test_time": cx.time,
+                    "test_signal": cx.signals["v(outp)"],
+                },
+                {
+                    "title": "V(outp, outn) — rectified output",
+                    "ref_time": ref.time,
+                    "ref_signal": ng_vdiff,
+                    "test_time": cx.time,
+                    "test_signal": cx_vdiff,
+                },
+                {
+                    "title": "Circulax − NGSpice  [V(outp,outn)]",
+                    "ref_time": cx.time,
+                    "ref_signal": err_diff,
+                    "test_time": cx.time,
+                    "test_signal": err_diff,
+                    "show_error": True,
+                },
             ],
             output_path=PLOT_OUTPUT,
         )

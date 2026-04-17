@@ -1,14 +1,10 @@
 ## Writing Components
 
-Circulax uses a functional, JAX-first approach to component definition. Instead of inheriting from complex base classes, you define components as pure Python functions decorated with specific handlers.
-
-This architecture ensures your components are automatically compatible with JIT compilation (jax.jit), vectorization (jax.vmap), and back-propagation (jax.grad).
+Components are pure Python functions with a decorator. They are automatically compatible with `jax.jit`, `jax.vmap`, and `jax.grad`.
 
 ---
 
 ## Quick Reference
-
-Four decorators are available. Pick based on what your component's physics looks like:
 
 | Decorator | Use case | DC | Transient | HB |
 |---|---|:--:|:--:|:--:|
@@ -19,9 +15,9 @@ Four decorators are available. Pick based on what your component's physics looks
 
 ---
 
-### The Core Concept
+### Function Signature
 
-Every component in circulax is a function that calculates the instantaneous balance equations for a specific node or state. The function signature generally looks like this:
+Every component computes the instantaneous balance equations for its ports and states:
 
 ```python
 def MyComponent(signals, s, [t], **params):
@@ -60,7 +56,7 @@ The function must return a tuple of two dictionaries: ```(f_dict, q_dict)```.
 
 ## `@component` — Time-Invariant Physics
 
-Most passive components (Resistors, Transistors, Diodes) do not depend explicitly on time t. For these, use the ```@component``` decorator.
+For components that do not depend explicitly on time (resistors, transistors, diodes, etc.).
 
 #### Example: A Simple Resistor
 
@@ -77,7 +73,7 @@ def Resistor(signals: Signals, s: States, R: float = 1e3):
 
 #### Example: A Capacitor (Storage Term)
 
-For reactive components, use `q_dict` to define what is being differentiated with respect to time.
+Reactive components use `q_dict` for the quantity differentiated with respect to time.
 
 ```python
 @component(ports=("p1", "p2"))
@@ -109,9 +105,9 @@ def Inductor(signals: Signals, s: States, L: float = 1e-9):
 
 ## `@source` — Time-Dependent Sources
 
-If your component varies with time (e.g. AC source, pulse generator, modulated optical source), use the `@source` decorator. This injects `t` as the third argument.
+For components that vary with time (AC sources, pulse generators, modulated optical sources). Injects `t` as the third argument.
 
-Voltage sources require an internal state variable `i_src` to represent the current flowing through the source — the voltage is fixed, so the current is the unknown the solver must find.
+Voltage sources need an internal state `i_src` — the voltage is prescribed, so the current is the unknown.
 
 ```python
 from circulax.components.base_component import source
@@ -135,13 +131,9 @@ def VoltageSourceAC(
 
 ## `@fdomain_component` — Frequency-Domain Components
 
-Use this decorator when a component's admittance depends on the **electrical signal frequency** — it cannot be expressed as an instantaneous function of port voltages.
+For components whose admittance depends on the electrical signal frequency and cannot be expressed as an instantaneous time-domain relation.
 
-Typical examples:
-
-* **Skin-effect resistor**: $Z(f) = R_0 + a\sqrt{f}$ — resistance rises with frequency as current crowds to conductor surface.
-* **Wideband interconnect model**: frequency-dependent loss derived from measurements or EM simulation.
-* **Alternative reactive formulation**: Capacitors and inductors can be defined via $Y_C(f) = j2\pi f C$ and $Y_L(f) = 1/(j2\pi f L)$ — mathematically equivalent to the `@component` path for Harmonic Balance.
+Examples: skin-effect resistors ($Z(f) = R_0 + a\sqrt{f}$), wideband interconnect models from EM simulation, or alternative reactive formulations ($Y_C(f) = j2\pi f C$).
 
 ### Signature contract
 
@@ -188,11 +180,11 @@ The f-domain path has one practical advantage: the inductor no longer needs an i
 
 ## Photonic Components
 
-Photonic circuits are simulated by treating optical field amplitudes as complex-valued "voltages" and scattering-matrix admittances as "conductances". The key insight is that photonic S-parameters describe the optical steady state at a given wavelength — **the Y-matrix is constant with respect to the electrical solver frequency** (the optical wavelength is a parameter, not a solved variable). This is why photonic components use `@component`, not `@fdomain_component`.
+Optical field amplitudes are treated as complex-valued "voltages" and S-parameter-derived admittances as "conductances". Since photonic S-parameters describe the steady state at a given wavelength — the Y-matrix is constant w.r.t. the electrical solver frequency — photonic components use `@component`, not `@fdomain_component`.
 
 ### A: Manual `@component` with `s_to_y()`
 
-Build the S-matrix from your component's physics, convert to Y via `s_to_y`, then return `I = Y @ V`. Cast all signals to `complex128`.
+Build the S-matrix, convert to Y via `s_to_y`, return `I = Y @ V`.
 
 ```python
 from circulax.s_transforms import s_to_y
@@ -219,11 +211,11 @@ def OpticalWaveguide(
     return {"p1": i_vec[0], "p2": i_vec[1]}, {}
 ```
 
-Use this approach when writing new photonic components — you have full control over the S-matrix construction.
+Use this approach for new photonic components.
 
-### B: `sax_component` — importing SAX library models
+### B: `sax_component` — importing SAX models
 
-If you have photonic models already written for the [SAX](https://flaport.github.io/sax/) ecosystem (e.g. from gdsfactory PDK libraries), `sax_component` wraps them without rewriting the physics. It auto-detects port names from the SAX dict and handles the S→Y conversion internally.
+Wraps existing [SAX](https://flaport.github.io/sax/) models (e.g. from gdsfactory PDK libraries) without rewriting physics. Auto-detects port names and handles S→Y conversion.
 
 ```python
 from circulax.s_transforms import sax_component
@@ -243,17 +235,13 @@ def sax_coupler(coupling: float = 0.5):
 Coupler = sax_component(sax_coupler)
 ```
 
-**When to use `sax_component`**: only when reusing models that already exist in SAX format. For new components, prefer the explicit `@component` pattern above — it is easier to understand and debug.
+Use `sax_component` only for reusing existing SAX models. For new components, prefer the explicit `@component` pattern.
 
 ---
 
-## Advanced: Under the Hood
+## Under the Hood
 
-For advanced users familiar with JAX and Equinox, it is helpful to understand what the `@component` decorator actually does.
-
-It does not simply wrap your function. Instead, it dynamically generates a new class that inherits from `equinox.Module`.
-
-**The Transformation Process**
+The `@component` decorator dynamically generates an `equinox.Module` subclass.
 
 When you write:
 
@@ -262,12 +250,9 @@ When you write:
 def MyResistor(signals, s, R=100.0):
 ```
 
-The decorator performs the following steps:
+The decorator:
 
-**Introspection**: It analyses the function signature to identify parameters (`R`) and their default values (`100.0`).
-
-**Class Generation**: It constructs a new `eqx.Module` class named `MyResistor`.
-
-**Field Registration**: The parameters (`R`) become fields of this class. This allows JAX to differentiate with respect to `R` automatically.
-
-**Static Optimization**: It creates a static `_fast_physics` method that unrolls dictionary lookups into raw array operations. This is what the solver calls inside `jax.jit` or `jax.vmap`.
+1. **Introspects** the function signature to find parameters (`R`) and defaults (`100.0`).
+2. **Generates** an `eqx.Module` class named `MyResistor`.
+3. **Registers** the parameters as module fields, making them JAX-differentiable.
+4. **Creates** a `_fast_physics` method that unrolls dict lookups into raw array ops for use inside `jax.jit` / `jax.vmap`.

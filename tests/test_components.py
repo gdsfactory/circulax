@@ -24,7 +24,7 @@ jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 # --- Component Tests ---
 
 
-def test_resistor()-> None:
+def test_resistor() -> None:
     r = Resistor(R=10.0)
     v_dict = {"p1": 5.0, "p2": 0.0}
     f, q = r(**v_dict)
@@ -35,7 +35,7 @@ def test_resistor()-> None:
     assert not q
 
 
-def test_capacitor()-> None:
+def test_capacitor() -> None:
     c = Capacitor(C=1e-11)
     v_dict = {"p1": 2.0, "p2": 1.0}
     f, q = c(**v_dict)
@@ -47,7 +47,7 @@ def test_capacitor()-> None:
     assert jnp.isclose(q["p2"], -expected_q)
 
 
-def test_voltage_source_delay()-> None:
+def test_voltage_source_delay() -> None:
     vs = VoltageSource(V=5.0, delay=0.5)
     v_dict = {"p1": 0.0, "p2": 0.0}
     s_dict = {"i_src": 0.0}
@@ -65,7 +65,7 @@ def test_voltage_source_delay()-> None:
     assert not q1
 
 
-def test_inductor()-> None:
+def test_inductor() -> None:
     ind = Inductor(L=1e-9)
     v_dict = {"p1": 0.5, "p2": 0.0}
     s_dict = {"i_L": 0.1}
@@ -83,7 +83,7 @@ def test_inductor()-> None:
     assert jnp.isclose(q["i_L"], expected_flux_linkage)
 
 
-def test_diode_forward_bias()-> None:
+def test_diode_forward_bias() -> None:
     d = Diode()
     v_dict = {"p1": 0.7, "p2": 0.0}
     f, q = d(**v_dict)
@@ -92,7 +92,7 @@ def test_diode_forward_bias()-> None:
     assert not q
 
 
-def test_current_source()-> None:
+def test_current_source() -> None:
     cs = CurrentSource(I=2.0)
     v_dict = {"p1": 0.0, "p2": 0.0}
     f, q = cs(**v_dict)
@@ -101,7 +101,7 @@ def test_current_source()-> None:
     assert not q
 
 
-def test_vcvs()-> None:
+def test_vcvs() -> None:
     vcvs = VCVS(A=10.0)
     v_dict = {"out_p": 1.0, "out_m": 0.0, "ctrl_p": 0.2, "ctrl_m": 0.0}
     s_dict = {"i_src": 0.0}
@@ -109,9 +109,7 @@ def test_vcvs()-> None:
     input_dict = {**v_dict, **s_dict}
     f, q = vcvs(**input_dict)
 
-    expected_constraint = (v_dict["out_p"] - v_dict["out_m"]) - vcvs.A * (
-        v_dict["ctrl_p"] - v_dict["ctrl_m"]
-    )
+    expected_constraint = (v_dict["out_p"] - v_dict["out_m"]) - vcvs.A * (v_dict["ctrl_p"] - v_dict["ctrl_m"])
     assert jnp.isclose(f["i_src"], expected_constraint)
     assert f["ctrl_p"] == 0.0
     assert f["ctrl_m"] == 0.0
@@ -137,7 +135,7 @@ def test_ccvs() -> None:
     assert not q
 
 
-def test_cccs()-> None:
+def test_cccs() -> None:
     alpha = 4.0
     i_ctrl = 0.5
     cccs = CCCS(alpha=alpha)
@@ -156,7 +154,7 @@ def test_cccs()-> None:
     assert not q
 
 
-def test_vccs()-> None:
+def test_vccs() -> None:
     G = 0.02
     v_ctrl = 1.5
     vccs = VCCS(G=G)
@@ -172,16 +170,14 @@ def test_vccs()-> None:
     assert not q
 
 
-def test_ideal_opamp()-> None:
+def test_ideal_opamp() -> None:
     opamp = IdealOpAmp(A=1e6)
     v_dict = {"out_p": 1.0, "out_m": 0.0, "in_p": 0.1, "in_m": 0.0}
     s_dict = {"i_src": 0.0}
     input_dict = {**v_dict, **s_dict}
     f, q = opamp(**input_dict)
 
-    expected_constraint = (v_dict["out_p"] - v_dict["out_m"]) - opamp.A * (
-        v_dict["in_p"] - v_dict["in_m"]
-    )
+    expected_constraint = (v_dict["out_p"] - v_dict["out_m"]) - opamp.A * (v_dict["in_p"] - v_dict["in_m"])
     assert jnp.isclose(f["i_src"], expected_constraint)
     assert f["in_p"] == 0.0
     assert f["in_m"] == 0.0
@@ -191,7 +187,7 @@ def test_ideal_opamp()-> None:
 # --- Base Component Tests ---
 
 
-def test_solver_call_resistor()-> None:
+def test_solver_call_resistor() -> None:
     params = {"R": 100.0}
     # Resistor.R = r
 
@@ -211,7 +207,7 @@ def test_solver_call_resistor()-> None:
     assert jnp.allclose(q_vec, jnp.zeros(2))
 
 
-def test_solver_call_capacitor()-> None:
+def test_solver_call_capacitor() -> None:
     params = {"C": 1e-9}
     # vars_vec = [v_p1, v_p2]
     vars_vec = jnp.array([3.0, 0.0])
@@ -230,7 +226,7 @@ def test_solver_call_capacitor()-> None:
     assert jnp.allclose(q_vec, jnp.array([q_val, -q_val]))
 
 
-def test_subclass_init_creates_namedtuples()-> None:
+def test_subclass_init_creates_namedtuples() -> None:
     # Define a dummy component
     class MyComp(CircuitComponent):
         ports = ("a", "b")
@@ -242,9 +238,9 @@ def test_subclass_init_creates_namedtuples()-> None:
     assert MyComp._VarsType_P is not None  # noqa: SLF001
     assert MyComp._VarsType_S is not None  # noqa: SLF001
 
-    p = MyComp._VarsType_P(1, 2) # noqa: SLF001
+    p = MyComp._VarsType_P(1, 2)  # noqa: SLF001
     assert p.a == 1
     assert p.b == 2
 
-    s = MyComp._VarsType_S(10) # noqa: SLF001
+    s = MyComp._VarsType_S(10)  # noqa: SLF001
     assert s.s1 == 10

@@ -31,8 +31,8 @@ Example::
     port_nodes = [pmap["R1,p1"]]
     run_ac = setup_ac_sweep(groups, num_vars, port_nodes, z0=50.0)
 
-    freqs = jnp.logspace(6, 10, 100)          # 1 MHz to 10 GHz
-    S = run_ac(y_dc, freqs)                    # shape (100, 1, 1) complex
+    freqs = jnp.logspace(6, 10, 100)  # 1 MHz to 10 GHz
+    S = run_ac(y_dc, freqs)  # shape (100, 1, 1) complex
 
     # JIT for repeated sweeps:
     S = jax.jit(run_ac)(y_dc, freqs)
@@ -98,7 +98,7 @@ def setup_ac_sweep(
         - **y_dc** — DC operating point, shape ``(num_vars,)``.
         - **freqs** — frequencies in Hz, shape ``(N_freqs,)``.
         - **S** — S-parameter matrix, shape ``(N_freqs, N_ports, N_ports)``
-          complex128.
+            complex128.
 
         Compatible with :func:`jax.jit` and :func:`jax.vmap` over ``y_dc``.
 
@@ -108,9 +108,7 @@ def setup_ac_sweep(
         raise ValueError(msg)
 
     # --- Pre-compute static COO index arrays (captured in closure) -----------
-    static_rows, static_cols, ground_idxs, _ = _build_index_arrays(
-        groups, num_vars, is_complex=False
-    )
+    static_rows, static_cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
     static_rows_jax = jnp.array(static_rows)
     static_cols_jax = jnp.array(static_cols)
     ground_indices = jnp.array(ground_idxs)
@@ -141,7 +139,6 @@ def setup_ac_sweep(
             S-parameter matrix, shape ``(N_freqs, N_ports, N_ports)`` complex128.
 
         """
-        # 1. Linearise once at y_dc — outside the frequency loop.
         G_vals, C_vals = assemble_gc_real(y_dc, groups)
 
         G_mat = jnp.zeros((num_vars, num_vars), dtype=jnp.float64)
@@ -150,12 +147,10 @@ def setup_ac_sweep(
         C_mat = jnp.zeros((num_vars, num_vars), dtype=jnp.float64)
         C_mat = C_mat.at[static_rows_jax, static_cols_jax].add(C_vals)
 
-        # 2. Build RHS: shape (num_vars, N_ports).
-        #    Column p: 2/z0 at port_nodes[p], zero elsewhere.
+        # RHS column p: 2/z0 at port_nodes[p], zero elsewhere.
         RHS = jnp.zeros((num_vars, N_ports), dtype=jnp.complex128)
         RHS = RHS.at[port_nodes_arr, jnp.arange(N_ports)].set(2.0 / z0)
 
-        # 3. Single-frequency solve (vmapped over freqs in step 4).
         def _solve_one_freq(f: Array) -> Array:
             omega = 2.0 * jnp.pi * f
             Y = G_mat.astype(jnp.complex128) + 1j * omega * C_mat.astype(jnp.complex128)
@@ -179,7 +174,6 @@ def setup_ac_sweep(
             V_ports = V[port_nodes_arr, :]  # (N_ports, N_ports)
             return V_ports - jnp.eye(N_ports, dtype=jnp.complex128)
 
-        # 4. Vmap over frequencies → (N_freqs, N_ports, N_ports).
         return jax.vmap(_solve_one_freq)(freqs)
 
     return run_ac

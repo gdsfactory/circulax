@@ -23,6 +23,7 @@ jax.config.update("jax_enable_x64", True)
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-17 17:32:48,573:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Netlist
@@ -126,9 +127,7 @@ stop = time.time()
 
 if sol.result == diffrax.RESULTS.successful:
     print("   ✅ Simulation Successful")
-    print(
-        f"Performed {sol.stats['num_steps']} steps performed in {stop - start:.2f} seconds"
-    )
+    print(f"Performed {sol.stats['num_steps']} steps performed in {stop - start:.2f} seconds")
     ts = sol.ts
     v_in = sol.ys[:, port_map["Vin,p1"]]
     v_out = sol.ys[:, port_map["R1,p2"]]
@@ -151,7 +150,7 @@ else:
 
 
        System Size: 4 variables
-       Port Map: {'D1,p1': 1, 'R1,p2': 1, 'D2,p2': 1, 'D2,p1': 0, 'D1,p2': 0, 'GND,p1': 0, 'Vin,p2': 0, 'R1,p1': 2, 'Vin,p1': 2, 'Vin,i_src': 3}
+       Port Map: {'D1,p1': 1, 'D2,p2': 1, 'R1,p2': 1, 'D2,p1': 0, 'D1,p2': 0, 'Vin,p2': 0, 'GND,p1': 0, 'R1,p1': 2, 'Vin,p1': 2, 'Vin,i_src': 3}
     2. Initializing Solver Strategy...
     3. Solving DC Operating Point...
 
@@ -161,7 +160,7 @@ else:
 
 
        ✅ Simulation Successful
-    Performed 591 steps performed in 0.75 seconds
+    Performed 591 steps performed in 0.80 seconds
 
 
 

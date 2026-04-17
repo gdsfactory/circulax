@@ -77,7 +77,7 @@ plugins:
                     - https://www.mkdocs.org/objects.inv
                 options:
                     docstring_options:
-                    ignore_init_summary: true
+                        ignore_init_summary: true
                     docstring_section_style: table
                     docstring_style: google
                     filters: ["!^_"]

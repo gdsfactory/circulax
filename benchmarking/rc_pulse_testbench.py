@@ -41,7 +41,7 @@ from bench_utils.runner import SolverFn, SolverResult, run_benchmark  # noqa: E4
 
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.electronic import Capacitor, PulseVoltageSource, Resistor  # noqa: E402
-from circulax.solvers import analyze_circuit, setup_transient, BDF2RefactoringTransientSolver  # noqa: E402
+from circulax.solvers import BDF2RefactoringTransientSolver, analyze_circuit, setup_transient  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Circuit parameters — must match circuits/rc_pulse.cir exactly
@@ -58,9 +58,14 @@ WARMUP_STEPS = 2
 WARMUP_T_END = WARMUP_STEPS * DT
 
 STEP_CONTROLLER = diffrax.PIDController(
-    rtol=1e-3, atol=1e-4,
-    pcoeff=0.2, icoeff=0.5, dcoeff=0.0,
-    force_dtmin=True, dtmin=1E-6*DT, dtmax=DT,
+    rtol=1e-3,
+    atol=1e-4,
+    pcoeff=0.2,
+    icoeff=0.5,
+    dcoeff=0.0,
+    force_dtmin=True,
+    dtmin=1e-6 * DT,
+    dtmax=DT,
     error_order=2,
 )
 
@@ -75,6 +80,7 @@ NODES = ["v(1)", "v(2)"]
 # ---------------------------------------------------------------------------
 # Solvers
 # ---------------------------------------------------------------------------
+
 
 def solver_ngspice() -> SolverResult:
     run_ngspice(CIR_FILE, NODES, output_path=NG_OUTPUT)  # warmup
@@ -95,43 +101,51 @@ def solver_circulax(n_save: int = 10_001) -> SolverResult:
     net_dict = {
         "instances": {
             "GND": {"component": "ground"},
-            "VS": {"component": "pulse_source", "settings": {
-                "v1": V1, "v2": V2, "td": TD, "tr": TR, "tf": TF, "pw": PW, "per": PER,
-            }},
-            "R1": {"component": "resistor",  "settings": {"R": R}},
+            "VS": {
+                "component": "pulse_source",
+                "settings": {
+                    "v1": V1,
+                    "v2": V2,
+                    "td": TD,
+                    "tr": TR,
+                    "tf": TF,
+                    "pw": PW,
+                    "per": PER,
+                },
+            },
+            "R1": {"component": "resistor", "settings": {"R": R}},
             "C1": {"component": "capacitor", "settings": {"C": C}},
         },
         "connections": {
             "GND,p1": ("VS,p2", "C1,p2"),
-            "VS,p1":  "R1,p1",
-            "R1,p2":  "C1,p1",
+            "VS,p1": "R1,p1",
+            "R1,p2": "C1,p1",
         },
     }
     models_map = {
-        "ground":       lambda: 0,
+        "ground": lambda: 0,
         "pulse_source": PulseVoltageSource,
-        "resistor":     Resistor,
-        "capacitor":    Capacitor,
+        "resistor": Resistor,
+        "capacitor": Capacitor,
     }
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
     linear_strategy = analyze_circuit(groups, sys_size, is_complex=False, backend="klu_split")
     y_op = linear_strategy.solve_dc(groups, jnp.zeros(sys_size))
-    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy,
-                                    transient_solver=BDF2RefactoringTransientSolver)
+    transient_sim = setup_transient(groups=groups, linear_strategy=linear_strategy, transient_solver=BDF2RefactoringTransientSolver)
     compile_time = time.perf_counter() - t0
 
     t0 = time.perf_counter()
     saveat_w = diffrax.SaveAt(ts=jnp.linspace(0.0, WARMUP_T_END, 101))
-    transient_sim(t0=0.0, t1=WARMUP_T_END, dt0=DT, y0=y_op,
-                  saveat=saveat_w, max_steps=WARMUP_STEPS + 100,
-                  stepsize_controller=STEP_CONTROLLER).ys.block_until_ready()
+    transient_sim(
+        t0=0.0, t1=WARMUP_T_END, dt0=DT, y0=y_op, saveat=saveat_w, max_steps=WARMUP_STEPS + 100, stepsize_controller=STEP_CONTROLLER
+    ).ys.block_until_ready()
     warmup_time = time.perf_counter() - t0
 
     t0 = time.perf_counter()
     saveat = diffrax.SaveAt(ts=jnp.linspace(0.0, T_END, n_save))
-    sol = transient_sim(t0=0.0, t1=T_END, dt0=DT, y0=y_op,
-                        saveat=saveat, max_steps=N_STEPS * 10,
-                        stepsize_controller=STEP_CONTROLLER)
+    sol = transient_sim(
+        t0=0.0, t1=T_END, dt0=DT, y0=y_op, saveat=saveat, max_steps=N_STEPS * 10, stepsize_controller=STEP_CONTROLLER
+    )
     sol.ys.block_until_ready()
     elapsed = time.perf_counter() - t0
 
@@ -155,7 +169,7 @@ def solver_circulax(n_save: int = 10_001) -> SolverResult:
 # ---------------------------------------------------------------------------
 
 SOLVERS: dict[str, SolverFn] = {
-    "ngspice":  solver_ngspice,
+    "ngspice": solver_ngspice,
     "circulax": solver_circulax,
 }
 REFERENCE = "ngspice"
@@ -165,9 +179,10 @@ REFERENCE = "ngspice"
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="RC pulse testbench")
-    parser.add_argument("--plot",   action="store_true")
+    parser.add_argument("--plot", action="store_true")
     parser.add_argument("--n-save", type=int, default=10_001)
     args = parser.parse_args()
 
@@ -178,11 +193,7 @@ def main() -> None:
         solvers=solvers,
         reference=REFERENCE,
         nodes=NODES,
-        title=(
-            f"RC Pulse Testbench  "
-            f"R={R:.0f}Ω  C={C*1e6:.0f}µF  τ={R*C*1e3:.1f}ms  "
-            f"T_end={T_END}s  dt={DT*1e6:.0f}µs"
-        ),
+        title=(f"RC Pulse Testbench  R={R:.0f}Ω  C={C * 1e6:.0f}µF  τ={R * C * 1e3:.1f}ms  T_end={T_END}s  dt={DT * 1e6:.0f}µs"),
     )
 
     if args.plot:
@@ -195,16 +206,28 @@ def main() -> None:
             time_scale=1e3,
             time_unit="ms",
             panels=[
-                {"title": "Source voltage V(1)",
-                 "ref_time": ref.time, "ref_signal": ref.signals["v(1)"],
-                 "test_time": cx.time, "test_signal": cx.signals["v(1)"]},
-                {"title": "Capacitor voltage V(2)",
-                 "ref_time": ref.time, "ref_signal": ref.signals["v(2)"],
-                 "test_time": cx.time, "test_signal": cx.signals["v(2)"]},
-                {"title": "Circulax − NGSpice  [V(2)]",
-                 "ref_time": cx.time, "ref_signal": err_v2,
-                 "test_time": cx.time, "test_signal": err_v2,
-                 "show_error": True},
+                {
+                    "title": "Source voltage V(1)",
+                    "ref_time": ref.time,
+                    "ref_signal": ref.signals["v(1)"],
+                    "test_time": cx.time,
+                    "test_signal": cx.signals["v(1)"],
+                },
+                {
+                    "title": "Capacitor voltage V(2)",
+                    "ref_time": ref.time,
+                    "ref_signal": ref.signals["v(2)"],
+                    "test_time": cx.time,
+                    "test_signal": cx.signals["v(2)"],
+                },
+                {
+                    "title": "Circulax − NGSpice  [V(2)]",
+                    "ref_time": cx.time,
+                    "ref_signal": err_v2,
+                    "test_time": cx.time,
+                    "test_signal": err_v2,
+                    "show_error": True,
+                },
             ],
             output_path=PLOT_OUTPUT,
         )

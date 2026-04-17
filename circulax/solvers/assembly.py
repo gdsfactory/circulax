@@ -32,17 +32,13 @@ def _real_physics(v: Array, p: Array, group, t1: float) -> tuple[Array, Array]:
     return group.physics_func(y=v, args=p, t=t1)
 
 
-def _complex_physics(
-    vr: Array, vi: Array, p: Array, group, t1: float
-) -> tuple[Array, Array, Array, Array]:
+def _complex_physics(vr: Array, vi: Array, p: Array, group, t1: float) -> tuple[Array, Array, Array, Array]:
     v = vr + 1j * vi
     f, q = group.physics_func(y=v, args=p, t=t1)
     return f.real, f.imag, q.real, q.imag
 
 
-def _primal_and_jac_real(
-    f, v: Array, p: Array
-) -> tuple[tuple[Array, Array], tuple[Array, Array]]:
+def _primal_and_jac_real(f, v: Array, p: Array) -> tuple[tuple[Array, Array], tuple[Array, Array]]:
     """Compute f(v,p) and its Jacobian w.r.t. v in a single forward sweep.
 
     Sweeps n unit tangents via ``jax.jvp``, extracting the primal from the
@@ -51,9 +47,7 @@ def _primal_and_jac_real(
     """
     n = v.shape[0]
     g = lambda v_: f(v_, p)  # close over p; differentiate w.r.t. v only
-    (f_vals, q_vals), (dfs, dqs) = jax.vmap(
-        lambda e: jax.jvp(g, (v,), (e,))
-    )(jnp.eye(n))
+    (f_vals, q_vals), (dfs, dqs) = jax.vmap(lambda e: jax.jvp(g, (v,), (e,)))(jnp.eye(n))
     return (f_vals[0], q_vals[0]), (dfs.T, dqs.T)
 
 
@@ -74,12 +68,8 @@ def _primal_and_jac_complex(
     zeros_vr = jnp.zeros_like(vr)
     zeros_vi = jnp.zeros_like(vi)
     g = lambda vr_, vi_: f(vr_, vi_, p)  # close over p; differentiate w.r.t. vr, vi only
-    (fr_s, fi_s, qr_s, qi_s), (dfr_r, dfi_r, dqr_r, dqi_r) = jax.vmap(
-        lambda e: jax.jvp(g, (vr, vi), (e, zeros_vi))
-    )(jnp.eye(n))
-    _, (dfr_i, dfi_i, dqr_i, dqi_i) = jax.vmap(
-        lambda e: jax.jvp(g, (vr, vi), (zeros_vr, e))
-    )(jnp.eye(n))
+    (fr_s, fi_s, qr_s, qi_s), (dfr_r, dfi_r, dqr_r, dqi_r) = jax.vmap(lambda e: jax.jvp(g, (vr, vi), (e, zeros_vi)))(jnp.eye(n))
+    _, (dfr_i, dfi_i, dqr_i, dqi_i) = jax.vmap(lambda e: jax.jvp(g, (vr, vi), (zeros_vr, e)))(jnp.eye(n))
     primal = (fr_s[0], fi_s[0], qr_s[0], qi_s[0])
     jac_r = (dfr_r.T, dfi_r.T, dqr_r.T, dqi_r.T)
     jac_i = (dfr_i.T, dfi_i.T, dqr_i.T, dqi_i.T)
@@ -135,6 +125,7 @@ def assemble_system_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+
         if group.is_fdomain:
             # F-domain component: evaluate admittance at f=0 (DC).
             v_locs = y_guess[group.var_indices]
@@ -156,9 +147,7 @@ def assemble_system_real(
 
         physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
 
-        (f_l, q_l), (df_l, dq_l) = jax.vmap(
-            functools.partial(_primal_and_jac_real, physics_at_t1)
-        )(v_locs, params)
+        (f_l, q_l), (df_l, dq_l) = jax.vmap(functools.partial(_primal_and_jac_real, physics_at_t1))(v_locs, params)
 
         total_f = total_f.at[group.eq_indices].add(f_l)
         total_q = total_q.at[group.eq_indices].add(q_l)
@@ -207,9 +196,7 @@ def assemble_gc_real(
         v_locs = y_guess[group.var_indices]
         physics_at_dc = functools.partial(_real_physics, group=group, t1=0.0)
 
-        (_, _), (df_l, dq_l) = jax.vmap(
-            functools.partial(_primal_and_jac_real, physics_at_dc)
-        )(v_locs, group.params)
+        (_, _), (df_l, dq_l) = jax.vmap(functools.partial(_primal_and_jac_real, physics_at_dc))(v_locs, group.params)
 
         g_vals_list.append(df_l.reshape(-1))
         c_vals_list.append(dq_l.reshape(-1))
@@ -250,6 +237,7 @@ def assemble_residual_only_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+
         if group.is_fdomain:
             # F-domain groups have no time-domain physics; their contribution is
             # added directly in the frequency domain by the HB solver.
@@ -326,6 +314,7 @@ def assemble_system_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+
         if group.is_fdomain:
             # F-domain component: evaluate admittance at f=0 (DC) — complex circuit path.
             v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
@@ -338,10 +327,10 @@ def assemble_system_complex(
             # For general complex Y: dIr/dVr = Yr, dIr/dVi = -Yi, dIi/dVr = Yi, dIi/dVi = Yr
             Yr = Y_mats.real  # (N, n_ports, n_ports)
             Yi = Y_mats.imag
-            vals_blocks[0].append(Yr.reshape(-1))   # RR: dIr/dVr
+            vals_blocks[0].append(Yr.reshape(-1))  # RR: dIr/dVr
             vals_blocks[1].append((-Yi).reshape(-1))  # RI: dIr/dVi
-            vals_blocks[2].append(Yi.reshape(-1))    # IR: dIi/dVr
-            vals_blocks[3].append(Yr.reshape(-1))    # II: dIi/dVi
+            vals_blocks[2].append(Yi.reshape(-1))  # IR: dIi/dVr
+            vals_blocks[3].append(Yr.reshape(-1))  # II: dIi/dVi
             continue
 
         v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
@@ -355,11 +344,9 @@ def assemble_system_complex(
 
         physics_split = functools.partial(_complex_physics, group=group, t1=t1)
 
-        (fr, fi, qr, qi), (dfr_r, dfi_r, dqr_r, dqi_r), (dfr_i, dfi_i, dqr_i, dqi_i) = (
-            jax.vmap(functools.partial(_primal_and_jac_complex, physics_split))(
-                v_r, v_i, params
-            )
-        )
+        (fr, fi, qr, qi), (dfr_r, dfi_r, dqr_r, dqi_r), (dfr_i, dfi_i, dqr_i, dqi_i) = jax.vmap(
+            functools.partial(_primal_and_jac_complex, physics_split)
+        )(v_r, v_i, params)
 
         idx_r, idx_i = group.eq_indices, group.eq_indices + half_size
         total_f = total_f.at[idx_r].add(fr).at[idx_i].add(fi)
@@ -409,6 +396,7 @@ def assemble_residual_only_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+
         if group.is_fdomain:
             # F-domain groups have no time-domain physics; their contribution is
             # added directly in the frequency domain by the HB solver.

@@ -64,7 +64,8 @@ Each component has two call interfaces:
 
 **`linear.py`** — Strategy pattern for linear algebra:
 - `DenseSolver`: JAX LU (`jnp.linalg.solve`), best for small circuits or GPU
-- `KLUSolver`: Sparse KLU via `klujax`, best for large circuits on CPU
+- `KLUSplitLinear`/`KLUSplitQuadratic`: Sparse KLU with split symbolic/numeric via `klujax >= 5.0` (default)
+- `KLUSolver`: Non-split KLU fallback via `klujax`
 - `SparseSolver`: Iterative BiCGStab, best for transient on GPU
 - All expose `solve_dc()` which runs Newton-Raphson (via Optimistix) to find DC operating point
 

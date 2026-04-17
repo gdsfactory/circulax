@@ -27,8 +27,7 @@ dependencies = [
     "matplotlib",
     "typing-extensions>=4.13.2",
     "lineax",
-    "klujax>=0.4.8"
-]
+    "klujax>=0.5.0"]
 
 [project.optional-dependencies]
 test = [
@@ -36,6 +35,7 @@ test = [
     "papermill",
     "ipykernel>=6.29.5",   # required by papermill to execute notebooks
     "schemdraw",
+    "jupyter-dash",        # pulls plotly + dash; used by inverse_design notebooks
 ]
 docs = [
     "ipykernel>=6.29.5",
@@ -59,6 +59,8 @@ docs = [
     "mkdocstrings[python]>=0.27.0",
     "mkdocs-glightbox>=0.4.0",
     "mkdocs-minify-plugin>=0.8.0",
+    "jupyter-dash",
+    "kaleido>=1.2.0,<2"
 ]
 dev = [
     "circulax[test,docs]",
@@ -161,10 +163,10 @@ circulax = { path = ".", editable = true }
 # ---------------------------------------------------------------------------
 
 [tool.pixi.tasks]
-copy_readme      = "cp ReadMe.md docs/index.md && sed -i 's|docs/images|images|g' docs/index.md"
+copy_readme      = "cp ReadMe.md docs/index.md && sed -i 's|docs/||g' docs/index.md"
 install_ipkernel = "python -m ipykernel install --user --name circulax"
 nbrun            = { cmd = ["/bin/sh", "-c", "find examples -name '*.ipynb' -not -path '*/.ipynb_checkpoints/*' | xargs -P4 -I NB papermill NB NB -k circulax"], depends-on = ["install_ipkernel"], description = "Execute all notebooks in-place with papermill (parallel)" }
-nbdocs           = { cmd = "rm -rf docs/examples && mkdir -p docs/examples && jupyter nbconvert --config docs/nbconvert_config.py --to markdown", depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
+nbdocs           = { cmd = ["/bin/sh", "-c", "rm -rf docs/examples && mkdir -p docs/examples && jupyter nbconvert --config docs/nbconvert_config.py --to markdown && find examples -name '*.gif' | xargs -I GIF cp GIF docs/examples/"], depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
 docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
 pytest_run       = { cmd = ["pytest", "tests",], depends-on = ["install_ipkernel"] }
@@ -188,9 +190,9 @@ bench_lc_ladder  = { cmd = ["python", "benchmarking/lc_ladder_testbench.py"],   
 default = { features = ["py313", "dev"], solve-group = "py313" }
 
 # CI matrix — minimal, no dev extras
-py311 = { features = ["py311", "test"], solve-group = "py311" }
-py312 = { features = ["py312", "test"], solve-group = "py312" }
-py313 = { features = ["py313", "test"], solve-group = "py313" }
+py311 = { features = ["py311", "dev"], solve-group = "py311" }
+py312 = { features = ["py312", "dev"], solve-group = "py312" }
+py313 = { features = ["py313", "dev"], solve-group = "py313" }
 
 # Benchmark environment — includes NGSpice for accuracy comparisons
 benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }

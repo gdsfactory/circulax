@@ -20,7 +20,7 @@ for _name, _cls in backends.items():
 
 
 # assemble_total_f is local to this module and uses jax
-def assemble_total_f(component_groups: list, y, t:float=0.0)-> None:
+def assemble_total_f(component_groups: list, y, t: float = 0.0) -> None:
     total_f = jnp.zeros(y.shape[0])
     for group in component_groups.values():
         v_locs = y[group.var_indices]
@@ -35,7 +35,7 @@ def assemble_total_f(component_groups: list, y, t:float=0.0)-> None:
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_operation_point_residual_small(simple_lrc_netlist: Netlist, backend)-> None:  # noqa: ANN001
+def test_solve_operation_point_residual_small(simple_lrc_netlist: Netlist, backend) -> None:  # noqa: ANN001
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
@@ -54,7 +54,7 @@ def test_solve_operation_point_residual_small(simple_lrc_netlist: Netlist, backe
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_operation_point_residual_small_complex(simple_optical_netlist: Netlist, backend)-> None:  # noqa: ANN001
+def test_solve_operation_point_residual_small_complex(simple_optical_netlist: Netlist, backend) -> None:  # noqa: ANN001
     net_dict, models_map = simple_optical_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 

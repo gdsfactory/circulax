@@ -54,13 +54,11 @@ sol = transient_sim(
 )
 ```
 
-This is simple and JIT-compiles efficiently, but requires you to choose a `dt0` that is small enough for accuracy across the whole simulation.
+Simple and JIT-compiles efficiently, but requires a `dt0` small enough for accuracy across the whole simulation.
 
 ### Adaptive step size with PIDController
 
-For circuits with widely varying timescales — fast switching events followed by slow settling — an adaptive step size controller dramatically reduces the number of steps while maintaining accuracy.
-
-Pass a `diffrax.PIDController` as the `stepsize_controller` argument:
+For circuits with widely varying timescales (fast switching followed by slow settling), pass a `diffrax.PIDController`:
 
 ```python
 import diffrax
@@ -113,19 +111,16 @@ print(sol.stats)
 ```python
 import diffrax
 import jax.numpy as jnp
-from circulax import compile_netlist, analyze_circuit, setup_transient
+from circulax import compile_circuit, setup_transient
 
-# 1. Compile and analyse
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
-linear_strat = analyze_circuit(groups, sys_size)
+# 1. Compile and solve DC operating point
+circuit = compile_circuit(net_dict, models_map)
+y_op = circuit()
 
-# 2. DC operating point (used as initial condition)
-y_op = linear_strat.solve_dc(groups, jnp.zeros(sys_size))
+# 2. Set up transient solver
+transient_sim = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
 
-# 3. Set up transient solver
-transient_sim = setup_transient(groups=groups, linear_strategy=linear_strat)
-
-# 4. Run with adaptive stepping
+# 3. Run with adaptive stepping
 pid = diffrax.PIDController(rtol=1e-3, atol=1e-6, pcoeff=0.2, icoeff=0.5,
                              dcoeff=0.0, error_order=2, dtmin=1e-14, force_dtmin=True)
 saveat = diffrax.SaveAt(ts=jnp.linspace(0, 1e-6, 1000))
@@ -136,7 +131,7 @@ sol = transient_sim(
     stepsize_controller=pid,
 )
 
-# 5. Extract results
+# 4. Extract results
 ts = sol.ts
-v_out = sol.ys[:, port_map["R1,p2"]]
+v_out = circuit.get_port_field(sol.ys, "R1,p2")
 ```

@@ -22,13 +22,13 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from circulax.compiler import compile_netlist
-from circulax.solvers import analyze_circuit
-from circulax.utils import update_group_params
-
+from circulax import compile_circuit
+from circulax.components.electronic import Resistor
+from circulax.components.photonic import Grating, OpticalSource, OpticalWaveguide, Splitter
 ```
 
     KLUJAX_RS DEBUG MODE.
+    WARNING:2026-04-17 17:32:40,004:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -89,16 +89,6 @@ net_dict = {
 
 
 ```python
-from circulax.components.electronic import Resistor
-from circulax.components.photonic import (
-    Grating,
-    OpticalSource,
-    OpticalWaveguide,
-    Splitter,
-)
-
-print("--- DEMO: Photonic Splitter & Grating Link (Wavelength Sweep) ---")
-
 models_map = {
     "grating": Grating,
     "waveguide": OpticalWaveguide,
@@ -108,49 +98,23 @@ models_map = {
     "ground": lambda: 0,
 }
 
+print("--- DEMO: Photonic Splitter & Grating Link (Wavelength Sweep) ---")
 
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
+circuit = compile_circuit(net_dict, models_map, is_complex=True)
 
 wavelengths = jnp.linspace(1260, 1360, 2000)
 
-solver_strat = analyze_circuit(groups, sys_size, is_complex=True)
-
 print("Sweeping Wavelength...")
-
-
-@jax.jit
-def solve_for_loss(val):
-    g = update_group_params(groups, "grating", "wavelength_nm", val)
-    g = update_group_params(g, "waveguide", "wavelength_nm", val)
-    y_flat = solver_strat.solve_dc(g, y_guess=jnp.ones(sys_size * 2))
-    return y_flat
-
-
 start = time.time()
-print("Solving for single wavelength (and jit compiling)")
-solve_for_loss(1310)
+solutions = jax.jit(circuit)(wavelength_nm=wavelengths)
 total = time.time() - start
-print(f"Compilation and single point simulation Time: {total:.3f}s")
+print(f"Sweep time: {total:.3f}s")
 
-print("Sweeping DC Operating Point...")
-start = time.time()
-solutions = jax.vmap(solve_for_loss)(wavelengths)
-total = time.time() - start
-print(f"Vmap simulation Time: {total:.3f}s")
-
-v_out1 = (
-    solutions[:, port_map["Detector,p1"]]
-    + 1j * solutions[:, port_map["Detector,p1"] + sys_size]
-)
-# v_out2 = solutions[:, port_map["Load2,p1" ]] + 1j * solutions[:, port_map["Load2,p1"]+sys_size]
-
+v_out1 = circuit.get_port_field(solutions, "Detector,p1")
 p_out1_db = 10.0 * jnp.log10(jnp.abs(v_out1) ** 2 + 1e-12)
-# p_out2_db = 10.0 * jnp.log10(jnp.abs(v_out2)**2 + 1e-12)
 
 plt.figure(figsize=(8, 4))
 plt.plot(wavelengths, p_out1_db, "b-", label="Port 1 (Split)")
-# plt.plot(wavelengths, p_out2_db, 'r--', label='Port 2 (Split)')
-
 plt.title("Grating and MZM Response")
 plt.xlabel("Wavelength (nm)")
 plt.ylabel("Received Power (dB)")
@@ -163,16 +127,11 @@ plt.show()
 
 
     Sweeping Wavelength...
-    Solving for single wavelength (and jit compiling)
 
 
-    Compilation and single point simulation Time: 0.854s
-    Sweeping DC Operating Point...
-
-
-    Vmap simulation Time: 1.339s
+    Sweep time: 1.565s
 
 
 
 
-![png](mzm_files/mzm_4_4.png)
+![png](mzm_files/mzm_4_3.png)

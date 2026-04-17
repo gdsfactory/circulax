@@ -1,8 +1,8 @@
 ## Harmonic Balance Analysis
 
-Harmonic Balance (HB) is a frequency-domain method for finding the **periodic steady state** of a nonlinear circuit driven by a periodic source.  Instead of integrating forward in time until transients decay, HB solves directly for the Fourier coefficients of every node voltage and state variable.
+Harmonic Balance (HB) solves directly for the Fourier coefficients of the periodic steady state, rather than integrating forward in time until transients decay.
 
-For circuits driven at a single frequency $f_0$, HB is often orders of magnitude faster than transient simulation: it converges in a handful of Newton iterations rather than thousands of time steps.
+For single-tone circuits, HB typically converges in ~10-20 Newton iterations instead of thousands of time steps.
 
 ---
 
@@ -16,12 +16,7 @@ For circuits driven at a single frequency $f_0$, HB is often orders of magnitude
 | **Nonlinear harmonics** | Captured automatically | Captured up to $N$ harmonics |
 | **Differentiable?** | Yes (Diffrax) | Yes (JAX end-to-end) |
 
-HB is the right choice when you need to:
-
-- Find the steady-state amplitude and phase at the drive frequency.
-- Measure Total Harmonic Distortion (THD) of a nonlinear amplifier or clipper.
-- Sweep the drive frequency across a band (run one HB solve per frequency).
-- Optimise circuit parameters to shape a frequency response (use `jax.grad` through the solver).
+Use HB for steady-state amplitude/phase, THD measurement, frequency sweeps, or gradient-based optimisation through the periodic solution.
 
 ---
 
@@ -65,9 +60,9 @@ Given a current iterate $Y^{(\ell)}$:
 
 ---
 
-### Why JAX Makes This Straightforward
+### Jacobian via AD
 
-Traditional HB implementations require manually deriving the **HB Jacobian**, which has a block-circulant structure coupling every harmonic to every other harmonic.  With JAX, this is completely unnecessary:
+Traditional HB implementations require manually deriving the block-circulant HB Jacobian. With JAX this is unnecessary:
 
 ```python
 def residual_fn(y_flat):
@@ -85,15 +80,13 @@ def residual_fn(y_flat):
 J = jax.jacobian(residual_fn)(y_flat)   # exact Jacobian, no manual derivation
 ```
 
-Key JAX features leveraged:
-
 | Feature | Role in HB |
 |---|---|
-| `jax.vmap` | Evaluates circuit physics at all $K$ time points in a single vectorised call — no Python loop |
-| `jnp.fft.rfft` / `irfft` | Differentiable DFT/IDFT; JAX traces through them cleanly |
-| `jax.jacobian` | Computes the exact $KN \times KN$ Newton Jacobian via forward-mode AD — no manual block-circulant derivation |
-| `jax.jit` | Compiles `residual_fn` and `jacobian(residual_fn)` once; subsequent Newton steps reuse the compiled XLA program |
-| `jax.grad` | The entire `hb.solve()` call is differentiable, enabling gradient-based inverse design through the steady state |
+| `jax.vmap` | Evaluates physics at all $K$ time points in one vectorised call |
+| `jnp.fft.rfft/irfft` | Differentiable DFT/IDFT |
+| `jax.jacobian` | Exact $KN \times KN$ Jacobian via forward-mode AD |
+| `jax.jit` | Compiles residual + Jacobian once; Newton steps reuse the XLA program |
+| `jax.grad` | The full `hb.solve()` is differentiable for inverse design |
 
 ---
 
@@ -103,21 +96,20 @@ The workflow mirrors the DC/transient pattern:
 
 ```python
 import jax.numpy as jnp
-from circulax import compile_netlist, analyze_circuit, setup_harmonic_balance
+from circulax import compile_circuit, setup_harmonic_balance
 from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSourceAC
 
 # 1. Define and compile the netlist
 net = { ... }   # SAX-format netlist dict
 models = {"R": Resistor, "L": Inductor, "C": Capacitor, "Vs": VoltageSourceAC}
-groups, num_vars, net_map = compile_netlist(net, models)
+circuit = compile_circuit(net, models, backend="dense")
 
 # 2. Find the DC operating point (used as the initial guess for HB)
-dc_solver = analyze_circuit(groups, num_vars, backend="dense")
-y_dc = dc_solver.solve_dc(groups, jnp.zeros(num_vars))
+y_dc = circuit()
 
 # 3. Set up and run the Harmonic Balance solver
 f_drive = 1e6   # Hz — must match the frequency in VoltageSourceAC settings
-run_hb = setup_harmonic_balance(groups, num_vars, freq=f_drive, num_harmonics=5)
+run_hb = setup_harmonic_balance(circuit.groups, circuit.sys_size, freq=f_drive, num_harmonics=5)
 y_time, y_freq = run_hb(y_dc)
 
 # The solver is also compatible with jax.jit for repeated calls:
@@ -128,8 +120,8 @@ y_time, y_freq = run_hb(y_dc)
 
 | Parameter | Default | Description |
 |---|---|---|
-| `groups` | — | Compiled component groups from `compile_netlist` |
-| `num_vars` | — | System size (second return value of `compile_netlist`) |
+| `groups` | — | Compiled component groups (from `circuit.groups`) |
+| `num_vars` | — | System size (from `circuit.sys_size`) |
 | `freq` | — | Fundamental frequency in Hz |
 | `num_harmonics` | `5` | Number of harmonics $N$; solver uses $K = 2N+1$ time points |
 
@@ -161,11 +153,11 @@ Plot any node's waveform as `plt.plot(t_points, y_time[:, node_idx])`.
 
 Normalised Fourier coefficients.  Index 0 is DC, index 1 is the fundamental, index $k$ is the $k$-th harmonic.
 
-Because `rfft` folds negative frequencies into positive ones, the **two-sided (physical) amplitude** of harmonic $k \geq 1$ is:
+Because `rfft` folds negative frequencies into positive ones, the two-sided (physical) amplitude of harmonic $k \geq 1$ is:
 
-$$\hat{V}_k = 2 \left| \texttt{y\_freq}[k, \text{node}] \right|$$
+$$\hat{V}_k = 2 \left| Y_k \right|$$
 
-The DC value is simply `y_freq[0, node].real` (no factor of 2).
+where $Y_k$ = `y_freq[k, node]`.  The DC value is simply `y_freq[0, node].real` (no factor of 2).
 
 ```python
 node = net_map["R1,p2"]
@@ -177,32 +169,27 @@ amplitudes = jnp.abs(y_freq[:, node]) * jnp.where(harmonics == 0, 1.0, 2.0)
 
 ### Frequency Sweep
 
-A common use case is sweeping the drive frequency across a band — for example, to measure a nonlinear amplifier's gain compression or a filter's harmonic rejection.  With JAX, `jax.vmap` compiles the entire sweep into a **single XLA call**, running all frequencies in parallel on CPU or GPU.
+`jax.vmap` compiles the entire frequency sweep into a single XLA call.
 
-The key requirement: the `VoltageSourceAC` component bakes its frequency into the compiled parameters.  When sweeping, you must update that parameter to match each sweep frequency — otherwise the source still drives at the original compile-time frequency regardless of what `setup_harmonic_balance` sees.  Use `equinox.tree_at` to override the param at trace time:
+The source frequency is baked into the compiled parameters, so it must be updated at each sweep point via `update_group_params`:
 
 ```python
-import equinox as eqx
 import jax
 import jax.numpy as jnp
-from circulax import compile_netlist, analyze_circuit, setup_harmonic_balance
+from circulax import compile_circuit, setup_harmonic_balance
+from circulax.utils import update_group_params
 
-groups, num_vars, net_map = compile_netlist(net, models)
-dc_solver = analyze_circuit(groups, num_vars, backend="dense")
-y_dc = dc_solver.solve_dc(groups, jnp.zeros(num_vars))
+circuit = compile_circuit(net, models, backend="dense")
+y_dc = circuit()
 
-node_idx = net_map["RL,p1"]   # output node index
+node_idx = circuit.port_map["RL,p1"]   # output node index
 
 def hb_solve_freq(sweep_freq):
     # Update the source's freq param so it drives at sweep_freq.
     # The group key matches the component key used in models_map.
-    updated_groups = eqx.tree_at(
-        lambda g: g["Vs"].params.freq,
-        groups,
-        jnp.asarray([sweep_freq]),
-    )
+    updated_groups = update_group_params(circuit.groups, "Vs", "freq", sweep_freq)
     run_hb = setup_harmonic_balance(
-        updated_groups, num_vars, freq=sweep_freq, num_harmonics=10
+        updated_groups, circuit.sys_size, freq=sweep_freq, num_harmonics=10
     )
     _, y_freq = run_hb(y_dc)
     return 2.0 * jnp.abs(y_freq[1, node_idx])   # fundamental amplitude
@@ -212,12 +199,10 @@ sweep_freqs = jnp.logspace(2, 5, 100)   # 100 Hz – 100 kHz
 amps = jax.jit(jax.vmap(hb_solve_freq))(sweep_freqs)
 ```
 
-This typically gives **10–15× wall-clock speedup** over an equivalent serial NGSpice sweep once compiled, with accuracy within ~1 mV for typical small-signal operating points.
-
 ---
 
 ### Scalability
 
-The Newton Jacobian has shape $(K \cdot n) \times (K \cdot n)$ and is stored as a dense array.  For 10 harmonics ($K=21$) and 200 circuit nodes this is $4200 \times 4200 \approx 80\,\text{MB}$ — tractable on any modern machine.
+The Newton Jacobian is $(K \cdot n) \times (K \cdot n)$, stored dense.  For 10 harmonics ($K=21$) and 200 nodes: $4200 \times 4200 \approx 80\,\text{MB}$.
 
-For large circuits, the block-circulant structure of the HB Jacobian can be exploited to reduce the problem to $n$ independent $K \times K$ linear systems (one per node), achieved by diagonalising with `jnp.fft.ifft`.  This is not yet implemented but is a natural future extension given Circulax's JAX foundation.
+For larger circuits, the block-circulant structure could be exploited to reduce to $n$ independent $K \times K$ systems via `jnp.fft.ifft` — not yet implemented.
