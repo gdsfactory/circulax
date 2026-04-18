@@ -35,14 +35,14 @@ theme:
 site_name: circulax
 site_description: A Differentiable, Functional Circuit Analyzer based on JAX.
 
-repo_url: https://github.com/cdaunt/circulax
-repo_name: cdaunt/circulax
+repo_url: https://github.com/gdsfactory/circulax
+repo_name: gdsfactory/circulax
 
 edit_uri: ""
 
 strict: false  # Don't allow warnings during the build process
 
-copyright: Copyright &copy; 2024 cdaunt
+copyright: Copyright &copy; 2026 Chris Daunt
 
 extra_css:
   - stylesheets/extra.css
@@ -137,4 +137,4 @@ hooks:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/cdaunt/circulax
+      link: https://github.com/gdsfactory/circulax

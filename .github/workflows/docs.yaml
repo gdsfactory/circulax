@@ -24,5 +24,11 @@ jobs:
           environments: default
           cache: true
 
+      - name: Execute example notebooks
+        run: pixi run nbrun
+
+      - name: Convert notebooks to markdown
+        run: pixi run nbdocs
+
       - name: Deploy docs
         run: pixi run docs-deploy
