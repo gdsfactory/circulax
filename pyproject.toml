@@ -71,10 +71,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/cdaunt/circulax"
-Repository = "https://github.com/cdaunt/circulax"
-Documentation = "https://cdaunt.github.io/circulax"
-Issues = "https://github.com/cdaunt/circulax/issues"
+Homepage = "https://github.com/gdsfactory/circulax"
+Repository = "https://github.com/gdsfactory/circulax"
+Documentation = "https://gdsfactory.github.io/circulax"
+Issues = "https://github.com/gdsfactory/circulax/issues"
 
 # ---------------------------------------------------------------------------
 # Build system (PyPI / hatch)
