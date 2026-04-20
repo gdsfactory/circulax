@@ -65,7 +65,11 @@ from circulax.components.electronic import (  # noqa: E402
     _junction_charge,
 )
 from circulax.solvers import analyze_circuit, setup_transient  # noqa: E402
-from circulax.solvers.transient import BDF2FactorizedTransientSolver, BDF2RefactoringTransientSolver, BDF2VectorizedTransientSolver  # noqa: E402
+from circulax.solvers.transient import (  # noqa: E402
+    BDF2FactorizedTransientSolver,
+    BDF2RefactoringTransientSolver,
+    BDF2VectorizedTransientSolver,
+)
 
 # ---------------------------------------------------------------------------
 # DiodeLimited — clamped Shockley + SPICE junction capacitance
@@ -494,7 +498,7 @@ def main() -> None:
     print("=" * 70)  # noqa: T201
     print("Diode Solver Benchmark  (tightened controls)")  # noqa: T201
     print(f"  Newton: rtol={NEWTON_RTOL:.0e}  atol={NEWTON_ATOL:.0e}")  # noqa: T201
-    print(f"  Step: rtol=1e-5  atol=1e-6  dtmax=1µs")  # noqa: T201
+    print("  Step: rtol=1e-5  atol=1e-6  dtmax=1µs")  # noqa: T201
     print(f"  Backends: {backends}  Reference: {ref}")  # noqa: T201
     print("=" * 70)  # noqa: T201
 

@@ -9,6 +9,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# Make bosdi importable when it's installed as a sibling source checkout
+# (not installed into the conda env).  Set BOSDI_SRC to override.
+import os as _os
+
+_bosdi_src = _os.environ.get("BOSDI_SRC", "/home/cdaunt/code/bosdi/src")
+if Path(_bosdi_src).is_dir() and _bosdi_src not in sys.path:
+    sys.path.insert(0, _bosdi_src)
+
 # Shared fixtures for tests
 jax.config.update("jax_enable_x64", True)
 

@@ -95,7 +95,7 @@ def test_short_transient_runs_complex(simple_optical_netlist, backend):
     assert jnp.isfinite(sol.ys).all()
 
 
-def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  # noqa: ANN001
+def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:
     """FactorizedTransientSolver (frozen-Jacobian) should produce the same trajectory
     as VectorizedTransientSolver (full Newton) on a linear LRC circuit."""
     from circulax.solvers.linear import split_solver_available
@@ -144,7 +144,7 @@ def test_factorized_transient_matches_vectorized(simple_lrc_netlist) -> None:  #
     assert jnp.allclose(sol_factor.ys, sol_full.ys, atol=1e-4)
 
 
-def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:  # noqa: ANN001
+def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:
     """RefactoringTransientSolver (klu_refactor) should produce the same trajectory
     as VectorizedTransientSolver (full Newton) on a linear LRC circuit."""
     from circulax.solvers.linear import split_refactor_available

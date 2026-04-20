@@ -20,11 +20,12 @@ Example:
     ...     param_defaults={"R": 1e3, "m": 1.0}
     ... )
     >>> resistor = OsdiResistor(R=100.0, m=1.0)
+
 """
 
 try:
-    from osdi_loader import load_osdi_model, OsdiModel
     from osdi_jax import osdi_eval
+    from osdi_loader import OsdiModel, load_osdi_model
     _BOSDI_AVAILABLE = True
     _BOSDI_ERR = None
 except ImportError as _bosdi_err:
@@ -34,9 +35,11 @@ except ImportError as _bosdi_err:
     OsdiModel = None  # type: ignore[assignment]
     osdi_eval = None  # type: ignore[assignment]
 
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar
+
 import jax
 import jax.numpy as jnp
+
 from circulax.components.base_component import CircuitComponent
 
 
@@ -49,6 +52,7 @@ def _extract_param(container: Any, name: str) -> Any:
 
     Returns:
         The parameter value
+
     """
     if isinstance(container, dict):
         return container[name]
@@ -71,7 +75,7 @@ class OsdiComponent(CircuitComponent):
     """
 
     # Class variables set by factory function
-    osdi_model: ClassVar[Optional[OsdiModel]] = None
+    osdi_model: ClassVar[OsdiModel | None] = None
     param_names: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
@@ -106,6 +110,7 @@ class OsdiComponent(CircuitComponent):
             - OSDI outputs are reshaped to match Circulax's flat format
             - Charge (q) is mapped to reactive port contributions
             - Updated internal state is mapped to state derivatives (f contributions)
+
         """
         if cls.osdi_model is None:
             raise RuntimeError(
@@ -167,9 +172,9 @@ class OsdiComponent(CircuitComponent):
 
 def osdi_component(
     osdi_path: str,
-    port_names: Optional[tuple[str, ...]] = None,
-    param_names: Optional[tuple[str, ...]] = None,
-    param_defaults: Optional[dict[str, float]] = None,
+    port_names: tuple[str, ...] | None = None,
+    param_names: tuple[str, ...] | None = None,
+    param_defaults: dict[str, float] | None = None,
     osdi_version: str = "0.4",
 ) -> type[OsdiComponent]:
     """Factory function to create an OsdiComponent subclass from a .osdi binary.
@@ -215,8 +220,8 @@ def osdi_component(
         >>> # Instantiate with specific parameter values
         >>> r1 = OsdiResistor(R=100.0, m=1.0)
         >>> # Use in circuit...
-    """
 
+    """
     # ─────────────────────────────────────────────────────────────────────
     # 1. Load OSDI model and extract metadata
     # ─────────────────────────────────────────────────────────────────────
@@ -263,7 +268,7 @@ def osdi_component(
     # 4. Set up parameter defaults (default: 1.0 for all)
     # ─────────────────────────────────────────────────────────────────────
     if param_defaults is None:
-        param_defaults = {pn: 1.0 for pn in param_names}
+        param_defaults = dict.fromkeys(param_names, 1.0)
     else:
         # Ensure all parameters have defaults
         for pn in param_names:
@@ -293,7 +298,7 @@ def osdi_component(
         "states": states,
 
         # Type hints for parameters
-        "__annotations__": {pn: float for pn in param_names},
+        "__annotations__": dict.fromkeys(param_names, float),
 
         # Parameter default values (become Equinox fields)
         **param_defaults,
@@ -302,7 +307,7 @@ def osdi_component(
     # ─────────────────────────────────────────────────────────────────────
     # 6. Create and return new class
     # ─────────────────────────────────────────────────────────────────────
-    class_name = f"OsdiComponent_{model.id}_{osdi_path.split('/')[-1].split('.')[0]}"
+    class_name = f"OsdiComponent_{model.id}_{osdi_path.rsplit('/', maxsplit=1)[-1].split('.')[0]}"
 
     new_class = type(class_name, (OsdiComponent,), namespace)
 

@@ -8,7 +8,8 @@ matches Circulax's JAX version. For now, we test the class structure
 and factory without instantiating the solver_call()."""
 
 import pytest
-from circulax.components.osdi_component import _BOSDI_AVAILABLE, osdi_component, OsdiComponent
+
+from circulax.components.osdi_component import _BOSDI_AVAILABLE, OsdiComponent, osdi_component
 
 pytestmark = pytest.mark.skipif(not _BOSDI_AVAILABLE, reason="bosdi package not available")
 
@@ -118,7 +119,6 @@ class TestOsdiComponentFactory:
         # Create a fake OSDI model with num_states > 0
         # For now, we can only test this indirectly if such a binary exists
         # This is a placeholder for future stateful model support
-        pass
 
 
 class TestOsdiComponentIntegration:

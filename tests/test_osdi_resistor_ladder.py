@@ -21,11 +21,11 @@ Expected Results:
   - Node 3: 1.0 V (exactly V_ref / 8)
 """
 
-import pytest
-import time
+
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from circulax import compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource

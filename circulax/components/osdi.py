@@ -8,6 +8,8 @@ on ``PYTHONPATH`` (e.g. via a ``.env`` file).  OSDI support is optional and not
 available on all platforms (e.g. Windows).
 """
 
+import difflib
+
 import equinox as eqx
 import jax.numpy as jnp
 
@@ -72,27 +74,92 @@ class OsdiModelDescriptor:
 
     Behaves like a component class from ``models_map``'s perspective but carries
     OSDI-specific metadata instead of Equinox fields.
+
+    Two construction modes:
+
+    1. **Canonical (recommended)** — ``param_names`` is ``None``, so the
+       descriptor uses ``model.param_names`` directly.  Settings dicts may
+       reference any canonical parameter name case-insensitively; unknown
+       names raise a ``ValueError`` with near-match suggestions.  This is
+       the mode used for models with large parameter sets (e.g. PSP103 with
+       783 parameters).
+
+    2. **Legacy positional** — ``param_names`` is an explicit tuple whose
+       *order* must match the OSDI model's internal parameter ordering.
+       Names are treated as opaque keys into ``default_params`` / settings
+       dicts; they do not need to match ``model.param_names``.  Retained
+       for backward compatibility with early OSDI tests that shipped
+       pre-inference aliases like ``"m"`` for ``"$mfactor"``.
     """
 
     _is_osdi_descriptor: bool = True
 
-    def __init__(self, model: OsdiModel, ports: tuple, param_names: tuple, default_params: dict) -> None:
+    def __init__(
+        self,
+        model: OsdiModel,
+        ports: tuple,
+        param_names: tuple | None,
+        default_params: dict,
+    ) -> None:
         self.model = model
         self.ports = ports
         self.states: tuple = ()   # stateless for now; stateful support requires bodi changes
-        self.param_names = param_names
-        self.default_params = default_params
+
+        if param_names is None:
+            self.param_names = tuple(model.param_names)
+            self.is_canonical = True
+            self._name_to_idx = {
+                n.lower(): i for i, n in enumerate(model.param_names) if n
+            }
+        else:
+            self.param_names = param_names
+            self.is_canonical = False
+            self._name_to_idx = {n.lower(): i for i, n in enumerate(param_names)}
+
+        # Canonicalise default_params keys (case-insensitive) so the merge in
+        # make_instance can be case-insensitive too.
+        self.default_params = self._canonicalise(default_params, source="default_params")
+
+    def _canonicalise(self, d: dict, *, source: str) -> dict:
+        """Case-insensitive: rewrite ``d``'s keys to match ``self.param_names``.
+
+        Unknown keys raise with a difflib "did you mean" suggestion.
+        """
+        out = dict.fromkeys(self.param_names, 0.0)
+        for k, v in d.items():
+            idx = self._name_to_idx.get(k.lower())
+            if idx is None:
+                candidates = list(self._name_to_idx.keys())
+                close = difflib.get_close_matches(k.lower(), candidates, n=5)
+                msg = (
+                    f"Unknown OSDI parameter {k!r} in {source}. "
+                    f"Did you mean one of: {close}?"
+                )
+                raise ValueError(msg)
+            out[self.param_names[idx]] = v
+        return out
 
     def make_instance(self, settings: dict) -> dict:
-        """Merge per-instance ``settings`` into ``default_params``, return ordered dict."""
-        merged = {**self.default_params, **settings}
+        """Merge per-instance ``settings`` into ``default_params`` by canonical name."""
+        merged = dict(self.default_params)
+        for k, v in settings.items():
+            idx = self._name_to_idx.get(k.lower())
+            if idx is None:
+                candidates = list(self._name_to_idx.keys())
+                close = difflib.get_close_matches(k.lower(), candidates, n=5)
+                msg = (
+                    f"Unknown OSDI parameter {k!r} in instance settings. "
+                    f"Did you mean one of: {close}?"
+                )
+                raise ValueError(msg)
+            merged[self.param_names[idx]] = v
         return {k: merged[k] for k in self.param_names}
 
 
 def osdi_component(
     osdi_path: str,
     ports: tuple,
-    param_names: tuple,
+    param_names: tuple | None = None,
     default_params: dict | None = None,
 ) -> OsdiModelDescriptor:
     """Load a compiled ``.osdi`` binary and return a descriptor for ``compile_netlist``.
@@ -100,30 +167,47 @@ def osdi_component(
     Args:
         osdi_path:      Absolute path to the OpenVAF-compiled ``.osdi`` file.
         ports:          Ordered tuple of port names matching the Verilog-A terminals.
-        param_names:    Ordered tuple of parameter names matching the OSDI model.
-        default_params: Default values for each parameter. If ``None``, all
-                        parameters default to ``0.0`` — be sure to pass real
-                        values in the netlist ``settings``.
+        param_names:    *(Optional, legacy)* Ordered tuple of parameter names.
+                        If ``None`` (recommended), the descriptor uses
+                        ``OsdiModel.param_names`` — the canonical names read
+                        from the OSDI binary — and every setting key is
+                        resolved against them case-insensitively.  If an
+                        explicit tuple is supplied, its order must match the
+                        OSDI model's internal parameter order and the names
+                        are opaque dict keys (legacy positional mode).
+        default_params: Default values for selected parameters.  Keys may be
+                        any subset of canonical parameter names; unspecified
+                        params default to ``0.0``.  In legacy positional mode
+                        the keys must match the supplied ``param_names``.
 
     Returns:
         :class:`OsdiModelDescriptor` — pass this as a value in the
         ``models_map`` argument of :func:`~circulax.compiler.compile_netlist`.
 
     Raises:
-        AssertionError: If ``ports`` or ``param_names`` lengths don't match the
-            OSDI model's declared pin/parameter counts.
-        NotImplementedError: If the OSDI model has internal state variables
+        ValueError:            If ``ports`` length or a legacy ``param_names``
+            length doesn't match the OSDI model's declared pin/param counts,
+            or if an unknown parameter name appears in ``default_params``.
+        NotImplementedError:   If the OSDI model has internal state variables
             (``num_states > 0``); stateful models are not yet supported.
+        ImportError:           If ``bosdi`` is not available.
 
-    Example::
+    Example (canonical mode, recommended)::
+
+        OsdiPSP103N = osdi_component(
+            osdi_path="psp103v4_psp103.osdi",
+            ports=("D", "G", "S", "B"),
+            default_params={"TYPE": 1.0, "L": 1e-6, "W": 10e-6},
+        )
+
+    Example (legacy positional mode)::
 
         OsdiResistor = osdi_component(
-            osdi_path="/path/to/resistor.osdi",
+            osdi_path="resistor.osdi",
             ports=("A", "B"),
-            param_names=("R", "m"),
-            default_params={"R": 1000.0, "m": 1.0},
+            param_names=("m", "R"),
+            default_params={"m": 1.0, "R": 1000.0},
         )
-        models = {"res": OsdiResistor, "vsrc": VoltageSource}
 
     """
     if not _BOSDI_AVAILABLE:
@@ -138,7 +222,7 @@ def osdi_component(
     if model.num_pins != len(ports):
         msg = f"OSDI model has {model.num_pins} pins but {len(ports)} port names given"
         raise ValueError(msg)
-    if model.num_params != len(param_names):
+    if param_names is not None and model.num_params != len(param_names):
         msg = f"OSDI model has {model.num_params} params but {len(param_names)} param names given"
         raise ValueError(msg)
     if model.num_states > 0:
@@ -149,5 +233,5 @@ def osdi_component(
         model=model,
         ports=ports,
         param_names=param_names,
-        default_params=default_params or dict.fromkeys(param_names, 0.0),
+        default_params=default_params or {},
     )

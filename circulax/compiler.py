@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 
 from circulax.components.base_component import PhysicsReturn, Signals
-from circulax.components.osdi import OsdiComponentGroup, OsdiModelDescriptor, _BOSDI_AVAILABLE
+from circulax.components.osdi import _BOSDI_AVAILABLE, OsdiComponentGroup, OsdiModelDescriptor
 from circulax.netlist import build_net_map
 
 

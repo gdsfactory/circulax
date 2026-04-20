@@ -26,7 +26,7 @@ def assemble_total_f(component_groups: list, y, t: float = 0.0) -> None:
         v_locs = y[group.var_indices]
         physics_fn = partial(group.physics_func, t=t)
 
-        def get_f_only(v, p):  # noqa: ANN202
+        def get_f_only(v, p):
             return physics_fn(y=v, args=p)[0]  # noqa: B023
 
         f_loc = jax.vmap(get_f_only)(v_locs, group.params)
@@ -35,7 +35,7 @@ def assemble_total_f(component_groups: list, y, t: float = 0.0) -> None:
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_operation_point_residual_small(simple_lrc_netlist: Netlist, backend) -> None:  # noqa: ANN001
+def test_solve_operation_point_residual_small(simple_lrc_netlist: Netlist, backend) -> None:
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
@@ -54,7 +54,7 @@ def test_solve_operation_point_residual_small(simple_lrc_netlist: Netlist, backe
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_operation_point_residual_small_complex(simple_optical_netlist: Netlist, backend) -> None:  # noqa: ANN001
+def test_solve_operation_point_residual_small_complex(simple_optical_netlist: Netlist, backend) -> None:
     net_dict, models_map = simple_optical_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
 
@@ -71,7 +71,7 @@ def test_solve_operation_point_residual_small_complex(simple_optical_netlist: Ne
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_dc_gmin_matches_direct(simple_lrc_netlist: Netlist, backend) -> None:  # noqa: ANN001
+def test_solve_dc_gmin_matches_direct(simple_lrc_netlist: Netlist, backend) -> None:
     """GMIN stepping should converge to the same operating point as direct Newton."""
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
@@ -89,7 +89,7 @@ def test_solve_dc_gmin_matches_direct(simple_lrc_netlist: Netlist, backend) -> N
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_dc_source_matches_direct(simple_lrc_netlist: Netlist, backend) -> None:  # noqa: ANN001
+def test_solve_dc_source_matches_direct(simple_lrc_netlist: Netlist, backend) -> None:
     """Source stepping should converge to the same operating point as direct Newton."""
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
@@ -149,7 +149,7 @@ def test_solve_dc_source_scales_voltage() -> None:
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_dc_checked_returns_converged_flag(simple_lrc_netlist: Netlist, backend) -> None:  # noqa: ANN001
+def test_solve_dc_checked_returns_converged_flag(simple_lrc_netlist: Netlist, backend) -> None:
     """solve_dc_checked should return (y, converged) with converged=True for a well-posed circuit."""
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
@@ -168,7 +168,7 @@ def test_solve_dc_checked_returns_converged_flag(simple_lrc_netlist: Netlist, ba
 
 
 @pytest.mark.parametrize("backend", _backends)
-def test_solve_dc_auto_matches_direct(simple_lrc_netlist: Netlist, backend) -> None:  # noqa: ANN001
+def test_solve_dc_auto_matches_direct(simple_lrc_netlist: Netlist, backend) -> None:
     """solve_dc_auto should fall through to direct Newton for a well-posed circuit."""
     net_dict, models_map = simple_lrc_netlist
     groups, sys_size, _ = compile_netlist(net_dict, models_map)
