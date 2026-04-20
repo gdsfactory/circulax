@@ -68,6 +68,14 @@ class OsdiComponentGroup(eqx.Module):
     is_fdomain: bool = eqx.field(static=True, default=False)
     amplitude_param: str = eqx.field(static=True, default="")
 
+    # Experimental: use bosdi.osdi_debug.schur_reduce to eliminate internal
+    # nodes from the per-device stamp before handing it to global Newton.
+    # See docs/bosdi_psp103_ring_oscillator_issue.md for motivation.  When
+    # True, the assembly pads the reduced 4x4 stamp back to num_nodes with
+    # identity rows on internal slots so the compiler-allocated internal
+    # unknowns stay self-consistent.
+    use_schur_reduction: bool = eqx.field(static=True, default=False)
+
 
 class OsdiModelDescriptor:
     """Descriptor returned by :func:`osdi_component`, consumed by ``compile_netlist``.
@@ -100,10 +108,12 @@ class OsdiModelDescriptor:
         ports: tuple,
         param_names: tuple | None,
         default_params: dict,
+        use_schur_reduction: bool = False,
     ) -> None:
         self.model = model
         self.ports = ports
         self.states: tuple = ()   # stateless for now; stateful support requires bodi changes
+        self.use_schur_reduction = use_schur_reduction
 
         if param_names is None:
             self.param_names = tuple(model.param_names)
@@ -161,6 +171,7 @@ def osdi_component(
     ports: tuple,
     param_names: tuple | None = None,
     default_params: dict | None = None,
+    use_schur_reduction: bool = False,
 ) -> OsdiModelDescriptor:
     """Load a compiled ``.osdi`` binary and return a descriptor for ``compile_netlist``.
 
@@ -234,4 +245,5 @@ def osdi_component(
         ports=ports,
         param_names=param_names,
         default_params=default_params or {},
+        use_schur_reduction=use_schur_reduction,
     )

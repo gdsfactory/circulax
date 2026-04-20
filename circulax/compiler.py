@@ -419,6 +419,7 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             jac_cols=jac_cols,
             reg_diag=reg_diag,
             index_map={item["name"]: i for i, item in enumerate(items)},
+            use_schur_reduction=getattr(descriptor, "use_schur_reduction", False),
         )
 
     return compiled_groups, sys_size, port_to_node_map

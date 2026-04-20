@@ -1,0 +1,23 @@
+// 3-stage CMOS inverter chain DC, Vin=VDD.
+// Expected: n1=0, n2=VDD, n3=0.
+
+ground 0
+
+load "psp103v4.osdi"
+include "models.inc"
+model vsource vsource
+
+vdd (vdd 0)  vsource dc=1.2
+vin (n0  0)  vsource dc=1.2
+
+mn1 (n1 n0 0   0)   nmos w=10u l=1u
+mp1 (n1 n0 vdd vdd) pmos w=20u l=1u
+mn2 (n2 n1 0   0)   nmos w=10u l=1u
+mp2 (n2 n1 vdd vdd) pmos w=20u l=1u
+mn3 (n3 n2 0   0)   nmos w=10u l=1u
+mp3 (n3 n2 vdd vdd) pmos w=20u l=1u
+
+control
+  options rawfile="binary" strictsave=1
+  analysis op1 op
+endc

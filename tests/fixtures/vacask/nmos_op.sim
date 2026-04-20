@@ -1,0 +1,17 @@
+// Single NMOS DC operating point at Vds=1.0, Vgs=0.7
+// VACASK reference for circulax's single-transistor test.
+
+ground 0
+
+load "psp103v4.osdi"
+include "models.inc"
+model vsource vsource
+
+m1   (d g 0 0)  nmos w=10u l=1u
+vds  (d 0)      vsource dc=1.0
+vgs  (g 0)      vsource dc=0.7
+
+control
+  options rawfile="binary" strictsave=1
+  analysis op1 op
+endc

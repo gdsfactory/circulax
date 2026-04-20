@@ -1,0 +1,19 @@
+// Single PMOS DC op-point mirroring circulax's PMOS test.
+// S = VDD, B = VDD, Vgs = -1.0 (so |V_gs| = 1.0), Vds = -0.6.
+
+ground 0
+
+load "psp103v4.osdi"
+include "models.inc"
+model vsource vsource
+
+vdd (vdd 0) vsource dc=1.2
+vd  (d 0)   vsource dc=0.6
+vg  (g 0)   vsource dc=0.2
+
+mp (d g vdd vdd) pmos w=20u l=1u
+
+control
+  options rawfile="binary" strictsave=1
+  analysis op1 op
+endc

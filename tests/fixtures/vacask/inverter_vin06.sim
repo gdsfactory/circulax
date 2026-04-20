@@ -1,0 +1,16 @@
+ground 0
+
+load "psp103v4.osdi"
+include "models.inc"
+model vsource vsource
+
+vdd (vdd 0)  vsource dc=1.2
+vin (in 0)   vsource dc=0.6
+
+mn (out in 0   0)   nmos w=10u l=1u
+mp (out in vdd vdd) pmos w=20u l=1u
+
+control
+  options rawfile="binary" strictsave=1
+  analysis op1 op
+endc

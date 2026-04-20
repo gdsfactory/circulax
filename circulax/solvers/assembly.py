@@ -36,7 +36,7 @@ def _assemble_osdi_group(
     alpha: float,
     dt: float,
 ) -> tuple[Array, Array, Array]:
-    """Evaluate one OSDI group via bodi and return ``(f_l, q_l, j_eff)``.
+    """Evaluate one OSDI group via bosdi and return ``(f_l, q_l, j_eff)``.
 
     Args:
         y:     Global state vector.
@@ -45,9 +45,20 @@ def _assemble_osdi_group(
         dt:    Timestep used to scale the reactive block.
 
     Returns:
-        ``(f_l, q_l, j_eff)`` where ``f_l`` and ``q_l`` are shape ``(N, num_pins)``
-        and ``j_eff`` is shape ``(N, num_pins, num_pins)``.
+        ``(f_l, q_l, j_eff)`` — ``f_l`` and ``q_l`` are shape
+        ``(N, num_nodes)`` and ``j_eff`` is shape
+        ``(N, num_nodes, num_nodes)``.  Both are stamped unchanged by
+        the caller into the global system using ``group.eq_indices``.
 
+        When ``group.use_schur_reduction`` is True, the internal-node
+        rows of ``f_l`` enforce ``V_int = V_int_predicted`` via a
+        local Schur back-substitution, the internal rows of ``q_l`` are
+        zero (the reactive contribution is already folded into the
+        terminal residual at the caller's ``alpha/dt``), and ``j_eff``
+        has the reduced 4×4 in its terminal block with identity rows
+        and the back-substitution coupling ``A_II⁻¹·A_IT`` in the
+        internal rows so global Newton converges the internal slots in
+        one step per iteration.
     """
     try:
         from osdi_jax import osdi_eval
@@ -63,8 +74,109 @@ def _assemble_osdi_group(
 
     G = cond.reshape(-1, group.num_nodes, group.num_nodes)   # (N, n, n)  dI/dV
     C = cap.reshape(-1, group.num_nodes, group.num_nodes)    # (N, n, n)  dQ/dV
+
+    if group.use_schur_reduction:
+        return _schur_reduce_osdi_stamp(
+            v_all=v_all, cur=cur, chg=chg, G=G, C=C,
+            alpha=alpha, dt=dt, group=group,
+        )
+
     j_eff = G + (alpha / dt) * C + group.reg_diag           # reg_diag broadcasts over N
     return cur, chg, j_eff
+
+
+def _schur_reduce_osdi_stamp(
+    *,
+    v_all: Array,
+    cur: Array,
+    chg: Array,
+    G: Array,
+    C: Array,
+    alpha: float,
+    dt: float,
+    group: OsdiComponentGroup,
+    gmin: float = 1e-12,
+) -> tuple[Array, Array, Array]:
+    """Schur-reduce the per-device stamp and pad back to num_nodes.
+
+    Strategy (kept consistent with the caller's ``total_f + (total_q −
+    q_prev)/dt`` contract):
+
+    * Reduce ``cur`` and ``chg`` **separately** against the DC ``G_II``
+      block.  This produces ``cur_eff_T`` and ``chg_eff_T`` terminal
+      stamps that the caller can differently with its existing
+      backward-Euler history logic.  The reductions share a single LU
+      of ``G_II + gmin·I``.
+    * Use the full ``α/dt``-weighted Schur complement for the Jacobian
+      stamp so Newton sees the reactive coupling correctly.  This is
+      an approximate Jacobian (differs slightly from the exact
+      ``d(cur_eff_T + chg_eff_T/dt)/dV``) — that's fine; Newton is
+      happy with any descent direction that points at the right root.
+    * Pad internal rows with an identity pin to ``V_I_pred`` (computed
+      at DC α=0) so the compiler-allocated internal slots stay
+      self-consistent.  Internal reactive contributions are zero'd so
+      ``(total_q − q_prev)/dt`` leaves them alone.
+    """
+    N = G.shape[0]
+    T = group.num_pins
+    I = group.num_nodes - T
+
+    G_TT = G[:, :T, :T]
+    G_TI = G[:, :T, T:]
+    G_IT = G[:, T:, :T]
+    G_II = G[:, T:, T:]
+    C_TT = C[:, :T, :T]
+    C_TI = C[:, :T, T:]
+    C_IT = C[:, T:, :T]
+    C_II = C[:, T:, T:]
+    cur_T = cur[:, :T]
+    cur_I = cur[:, T:]
+    chg_T = chg[:, :T]
+    chg_I = chg[:, T:]
+
+    eye_I = jnp.eye(I, dtype=G.dtype)
+
+    # ---- DC Schur (α=0) — for cur, chg, internal-node prediction ------------
+    G_II_reg = G_II + gmin * eye_I
+    # One LU, three RHSs: [G_IT | cur_I | chg_I]  shape (N, I, T+2).
+    rhs_dc = jnp.concatenate(
+        [G_IT, cur_I[..., None], chg_I[..., None]], axis=-1
+    )
+    sol_dc = jnp.linalg.solve(G_II_reg, rhs_dc)
+    X_dc = sol_dc[..., :T]
+    cur_back = sol_dc[..., T]
+    chg_back = sol_dc[..., T + 1]
+
+    cur_eff_T = cur_T - jnp.einsum("nij,nj->ni", G_TI, cur_back)
+    chg_eff_T = chg_T - jnp.einsum("nij,nj->ni", G_TI, chg_back)
+
+    # Internal-node prediction from DC Schur.
+    v_T = v_all[:, :T]
+    v_I = v_all[:, T:]
+    v_I_pred = cur_back - jnp.einsum("nij,nj->ni", X_dc, v_T)
+
+    # ---- Jacobian Schur at α/dt — for Newton descent direction --------------
+    a_over_dt = alpha / dt
+    A_TT = G_TT + a_over_dt * C_TT
+    A_TI = G_TI + a_over_dt * C_TI
+    A_IT = G_IT + a_over_dt * C_IT
+    A_II = G_II + a_over_dt * C_II
+    A_II_reg = A_II + gmin * eye_I
+    X_jac = jnp.linalg.solve(A_II_reg, A_IT)
+    j_eff_T = A_TT - A_TI @ X_jac
+
+    # ---- Pad back to (N, num_nodes, num_nodes) -----------------------------
+    n = group.num_nodes
+    j_padded = jnp.zeros((N, n, n), dtype=j_eff_T.dtype)
+    j_padded = j_padded.at[:, :T, :T].set(j_eff_T)
+    j_padded = j_padded.at[:, T:, :T].set(X_dc)
+    j_padded = j_padded.at[:, T:, T:].set(jnp.broadcast_to(eye_I, (N, I, I)))
+
+    # Residual stamps.  Caller computes f + (q − q_prev)/dt.
+    # Internal f row = V_I − V_I_pred  (one-shot pin).  Internal q row = 0.
+    cur_padded = jnp.concatenate([cur_eff_T, v_I - v_I_pred], axis=-1)
+    chg_padded = jnp.concatenate([chg_eff_T, jnp.zeros_like(v_I)], axis=-1)
+    return cur_padded, chg_padded, j_padded
 
 
 def _real_physics(v: Array, p: Array, group, t1: float) -> tuple[Array, Array]:
