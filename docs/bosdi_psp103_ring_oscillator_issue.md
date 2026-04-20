@@ -1,7 +1,38 @@
 # PSP103 ring-oscillator frequency mismatch vs. VACASK
 
 **Audience:** bosdi author.
-**Status:** **resolved — not a bosdi issue**.  Fourth and final pass.
+**Status:** **resolved — circulax now matches VACASK to 0.5 % on the ring.**
+There never was a bosdi issue.  The original "6.7×" gap was an FFT-peak
+artefact: ring-oscillator outputs are square-wave-like with strong odd
+harmonics, and the FFT detector was locking onto VACASK's 3rd harmonic
+(937 MHz) rather than its fundamental (290 MHz).  Once we switched to a
+zero-crossing-based period extractor, circulax's actual answer (290.94 MHz
+with the new trapezoidal integrator) matches VACASK's 289.60 MHz
+fundamental within rounding.
+
+Earlier passes of this document mis-localised the gap to (in turn) load
+capacitance, internal-node integration, and the time integrator — each
+ruled out cleanly by the experiments your `osdi_debug.schur_reduce` and
+the VACASK ladder enabled.  All those experiments still passed in their
+own right (DC bit-for-bit, open-loop transient bit-for-bit, Schur path
+identical to full 6×6) — they just weren't pointing at a real bug, only
+at the harmonic-detection mistake.
+
+**Final fixes on circulax's side:**
+1. Added a trapezoidal integrator (`TrapVectorized/Factorized/Refactoring
+   TransientSolver`) for limit-cycle preservation.  It matches VACASK to
+   1 % on inverter-step delay regardless of variant.
+2. Fixed the ring-osc test's `_dominant_frequency` to use rising
+   zero-crossings instead of FFT peak.
+3. Dropped the SDIRK3 + 50 fF stability load from the ring fixture; trap
+   doesn't need it.
+4. Tightened the VACASK comparison tolerance from 10× to ±10 %; actual
+   agreement is 0.5 %.
+
+Below is the full investigation log with the early hypotheses and how
+they were ruled out, kept verbatim because the diagnostic ladder
+(VACASK cross-checks, Schur path, integrator sweep) is the right way to
+debug similar issues in the future.
 Since the last revision we built out a full VACASK cross-check ladder
 (13 DC tests + 2 transient tests, all passing in `tests/test_psp103_vs_vacask.py`)
 and proved:

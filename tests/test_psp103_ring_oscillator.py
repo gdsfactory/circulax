@@ -157,9 +157,10 @@ def ring_compiled(psp103_models):
         "r_kick": Resistor,
         "cload":  Capacitor,
     }
-    netlist = _build_ring_oscillator_netlist()
+    # No external load cap — trap doesn't need the SDIRK3-stability padding.
+    netlist = _build_ring_oscillator_netlist(c_load=0.0)
     groups, sys_size, port_map = compile_netlist(netlist, models)
-    solver = analyze_circuit(groups, sys_size)
+    solver = analyze_circuit(groups, sys_size, backend="klu_split")
     return groups, sys_size, port_map, solver
 
 
@@ -218,11 +219,16 @@ def test_ring_oscillator_dc(ring_compiled):
 
 
 def _run_ring_transient(ring_compiled, t1=100e-9, n_save=500):
-    """Run transient and return ``(t, v_n1)`` numpy arrays."""
+    """Run transient and return ``(t, v_n1)`` numpy arrays.
+
+    Uses the trapezoidal integrator (zero numerical damping, A-stable) at
+    a 5 ps fixed step.  Trap matches VACASK's tran_method="trap" exactly
+    on the open-loop tests and tracks the limit-cycle frequency cleanly.
+    """
     import diffrax
 
     from circulax.solvers import setup_transient
-    from circulax.solvers.transient import SDIRK3VectorizedTransientSolver
+    from circulax.solvers.transient import TrapRefactoringTransientSolver
 
     groups, sys_size, port_map, solver = ring_compiled
 
@@ -232,16 +238,20 @@ def _run_ring_transient(ring_compiled, t1=100e-9, n_save=500):
     y0 = solver.solve_dc_gmin(groups, y_source, g_start=G_HOMOTOPY, n_steps=30)
     assert jnp.all(jnp.isfinite(y0)), "DC solve for transient IC produced non-finite values"
 
+    # PSP103 is strongly nonlinear — use the refactor variant so Newton
+    # gets a fresh Jacobian factorisation per iteration (full quadratic
+    # convergence) instead of the cheaper frozen-Jac inner loop.
     run = setup_transient(
-        groups, solver, transient_solver=SDIRK3VectorizedTransientSolver
+        groups, solver, transient_solver=TrapRefactoringTransientSolver,
     )
     sol = run(
         t0=0.0,
         t1=t1,
-        dt0=0.01e-9,  # 10 ps
+        dt0=5e-12,   # 5 ps fixed step — matches VACASK's runme.sim
         y0=y0,
         saveat=diffrax.SaveAt(ts=jnp.linspace(0.0, t1, n_save)),
-        max_steps=200_000,
+        max_steps=2_000_000,
+        stepsize_controller=diffrax.ConstantStepSize(),
     )
     t = np.asarray(sol.ts)
     ys = np.asarray(sol.ys)
@@ -253,15 +263,42 @@ def _run_ring_transient(ring_compiled, t1=100e-9, n_save=500):
 
 
 def _dominant_frequency(t: np.ndarray, signal: np.ndarray) -> float:
-    """Return the dominant non-DC frequency (Hz) of a uniformly sampled signal."""
-    signal = signal - signal.mean()
+    """Return the fundamental frequency (Hz) of a (near-)square-wave signal.
+
+    Ring-oscillator outputs are square-wave-like, with strong odd harmonics
+    from the sharp transitions.  An FFT-peak detector can easily pick the
+    3rd or 5th harmonic instead of the fundamental.  We use rising
+    mid-supply crossings of the (DC-removed) signal as a robust period
+    estimator: count the time between consecutive rising crossings of zero
+    and take the median.  This is invariant to harmonic content and works
+    even for non-uniformly-sampled inputs (it only uses ``t``).
+
+    Falls back to FFT peak if fewer than 3 rising crossings are found
+    (e.g. for very short capture windows).
+    """
+    centered = signal - signal.mean()
+    sign_changes = np.diff(np.sign(centered))
+    rising = np.where(sign_changes > 0)[0]
+    if len(rising) >= 3:
+        # Skip the first crossing (initial transient) and use the rest.
+        rising = rising[1:]
+        # Linear-interpolate the actual zero-crossing time per index.
+        cross_t = []
+        for i in rising:
+            x0, x1 = float(centered[i]), float(centered[i + 1])
+            t0, t1 = float(t[i]), float(t[i + 1])
+            cross_t.append(t0 - x0 * (t1 - t0) / (x1 - x0))
+        cross_t = np.asarray(cross_t)
+        if len(cross_t) >= 2:
+            periods = np.diff(cross_t)
+            return float(1.0 / np.median(periods))
+
+    # Fallback: FFT peak.
     dt = float(t[1] - t[0])
-    freqs = np.fft.rfftfreq(len(signal), d=dt)
-    power = np.abs(np.fft.rfft(signal))
-    # Skip the DC bin.
+    freqs = np.fft.rfftfreq(len(centered), d=dt)
+    power = np.abs(np.fft.rfft(centered))
     power[0] = 0.0
-    peak = int(np.argmax(power))
-    return float(freqs[peak])
+    return float(freqs[int(np.argmax(power))])
 
 
 def test_ring_oscillator_transient(ring_compiled):
@@ -286,23 +323,19 @@ def test_ring_oscillator_transient(ring_compiled):
 def test_ring_oscillator_vs_vacask_reference(ring_compiled):
     """Compare oscillation frequency against a VACASK reference run.
 
-    Tolerance: within a factor of 10×.  That's loose on purpose: bosdi's
-    terminal Jacobian currently only surfaces currents between external
-    terminals (D/G/S/B), so the channel transconductance that flows via
-    PSP103's internal di/si nodes is hidden from the solver.  To keep
-    SDIRK3 stable we add a 50 fF lumped load per stage (see the netlist
-    builder docstring); that dominates the intrinsic ~60 fF node capacitance
-    in a 1 µm process and slows the ring by roughly 6×.  The 10× tolerance
-    accepts that known gap but still catches wiring/model-card errors that
-    would produce an order-of-magnitude wrong frequency.
-
-    Follow-up: exposing the internal-node Jacobian in bosdi would let us
-    drop the lumped load and tighten this comparison to ±20 %.
+    Tolerance: ±10 %.  Period is extracted from rising mid-supply
+    zero-crossings (see :func:`_dominant_frequency`) rather than the FFT
+    peak — ring outputs are square-wave-like, and an FFT peak detector
+    can land on the 3rd harmonic, producing a spurious "3× faster"
+    artefact (this exact bug temporarily mis-localised the ring-osc
+    investigation; see ``docs/bosdi_psp103_ring_oscillator_issue.md``).
     """
     ref = np.load(_VACASK_REF_FIXTURE)
     t_ref = np.asarray(ref["t"])
     v_ref = np.asarray(ref["v1"])
-    f_ref = _dominant_frequency(t_ref, v_ref)
+    # Use the long, settled tail of the VACASK trace (skip startup).
+    mask = t_ref > 100e-9
+    f_ref = _dominant_frequency(t_ref[mask], v_ref[mask])
 
     t, v_n1 = _run_ring_transient(ring_compiled, t1=100e-9, n_save=2000)
     f_sim = _dominant_frequency(t, v_n1)
@@ -310,8 +343,8 @@ def test_ring_oscillator_vs_vacask_reference(ring_compiled):
     print(f"\nVACASK freq   = {f_ref / 1e6:7.2f} MHz  ({1e9 / f_ref:5.2f} ns period)")
     print(f"circulax freq = {f_sim / 1e6:7.2f} MHz  ({1e9 / f_sim:5.2f} ns period)")
     ratio = f_sim / f_ref if f_ref > 0 else float("inf")
-    assert 0.1 <= ratio <= 10.0, (
-        f"ring oscillator frequency mismatch exceeds order-of-magnitude "
-        f"tolerance: circulax {f_sim / 1e6:.2f} MHz vs VACASK {f_ref / 1e6:.2f} MHz "
+    assert 0.9 <= ratio <= 1.1, (
+        f"ring oscillator frequency mismatch exceeds ±10 % tolerance: "
+        f"circulax {f_sim / 1e6:.2f} MHz vs VACASK {f_ref / 1e6:.2f} MHz "
         f"(ratio {ratio:.3f})"
     )
