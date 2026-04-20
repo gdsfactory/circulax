@@ -355,6 +355,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         component_groups: dict[str, Any],
         y_guess: jax.Array,
         n_steps: int = 10,
+        scale_start: float = 1e-3,
         rtol: float = 1e-6,
         atol: float = 1e-6,
         max_steps: int = 100,
@@ -362,17 +363,22 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         """DC Operating Point via source stepping (homotopy rescue).
 
         Ramps all source amplitudes (components tagged with ``amplitude_param``)
-        from 10 % to 100 % of their netlist values, using each converged
-        solution as the warm start for the next step.  This guides Newton
-        through the nonlinear region without the large initial step from 0V to
-        full excitation.
+        logarithmically from ``scale_start`` to ``1.0`` of their netlist
+        values, using each converged solution as the warm start for the next
+        step.  Log spacing clusters samples near zero where the circuit is
+        nearly linear (Newton converges trivially), then widens toward 1.0 as
+        nonlinearity grows — better-behaved than linear spacing for circuits
+        with sharp current onsets (diodes above threshold, MOSFET channels).
 
         Implemented with ``jax.lax.scan`` — fully JIT/grad/vmap-compatible.
 
         Args:
             component_groups: Compiled circuit components.
             y_guess: Initial guess (typically ``jnp.zeros(sys_size)``).
-            n_steps: Number of uniformly-spaced steps from 0.1 to 1.0.
+            n_steps: Number of log-uniform steps from ``scale_start`` to 1.0.
+            scale_start: Starting fraction of full source amplitude. Defaults
+                to ``1e-3`` (0.1 %) — effectively "almost zero", so the first
+                scan step solves a near-linear problem from the zero guess.
             rtol: Relative tolerance for each inner Newton solve.
             atol: Absolute tolerance for each inner Newton solve.
             max_steps: Max Newton iterations per step.
@@ -381,7 +387,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             Converged solution vector at full source amplitude.
 
         """
-        scales = jnp.linspace(0.1, 1.0, n_steps)
+        scales = jnp.logspace(jnp.log10(scale_start), 0.0, n_steps)
 
         def step(y: jax.Array, scale: jax.Array) -> tuple[jax.Array, None]:
             y_new, _ = self._run_newton(component_groups, y, source_scale=scale, rtol=rtol, atol=atol, max_steps=max_steps)
