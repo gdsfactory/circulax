@@ -444,6 +444,14 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
     initialised to ``+inf`` so that ``ω = 0`` on the first step, making the
     BDF2 formula reduce to Backward Euler via IEEE 754 arithmetic (no branching).
     ``q_nm1`` caches Q(y_{n-1}) to avoid recomputing it each step.
+
+    **When to use BDF2 instead of the default trap:** circuits with very
+    sharp digital edges where trap shows spurious "trapezoidal ringing"
+    at the Nyquist frequency.  BDF2's slight L²-stable damping kills the
+    ringing without measurably hurting accuracy on most circuits.  For
+    oscillators, limit-cycle frequencies match trap to within the same
+    ~0.5 % we see vs VACASK on the PSP103 ring oscillator (see
+    ``docs/bosdi_psp103_ring_oscillator_issue.md``).
     """
 
     def order(self, terms) -> int:  # noqa: D102
@@ -662,12 +670,33 @@ _SDIRK3_B2 = 1.0 - _SDIRK3_G - _SDIRK3_B1  # a32 = b2
 
 
 class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
-    """3rd-order A-stable SDIRK3 solver using full Newton-Raphson at each stage.
+    """3rd-order L-stable SDIRK3 solver using full Newton-Raphson at each stage.
 
     Uses Alexander's L-stable 3-stage SDIRK tableau with the companion method.
     Each timestep performs 3 sequential Newton solves (one per stage) with the
     Jacobian reassembled at every iteration.  The same ``solver_state`` 2-tuple
     ``(y_prev, dt_prev)`` as Backward Euler is used — SDIRK3 is a one-step method.
+
+    .. warning::
+
+       SDIRK3's L-stability is *active damping* of high-frequency modes.
+       For self-oscillating circuits (ring oscillators, LC tanks, Colpitts,
+       relaxation oscillators, clocks) this damping pulls the limit-cycle
+       frequency.  On the PSP103 ring benchmark SDIRK3 reports a 1.7×
+       slower frequency than VACASK trap, while circulax's trap and BDF2
+       both match VACASK to 0.5 %.  See
+       ``docs/bosdi_psp103_ring_oscillator_issue.md``.
+
+    **When SDIRK3 is the right choice:** stiff DC-settling transients
+    (power-up sequences, biasing into the operating point), sharp event
+    capture in non-oscillatory circuits (digital glitch propagation, ESD
+    pulse), high-index DAEs, or any problem where you want fast
+    unphysical modes aggressively damped to zero.  Costs ~3× more wall
+    time per step than trap/BDF2 because of the 3 stage solves.
+
+    **When SDIRK3 is the wrong choice:** anything with a limit cycle —
+    use ``Trap*TransientSolver`` (default) or ``BDF2*TransientSolver``
+    instead.
     """
 
     def order(self, terms) -> int:  # noqa: D102
@@ -1001,11 +1030,31 @@ def _trap_init(component_groups, y0, t0, num_vars, is_complex):  # noqa: ARG001
 
 
 class TrapVectorizedTransientSolver(VectorizedTransientSolver):
-    """Trapezoidal upgrade of :class:`VectorizedTransientSolver`.
+    """Trapezoidal-rule transient solver — circulax's default integrator.
 
     Per-iteration sparse solve via the linear strategy's ``_solve_impl``
     (no factor reuse).  Same Newton inner loop as BDF2/BE; differs only
     in the residual coefficients (α=2, plus the F_old history term).
+
+    **When to use trap (default):** analog / RF / photonic oscillators,
+    LC tanks, harmonic balance, ring oscillators, anything with a limit
+    cycle or conservative dynamics that should not be artificially damped.
+    Trap is 2nd-order A-stable with *zero* numerical damping at any
+    frequency — limit-cycle frequencies are preserved exactly.
+
+    **When to switch to BDF2 instead:** circuits with very sharp digital
+    edges combined with stiffness can develop spurious "trapezoidal
+    ringing" at the Nyquist frequency — high-amplitude oscillations with
+    period 2·dt that the integrator can't damp.  The symptom is a sawtooth
+    at twice the step rate riding on top of the real signal.  When you
+    see that, switch to ``BDF2*TransientSolver`` (slight L²-stable
+    damping kills the ringing without measurably hurting accuracy on
+    most circuits).
+
+    **When to switch to SDIRK3 instead:** stiff DC-settling transients
+    (power-up, biasing) where you want fast unphysical modes aggressively
+    damped to zero.  SDIRK3 is L-stable but its damping pulls oscillator
+    limit cycles, so don't use it on ring-osc / LC-tank / clock circuits.
     """
 
     def order(self, terms) -> int:  # noqa: D102
@@ -1240,13 +1289,20 @@ def setup_transient(
         raise RuntimeError(msg)
 
     if transient_solver is None:
-        # Pick the best BDF2 variant the linear solver supports.
+        # Pick the best Trap variant the linear solver supports.
+        # Trap (2nd order, A-stable, zero numerical damping) is the SPICE
+        # historical default and the right pick for circulax's typical
+        # workloads — analog/RF/photonic oscillators, LC tanks, harmonic
+        # balance.  See the docstring on the Trap*TransientSolver classes
+        # for the trapezoidal-ringing caveat on sharp digital edges; in
+        # that case pass ``transient_solver=BDF2RefactoringTransientSolver``
+        # explicitly.
         if hasattr(linear_strategy, "refactor_jacobian"):
-            transient_solver = BDF2RefactoringTransientSolver
+            transient_solver = TrapRefactoringTransientSolver
         elif hasattr(linear_strategy, "factor_jacobian"):
-            transient_solver = BDF2FactorizedTransientSolver
+            transient_solver = TrapFactorizedTransientSolver
         else:
-            transient_solver = BDF2VectorizedTransientSolver
+            transient_solver = TrapVectorizedTransientSolver
 
     import inspect
     tsolver = transient_solver(linear_solver=linear_strategy) if inspect.isclass(transient_solver) else transient_solver

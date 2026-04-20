@@ -10,34 +10,53 @@ forward in time from an initial condition, typically the DC operating point.  Ea
 
 ## Time Discretisation and Accuracy
 
-Circulax provides three implicit time-stepping schemes.  The default is selected automatically based on the linear solver backend.
+Circulax provides four implicit time-stepping schemes.  The default is selected automatically based on the linear solver backend.
 
-| Solver | Order | Method | Notes |
-|--------|-------|--------|-------|
-| `BDF2` | 2nd | Variable-step Gear/BDF2 | **Default.** Backward Euler on step 1, BDF2 from step 2. |
-| `SDIRK3` | 3rd | Alexander SDIRK (3 stages) | A-stable; 3 Newton solves per step. Higher accuracy at larger step sizes. |
-| `BackwardEuler` | 1st | Backward Euler | First-order fallback; rarely needed directly. |
+| Solver | Order | Stability | Notes |
+|--------|-------|-----------|-------|
+| `Trap` | 2nd | A-stable, **zero damping** | **Default.** Symmetric trapezoidal rule. The SPICE historical default. |
+| `BDF2` | 2nd | A-stable, slight L²-damping | Variable-step Gear/BDF2. BE on step 1, BDF2 from step 2. |
+| `SDIRK3` | 3rd | L-stable, **strong damping** | Alexander SDIRK (3 stages). 3 Newton solves per step. |
+| `BackwardEuler` | 1st | L-stable, strong damping | First-order; rarely needed directly. |
 
-All three methods are **A-stable**: they remain stable for arbitrarily stiff circuits without restricting the step size for stability reasons.
+All four methods are stable for arbitrarily stiff circuits, but they differ in *how they treat oscillation*:
+
+- **Trap** has zero numerical damping at any frequency. Limit-cycle frequencies are preserved exactly. This is what circuit designers expect — it's the SPICE historical default. Trade-off: trap can develop spurious "trapezoidal ringing" at the Nyquist frequency on circuits with very sharp digital edges combined with stiffness; the symptom is a sawtooth at twice the step rate riding on top of the real signal.
+- **BDF2** introduces slight L²-stable damping that kills trap-style ringing without measurably hurting accuracy. Use this when you see trap ringing.
+- **SDIRK3** is *L-stable* — it aggressively damps high-frequency modes. This is great for stiff DC-settling transients (power-up sequences, biasing into the operating point) and sharp event capture in non-oscillatory circuits. **It is the wrong choice for any self-oscillating circuit** (ring oscillator, LC tank, Colpitts, relaxation oscillator, clock): the same L-stable damping that suppresses unphysical fast modes also pulls real limit-cycle frequencies. On the PSP103 ring benchmark SDIRK3 reports a ~1.7× slower frequency than VACASK trap, while circulax's trap and BDF2 both match VACASK to 0.5 % (see `docs/bosdi_psp103_ring_oscillator_issue.md`). SDIRK3 also costs ~3× more wall time per step.
+- **BackwardEuler** is the simplest fallback (1st order, strong damping); useful for smoke testing.
 
 Higher-order solvers reduce **global truncation error**:
 
-- BDF2 achieves $\mathcal{O}(h^2)$ accuracy — halving the step size reduces the error by 4×.
+- Trap achieves $\mathcal{O}(h^2)$ accuracy and is symmetric (time-reversible).
+- BDF2 achieves $\mathcal{O}(h^2)$ — halving the step size reduces the error by 4×.
 - SDIRK3 achieves $\mathcal{O}(h^3)$ — halving the step size reduces the error by 8×.
 
-For most circuits BDF2 is the right choice.  Use SDIRK3 when high accuracy at large step sizes is needed (e.g., long simulations with tightly-toleranced outputs).
+### Picking an integrator
 
-To select SDIRK3 explicitly:
+| Circuit type | Recommended solver |
+|--------------|--------------------|
+| Analog / RF / photonic oscillators, LC tanks, ring oscillators, harmonic balance | **`Trap` (default)** |
+| Digital edges or switching circuits where trap shows ringing | `BDF2` |
+| Stiff DC-settling transients, ESD pulses, amplifier startup, non-oscillatory event capture | `SDIRK3` |
+| Smoke test or first-step warmup | `BackwardEuler` |
+
+To select a non-default integrator explicitly:
 
 ```python
-from circulax.solvers.transient import SDIRK3VectorizedTransientSolver
+from circulax.solvers.transient import (
+    BDF2RefactoringTransientSolver,
+    SDIRK3RefactoringTransientSolver,
+)
 
 transient_sim = setup_transient(
     groups=groups,
     linear_strategy=linear_strat,
-    transient_solver=SDIRK3VectorizedTransientSolver,
+    transient_solver=BDF2RefactoringTransientSolver,  # or SDIRK3, etc.
 )
 ```
+
+Each integrator has three variants (`*Vectorized`, `*Factorized`, `*Refactoring`) trading off Newton convergence robustness against per-step cost. Use `*Refactoring` for strongly nonlinear circuits (e.g. PSP103, BSIM4 stacks) where the Jacobian must be re-factorised at every Newton iteration; use `*Factorized` (frozen Jacobian) for mildly nonlinear circuits where one factorisation per step is enough.
 
 ---
 
@@ -100,7 +119,7 @@ print(sol.stats)
 
 **Tuning tips:**
 
-- Set `error_order` to match your solver (2 for BDF2, 3 for SDIRK3).
+- Set `error_order` to match your solver (2 for Trap/BDF2, 3 for SDIRK3).
 - `rtol=1e-3, atol=1e-6` is a good starting point for most circuits.
 - Tighten tolerances if you see waveform artifacts; loosen them to reduce step count.
 - `dtmax` should be no larger than the fastest feature you care about (e.g., 1/10 of the shortest rise time).
