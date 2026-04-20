@@ -79,10 +79,16 @@ def read_op_raw(path: Path) -> dict[str, float]:
 
 
 def read_time_raw(path: Path) -> dict[str, np.ndarray]:
-    """Read a VACASK tran raw file and return {name: array}."""
+    """Read a VACASK tran raw file and return {name: 1-D array}.
+
+    VACASK's RawFile stores the per-step solution vector as a 2-D
+    ``(num_points, num_signals)`` array; this helper splits it into one
+    1-D array per signal, indexed by the signal's name.
+    """
     if str(VACASK_PYTHON) not in sys.path:
         sys.path.insert(0, str(VACASK_PYTHON))
     from rawfile import rawread  # type: ignore
 
     r = rawread(str(path)).get()
-    return {name: np.asarray(r.data[i]) for i, name in enumerate(r.names)}
+    arr = np.asarray(r.data)
+    return {name: arr[:, i] for i, name in enumerate(r.names)}

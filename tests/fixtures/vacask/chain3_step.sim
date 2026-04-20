@@ -1,0 +1,25 @@
+// 3-stage CMOS inverter chain step response.
+// Vin: 0 -> VDD over 100 ps starting at 1 ns; sim 0..5 ns at 5 ps step.
+// Reports n1 (first inverter output), n2, n3.
+
+ground 0
+
+load "psp103v4.osdi"
+include "models.inc"
+model vsource vsource
+
+vdd (vdd 0)  vsource dc=1.2
+vin (n0  0)  vsource type="pulse" val0=0 val1=1.2 delay=1n rise=100p fall=100p width=10n period=20n
+
+mn1 (n1 n0 0   0)   nmos w=10u l=1u
+mp1 (n1 n0 vdd vdd) pmos w=20u l=1u
+mn2 (n2 n1 0   0)   nmos w=10u l=1u
+mp2 (n2 n1 vdd vdd) pmos w=20u l=1u
+mn3 (n3 n2 0   0)   nmos w=10u l=1u
+mp3 (n3 n2 vdd vdd) pmos w=20u l=1u
+
+control
+  options rawfile="binary" strictsave=1
+  options tran_method="trap"
+  analysis tran1 tran step=5p stop=5n maxstep=5p
+endc

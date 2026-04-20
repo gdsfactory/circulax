@@ -1,0 +1,22 @@
+// CMOS inverter step-response transient.
+// Vin: 0 -> VDD over 100 ps starting at 1 ns; sim 0..5 ns at 5 ps step.
+// Used as the trapezoidal reference for circulax's BDF2/SDIRK3 transient
+// cross-check; see tests/test_psp103_vs_vacask.py.
+
+ground 0
+
+load "psp103v4.osdi"
+include "models.inc"
+model vsource vsource
+
+vdd (vdd 0)  vsource dc=1.2
+vin (in  0)  vsource type="pulse" val0=0 val1=1.2 delay=1n rise=100p fall=100p width=10n period=20n
+
+mn (out in 0   0)   nmos w=10u l=1u
+mp (out in vdd vdd) pmos w=20u l=1u
+
+control
+  options rawfile="binary" strictsave=1
+  options tran_method="trap"
+  analysis tran1 tran step=5p stop=5n maxstep=5p
+endc
