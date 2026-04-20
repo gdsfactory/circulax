@@ -71,8 +71,31 @@ def on_pre_page(page: Any, config: Any, files: Any, **kwargs: Any) -> Any:
     return page
 
 
+_ANIMATION_MARKER = "<!-- animation -->"
+_GIF_LINE_RE = re.compile(r"^!\[[^\]]*\]\([^)]*\.gif\)\s*$", re.MULTILINE)
+
+
+def _hoist_animation(markdown: str) -> str:
+    """If a page has an `<!-- animation -->` sentinel, move the last standalone
+    `![...](*.gif)` line into that slot (and drop it from its original position).
+
+    This lets inverse-design notebooks keep the animation cell at the end for
+    native Jupyter viewing while showing it up-front on the rendered docs site.
+    """
+    if _ANIMATION_MARKER not in markdown:
+        return markdown
+    matches = list(_GIF_LINE_RE.finditer(markdown))
+    if not matches:
+        return markdown
+    last = matches[-1]
+    gif_line = last.group(0).strip()
+    without_gif = markdown[: last.start()] + markdown[last.end() :]
+    return without_gif.replace(_ANIMATION_MARKER, gif_line, 1)
+
+
 def on_page_markdown(markdown: str, page: Any, config: Any, files: Any, **kwargs: Any) -> str:
     """Process markdown content before it's converted to HTML."""
+    markdown = _hoist_animation(markdown)
     blocks = markdown.split("```")
 
     for i, block in enumerate(blocks):
