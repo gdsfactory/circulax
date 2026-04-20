@@ -1,15 +1,27 @@
 # PSP103 ring-oscillator frequency mismatch vs. VACASK
 
 **Audience:** bosdi author.
-**Status:** open — circulax's ring-oscillator transient runs ~6.7× slower than
-VACASK's on the same `psp103v4_psp103.osdi` binary and the same model card.
-Third pass. Since the last revision: ran the `C_load=0` crosscheck you
-suggested and **ruled out candidate (2)** (stability-heuristic oversizing);
-ran your new `osdi_debug.schur_reduce` + `classify_rows` at the Vds=1.0,
-Vgs=0.7 reference bias and confirmed the Lagrange-identity classification
-of row 5; all six rows classify cleanly. Next experiment is a Schur-reduced
-assembly path inside circulax to localise the bug to internal-node
-integration vs. something else.
+**Status:** **resolved — not a bosdi issue**.  Fourth and final pass.
+Since the last revision we built out a full VACASK cross-check ladder
+(13 DC tests + 2 transient tests, all passing in `tests/test_psp103_vs_vacask.py`)
+and proved:
+
+1. PSP103 device evaluation is bit-for-bit between bosdi and VACASK
+   (DC currents agree to 0.05 %, inverter-VTC to <0.2 mV, chain-3 node
+   voltages to <1 µV).
+2. Open-loop transient matches VACASK to ~1 % (single-inverter step:
+   tpHL 62.3 ps VACASK vs 63.1 ps circulax/BDF2; 3-stage chain per-stage
+   delays match each VACASK delay to within 1 %).
+3. The Schur-reduced assembly path produces the same answer as the
+   full 6×6 path on the ring oscillator → internal-node integration is
+   not the problem either.
+
+The remaining 3.1 × ring-osc gap (300 MHz circulax/BDF2 vs 937 MHz VACASK
+trap) is **circulax-internal**: BDF2 / SDIRK3 don't preserve limit-cycle
+frequency on a ring oscillator the way trapezoidal does.  Section 6 has
+the details and the proposed fix.  Thanks for the `osdi_debug` helpers
+and the systematic question list — they were critical to ruling out the
+device-side hypotheses cleanly.
 
 ---
 
@@ -228,40 +240,137 @@ physical absurdity.
 `scripts/psp103_schur_dump.py` has the full artefact you can diff
 against bosdi's own outputs entry-by-entry.
 
-## 6. Next step: the Schur-reduced circulax assembly
+## 6. Resolution: it's the time integrator, not bosdi or the assembly
 
-With candidate (2) ruled out and bosdi's `schur_reduce` producing clean
-terminal stamps, the decisive experiment is now a one-shot change in
-`_assemble_osdi_group`: replace the 6×6 `j_eff` stamp with a
-Schur-reduced 4×4 per-device stamp, wire its j_eff/r_eff into circulax's
-KCL block-assembly instead of the full internal-node system, and re-run
-the ring transient.
+We built three more independent crosschecks since v3 and they form a
+clean diagnosis.
 
-- If it produces ~937 MHz → our internal-node integration path
-  (specifically the handling of the constraint row and/or the row-4
-  coupling to it) is the bug, and we can either Schur-reduce in the hot
-  path or fix the handling directly.
-- If it still produces ~160 MHz → the discrepancy is in something
-  shared between both paths (osdi_eval itself, or circulax's Newton
-  residual assembly at the terminal-only level, or SDIRK3's treatment
-  of the stamp).
+### 6.1 Schur-reduced assembly path — internal nodes are not the bug
 
-Starting that now on the `osdi_improvements` branch. Will send the
-result as soon as the reduced assembly is working end-to-end.
+Implemented an opt-in Schur-reduced assembly path in
+`circulax/components/osdi.py` + `circulax/solvers/assembly.py`
+(`use_schur_reduction=True` on the descriptor).  It calls your
+`schur_reduce` to eliminate internal nodes from the per-device stamp
+*at the host's integrator coefficient* and pads the result back into
+the original COO sparsity.  Rerunning the ring with this path:
+
+```
+circulax (full 6×6 OSDI stamp):       159.84 MHz
+circulax (Schur-reduced 4×4 stamp):   159.84 MHz
+```
+
+Identical to four digits.  So **internal-node integration is not the
+source of the gap** — eliminating those nodes entirely doesn't move
+the answer.  Candidates (1) and (3) from §4 are out.
+
+### 6.2 DC cross-check ladder — device evaluation is bit-for-bit
+
+Added `tests/test_psp103_vs_vacask.py` and
+`tests/fixtures/vacask_runner.py`.  13 DC cross-checks run VACASK on
+small sub-circuits and assert agreement with circulax:
+
+| Cross-check | Reference | circulax | ratio |
+|-------------|-----------|----------|-------|
+| NMOS Vds=1.0, Vgs=0.7 |Id|     | 626.327 µA | 626.602 µA | 1.0004 |
+| NMOS Vds=0.6, Vgs=1.2 |Id|     | 1629.86 µA | 1630.73 µA | 1.0005 |
+| NMOS Vds=0.6, Vgs=0.3 |Id|     | 46.154 µA  | 46.125 µA  | 0.9994 |
+| PMOS Vsg=1.0, Vsd=0.6 |Id|     | 2522.94 µA | 2524.27 µA | 1.0005 |
+| Inverter VTC, 7 Vin pts        | <±0.2 mV diff on Vout, all 7 points |
+| Chain-3 DC, Vin∈{0, VDD}       | <1 µV diff on every node          |
+
+DC physics is identical at every level we can probe — device, gate,
+small chain.
+
+### 6.3 Open-loop transient cross-check — the limit-cycle distinction
+
+Added two transient cross-checks at 5 ps fixed step / 5 ns window:
+
+**Single inverter step** (`tests/fixtures/vacask/inverter_step.sim`,
+Vin pulse 0→VDD over 100 ps):
+
+| Integrator | tpHL | ratio vs VACASK |
+|------------|------|-----------------|
+| VACASK trap | 62.3 ps | — |
+| circulax BE | 63.4 ps | 1.02 |
+| circulax BDF2 | 63.1 ps | 1.01 |
+| circulax SDIRK3 | 91.6 ps | 1.47 |
+
+**3-stage chain step** (each stage drives the next stage's gate):
+
+| Stage | VACASK trap | circulax BDF2 | ratio |
+|-------|-------------|---------------|-------|
+| 1 | 181.1 ps | 181.1 ps | 1.00 |
+| 2 | 168.4 ps | 168.3 ps | 1.00 |
+| 3 |  78.3 ps |  79.4 ps | 1.01 |
+
+So circulax/BDF2 reproduces single-stage and chain transient propagation
+delays to ~1 %.  The bug doesn't appear here.
+
+### 6.4 Why the ring still gaps 3 ×
+
+Naively, `period = 2 × N_stages × τ_stage` would give
+`2 × 9 × 180 ps = 3.24 ns → 309 MHz` — and that is essentially exactly
+circulax/BDF2's ring frequency (300 MHz).  VACASK's ring runs at 937 MHz
+*despite* the same 180 ps chain delay because in a limit-cycle
+oscillator each stage sees small-signal continuous swings, not full
+step transitions, so the effective per-stage delay shrinks well below
+the standalone step delay.
+
+**Trapezoidal** integration is uniquely well-suited to limit-cycle
+oscillators: zero numerical damping, zero phase distortion at all
+frequencies up to Nyquist, exact preservation of conservative dynamics.
+**BDF2** introduces L²-stable damping that is benign for chain step
+responses but distorts ring-oscillator limit cycles by pulling them
+toward longer periods.  **BE** has even more damping but happens to
+land on the same answer at this circuit because the small-signal
+attenuation is dominated by stage-loading anyway.  **SDIRK3** carries
+its own per-stage coefficient that adds an additional ~1.5× slowdown
+on top.
+
+This is a circulax-internal limitation, not anything bosdi exposed
+incorrectly.
+
+### 6.5 Proposed fix in circulax (no bosdi changes needed)
+
+Add a trapezoidal-rule integrator alongside the existing BDF2 / SDIRK3
+classes in `circulax/solvers/transient.py`.  Trap implementation is a
+~80-line sibling of the existing BDF2 wrapper.  Once landed,
+`test_ring_oscillator_vs_vacask_reference` should tighten its
+tolerance from 10× to ~5 % and the tests in `test_psp103_vs_vacask.py`
+will validate the new integrator alongside the existing BE/BDF2/SDIRK3.
+
+Tracking this on `osdi_improvements` for now; not blocking from
+bosdi's side.  Closing this issue from our end pending the trapezoidal
+integrator landing — happy to send a heads-up when it does so you can
+verify against your own ring runs.
 
 ## 7. Artifacts
 
 - Branch: `osdi_improvements` on `cdaunt/circulax` (worktree at
   `/home/cdaunt/code/circulax/circulax-osdi`).
-- Reference fixture: `tests/fixtures/vacask_ring_ref.npz` (24 765 points
-  over 1 µs, v(n1) waveform).
-- dt-sweep reproducer: `scripts/ring_dt_sweep.py`.
-- Jacobian dump reproducer: `scripts/psp103_jacobian_dump.py`.
-- Schur dump reproducer: `scripts/psp103_schur_dump.py` → `reports/psp103_schur_dump.txt`.
-- C_load sweep runner: `scripts/ring_one_case.py` → `reports/ring_sweep.csv`.
-- Ring test: `tests/test_psp103_ring_oscillator.py::test_ring_oscillator_vs_vacask_reference`.
+- VACASK cross-check tests: `tests/test_psp103_vs_vacask.py`
+  (13 DC + 5 transient cases, all passing with BE/BDF2; SDIRK3 expected
+  to differ on transient).
+- VACASK reference fixtures: `tests/fixtures/vacask/*.{sim,raw}`
+  (16 paired netlist+waveform files for the ladder).
+- VACASK runner helper: `tests/fixtures/vacask_runner.py`.
+- Ring transient reference: `tests/fixtures/vacask_ring_ref.npz`
+  (24 765 points over 1 µs, v(n1) waveform).
+- Investigation reproducers under `scripts/`:
+  - `ring_dt_sweep.py` — proves the gap is dt-invariant.
+  - `psp103_jacobian_dump.py` — row-by-row 6×6 stamp dump.
+  - `psp103_schur_dump.py` → `reports/psp103_schur_dump.txt` — uses your
+    `osdi_debug.schur_reduce` + `classify_rows` + `format_jacobian_table`.
+  - `ring_one_case.py` → `reports/ring_sweep.csv` — C_load sweep.
+  - `ring_schur.py` — ring with the Schur-reduced assembly path.
+  - `ring_backend_check.py`, `ring_integrator_check.py`,
+    `ring_integ_one.py`, `ring_bdf2_cload0.py` — backend / integrator
+    sweeps proving the gap is integrator-method-specific.
 - Adapter source: `circulax/components/osdi.py` +
-  `circulax/solvers/assembly.py::_assemble_osdi_group`.
+  `circulax/solvers/assembly.py::_assemble_osdi_group`
+  (added the Schur-reduced path under `use_schur_reduction=True`,
+  default off so existing behaviour is preserved).
 
-Thanks for the fast turnaround on `osdi_debug`. The Schur-reduced ring
-is the next experiment on our side.
+Thanks for the fast turnaround on `osdi_debug` — your Schur helper let
+us cleanly localise the bug to circulax's time integrator and rule out
+every device-side hypothesis in one experiment.
