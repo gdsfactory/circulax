@@ -1,0 +1,143 @@
+ WARN Using local manifest /home/cdaunt/code/circulax/circulax-osdi/pyproject.toml rather than  from environment variable `PIXI_PROJECT_MANIFEST`
+KLUJAX_RS DEBUG MODE.
+WARNING:2026-04-20 16:55:21,820:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+==============================================================================
+PSP103 NMOS W=10 um L=1 um | VACASK psp103n card
+Bias: V_D=1.0, V_G=0.7, V_S=0.0, V_B=0.0, V_int0=V_int1=0.5 (guess)
+Node order: D, G, S, B, int0, int1  (post-collapse)
+num_pins = 4, num_nodes = 6, num_params = 783
+collapsible_pairs (raw OSDI indices): [(1, 5), (2, 6), (0, 7), (8, 9), (10, 9), (11, 9), (3, 9)]
+==============================================================================
+
+--- cur (resistive residual, A) ---
+  cur[   D] = +6.266017e-04
+  cur[   G] = +0.000000e+00
+  cur[   S] = -6.266017e-04
+  cur[   B] = +0.000000e+00
+  cur[int0] = +5.153213e-01
+  cur[int1] = -5.000000e-01
+
+--- chg (reactive residual, C) ---
+  chg[   D] = +2.490363e-14
+  chg[   G] = +1.183387e-14
+  chg[   S] = +1.292441e-14
+  chg[   B] = -4.966191e-14
+  chg[int0] = +8.490477e-14
+  chg[int1] = +0.000000e+00
+
+cond (G = dcur/dV, S)  (rows: KCL equation, cols: d/dV)
+                    D           G           S           B        int0        int1
+        D  6.9024e-05  2.1145e-03 -2.4340e-03  2.5053e-04  0.0000e+00  9.5468e-02
+        G  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00
+        S -6.9024e-05 -2.1145e-03  2.4340e-03 -2.5053e-04  0.0000e+00 -9.5468e-02
+        B  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00
+     int0  1.6799e-03  1.7020e-02 -2.1081e-02  2.3806e-03  3.0643e-02  1.0000e+00
+     int1  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00 -1.0000e+00
+
+cap  (C = dchg/dV, F)  (rows: KCL equation, cols: d/dV)
+                    D           G           S           B        int0        int1
+        D  2.6931e-15 -4.0012e-14  4.2134e-14 -4.8151e-15  8.4905e-14  0.0000e+00
+        G -2.7400e-15  1.0706e-13 -9.6204e-14 -8.1173e-15 -1.6981e-13  0.0000e+00
+        S  8.2771e-17 -5.8458e-14  6.5581e-14 -7.2058e-15  8.4905e-14  0.0000e+00
+        B -3.5820e-17 -8.5911e-15 -1.1511e-14  2.0138e-14  0.0000e+00  0.0000e+00
+     int0  5.8916e-17  8.7936e-15 -9.9860e-15  1.1335e-15  1.6981e-13  0.0000e+00
+     int1  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00
+
+--- bosdi.osdi_debug.classify_rows ---
+  row 0 (   D): physics         5 cond + 5 cap non-zeros
+  row 1 (   G): reactive_only   5 cap entries, no conductance
+  row 2 (   S): physics         5 cond + 5 cap non-zeros
+  row 3 (   B): reactive_only   4 cap entries, no conductance
+  row 4 (int0): physics         6 cond + 5 cap non-zeros
+  row 5 (int1): constraint      cond nonzeros at cols=[5] with values=[-1.0] — Lagrange identity row
+
+--- bosdi.osdi_debug.format_jacobian_table ---
+ row  col           cond            cap  flag
+------------------------------------------------------
+   0    0     6.9024e-05    2.69308e-15
+   0    1     0.00211449   -4.00122e-14
+   0    2    -0.00243405    4.21342e-14
+   0    3    0.000250527   -4.81509e-15
+   0    4              0    8.49048e-14
+   0    5      0.0954682              0
+   1    0              0   -2.74003e-15
+   1    1              0    1.07061e-13
+   1    2              0   -9.62039e-14
+   1    3              0   -8.11729e-15
+   1    4              0    -1.6981e-13
+   2    0    -6.9024e-05    8.27708e-17
+   2    1    -0.00211449   -5.84579e-14
+   2    2     0.00243405     6.5581e-14
+   2    3   -0.000250527   -7.20584e-15
+   2    4              0    8.49048e-14
+   2    5     -0.0954682              0
+   3    0              0   -3.58199e-17
+   3    1              0   -8.59108e-15
+   3    2              0   -1.15113e-14
+   3    3              0    2.01382e-14
+   4    0     0.00167988    5.89165e-17
+   4    1      0.0170204    8.79358e-15
+   4    2      -0.021081   -9.98596e-15
+   4    3     0.00238064    1.13347e-15
+   4    4      0.0306427     1.6981e-13
+   4    5              1              0
+   5    5             -1              0  ← constraint
+
+Row classifications:
+  row  0: physics        — 5 cond + 5 cap non-zeros
+  row  1: reactive_only  — 5 cap entries, no conductance
+  row  2: physics        — 5 cond + 5 cap non-zeros
+  row  3: reactive_only  — 4 cap entries, no conductance
+  row  4: physics        — 6 cond + 5 cap non-zeros
+  row  5: constraint     — cond nonzeros at cols=[5] with values=[-1.0] — Lagrange identity row
+
+==============================================================================
+SCHUR REDUCTIONS (internal nodes 4, 5 eliminated)
+==============================================================================
+
+--- alpha=0  (DC-only) --- singular=False
+j_eff (4x4)  (rows: KCL equation, cols: d/dV)
+                    D           G           S           B
+        D  6.9024e-05  2.1145e-03 -2.4340e-03  2.5053e-04
+        G  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00
+        S -6.9024e-05 -2.1145e-03  2.4340e-03 -2.5053e-04
+        B  0.0000e+00  0.0000e+00  0.0000e+00  0.0000e+00
+  r_eff[   D] = -4.710749e-02
+  r_eff[   G] = +0.000000e+00
+  r_eff[   S] = +4.710749e-02
+  r_eff[   B] = +0.000000e+00
+
+--- alpha=1e11 (dt=10 ps, Backward Euler) --- singular=False
+j_eff (4x4)  (rows: KCL equation, cols: d/dV)
+                    D           G           S           B
+        D  3.7787e-05 -5.0779e-03  5.7158e-03 -6.7562e-04
+        G  3.2709e-04  1.7089e-02 -1.7493e-02  7.7541e-05
+        S -3.6129e-04 -1.1152e-02  1.2929e-02 -1.4157e-03
+        B -3.5820e-06 -8.5911e-04 -1.1511e-03  2.0138e-03
+  r_eff[   D] = -4.886236e-02
+  r_eff[   G] = +9.673864e-03
+  r_eff[   S] = +4.415469e-02
+  r_eff[   B] = -4.966191e-03
+
+--- alpha=1e9  (dt=1 ns,  Backward Euler) --- singular=False
+j_eff (4x4)  (rows: KCL equation, cols: d/dV)
+                    D           G           S           B
+        D  6.7088e-05  2.0276e-03 -2.3338e-03  2.3915e-04
+        G  6.5182e-06  2.0091e-04 -2.1244e-04  5.0088e-06
+        S -7.3570e-05 -2.2199e-03  2.5577e-03 -2.6430e-04
+        B -3.5820e-08 -8.5911e-06 -1.1511e-05  2.0138e-05
+  r_eff[   D] = -4.712504e-02
+  r_eff[   G] = +9.673864e-05
+  r_eff[   S] = +4.707796e-02
+  r_eff[   B] = -4.966191e-05
+
+--- effective terminal capacitance (finite-difference) ---
+  dC/d(alpha) between alpha=1e+09 and 1e+10
+C_eff (F) at terminals  (rows: KCL equation, cols: d/dV)
+                    D           G           S           B
+        D -1.6945e-15 -8.4704e-14  9.7462e-14 -1.1063e-14
+        G  6.0352e-15  1.9644e-13 -2.0686e-13  4.3791e-15
+        S -4.3049e-15 -1.0315e-13  1.2091e-13 -1.3454e-14
+        B -3.5820e-17 -8.5911e-15 -1.1511e-14  2.0138e-14
+
+  C_eff[D,D] = -1.69 fF

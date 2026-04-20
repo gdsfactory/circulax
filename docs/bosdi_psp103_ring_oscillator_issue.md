@@ -3,10 +3,13 @@
 **Audience:** bosdi author.
 **Status:** open — circulax's ring-oscillator transient runs ~6.7× slower than
 VACASK's on the same `psp103v4_psp103.osdi` binary and the same model card.
-This document is the second pass on that investigation, updated after your
-feedback; it confirms two of your hypotheses, rules out one of ours, and
-narrows the remaining work to a bit-for-bit DC comparison plus a hard look
-at how the constraint-row `dQ/dt` participates in our implicit timestep.
+Third pass. Since the last revision: ran the `C_load=0` crosscheck you
+suggested and **ruled out candidate (2)** (stability-heuristic oversizing);
+ran your new `osdi_debug.schur_reduce` + `classify_rows` at the Vds=1.0,
+Vgs=0.7 reference bias and confirmed the Lagrange-identity classification
+of row 5; all six rows classify cleanly. Next experiment is a Schur-reduced
+assembly path inside circulax to localise the bug to internal-node
+integration vs. something else.
 
 ---
 
@@ -136,73 +139,115 @@ of lumped external capacitance per stage, which roughly *doubles* the
 effective node capacitance. That accounts for ~2× of the 6.7× gap. A
 factor-of-~3 remains unexplained by load capacitance alone.
 
-## 4. Where we currently suspect the remaining ~3× lives
+## 4. Candidate (2) is out — C_load sweep
 
-Three concrete candidates, ranked by what the row dump implicates:
+You proposed a sharp crosscheck: run the ring with `C_load = 0` and a
+larger `gmin`; if it converges, our stability heuristic is the culprit.
+We ran it. Single-case runner in `scripts/ring_one_case.py`, results
+appended to `reports/ring_sweep.csv`:
 
-1. **Constraint-row `dQ/dt` routing at row 4.** Row 4 (int0) carries the
-   big `C[int0, int0] = 170 fF` entry plus a `G[int0, int1] = +1.0`
-   off-diagonal coupling to row 5's constraint. Our implicit step computes
-   `residual[int0] = cur[int0] + (chg[int0] - chg_prev[int0])/dt` and stamps
-   `j_eff[int0, :] = G[int0, :] + (α/dt)·C[int0, :]`. We think this is
-   right, but the interaction between the `+1` row-4 entry (pointing at
-   V_int1, which row 5 pins to V_S) and the 170 fF row-4 capacitance
-   might produce a stale `dQ/dt` term at the constraint boundary that
-   VACASK treats differently. This matches your Q5 call-out about `ddt()`
-   routed to a constraint row via the wrong integrator coefficient.
-2. **Our numerical-stability heuristic forcing extra C_load.** We use a
-   Jacobian-diagonal-dominance heuristic to pick `C_load ≥ α·|G_ii|·dt`
-   and landed on 50 fF as the safe choice at 10 ps. If the real effective
-   `|G_ii|` the solver sees is dominated by `G[D, int1] = 95.5 mS`
-   (≈ gds via the internal source), we may be over-stabilising.
-3. **SDIRK3 coefficient interaction with row 5.** SDIRK3 has α ≈ 2.29 per
-   stage and three internal stage solves; the constraint row's `cur[5] =
-   -V_int1` residual gets re-evaluated per stage. We haven't audited
-   whether the per-stage `V_int1` trajectory produces the same transient
-   behaviour VACASK's trapezoidal integrator does on the same row.
+| C_load | gmin | Period | Frequency | Swing |
+|--------|------|--------|-----------|-------|
+| 50 fF | 1e-9 | 6.26 ns | 159.8 MHz | 1.375 V |
+| 0 fF  | 1e-3 | 6.01 ns | 166.5 MHz | 1.407 V |
+| 0 fF  | 1e-6 | 6.01 ns | 166.5 MHz | 1.407 V |
+| 0 fF  | 1e-9 | 6.01 ns | 166.5 MHz | 1.407 V |
 
-We don't yet know which of (1)/(2)/(3) dominates.
+Removing the external 50 fF shifts frequency only from 160 → 167 MHz
+(~4 %). The ring is essentially just as slow with zero external load as
+with our safety 50 fF. So the stability-heuristic oversizing hypothesis
+is wrong, or at best a rounding term — it contributes a ~4 % slowdown,
+not a 6× slowdown.
 
-## 5. Your offered helpers — yes please
+Gmin is effectively irrelevant here because our `dc_init` step runs with
+a large homotopy gmin and then we switch to the runtime one for the
+transient; the transient path itself doesn't lean on gmin once the
+initial DC seed is settled.
 
-You offered two; we'd take both and happily pay for them with a concrete
-bug report or a circulax-side PR, whichever is more useful.
+So the gap lives in candidate (1) and/or (3) — the constraint-row
+`dQ/dt` / integrator-coefficient interaction on rows 4 and 5.
 
-1. **`schur_reduce_terminal(G_full, C_full, num_pins, alpha, gmin=1e-12)`
-   utility**, returning a 4×4 terminal-equivalent `(G_eff, C_eff)` and a
-   `warning_if_singular` flag. Even if we don't put it in circulax's hot
-   path, it would be a powerful *debugging* tool: if we run the ring with
-   the Schur-reduced 4×4 matrix and get 937 MHz, that isolates the gap to
-   "internal-node integration in circulax", and if we still get 150 MHz,
-   it isolates it to "something in the model eval or the reduced matrix
-   itself". We'd be happy to add this to a `bosdi.debug` submodule.
-2. **Per-device debug emitter**, printing
-   `{(row_idx, col_idx, has_resist, has_react, value, is_likely_constraint)}`
-   for one instance. This would let us line-by-line diff our
-   `_assemble_osdi_group` output against what bosdi intends the scatter
-   to mean, which is the next investigation step for candidate (1) above.
+## 5. schur_reduce output at Vds=1.0, Vgs=0.7 — ready for you
 
-## 6. Concrete next step we're starting now
+We ran your `osdi_debug.schur_reduce` + `classify_rows` +
+`format_jacobian_table` at the reference bias. Full dump at
+`reports/psp103_schur_dump.txt` (reproducer: `scripts/psp103_schur_dump.py`).
+Headline:
 
-Per your Q5 paragraph, the deciding experiment is a bit-for-bit
-`osdi_eval` vs VACASK DC comparison at a fixed bias. We're extending our
-PSP103 verification tests so each ladder stage has a VACASK reference:
+**`classify_rows` on the 6×6 PSP103 stamp:**
 
-- single NMOS at Vds=1.0, Vgs=0.7 — `cur`, `cond`, `chg`, `cap` matrices;
-- single PMOS equivalent;
-- CMOS inverter DC transfer (7 points);
-- inverter step-response delay;
-- 3-stage chain DC logic levels.
+| Row | Node | Kind | Detail |
+|-----|------|------|--------|
+| 0 | D    | physics        | 5 cond + 5 cap non-zeros |
+| 1 | G    | reactive_only  | 5 cap entries, no conductance |
+| 2 | S    | physics        | 5 cond + 5 cap non-zeros |
+| 3 | B    | reactive_only  | 4 cap entries, no conductance |
+| 4 | int0 | physics        | 6 cond + 5 cap non-zeros |
+| 5 | int1 | **constraint** | `cond` nonzero at col=5, value=-1.0 — Lagrange identity row |
 
-If `osdi_eval` matches VACASK's internal stamping bit-for-bit, the 6.7×
-gap is unambiguously transient-side (our implicit integration of the
-constraint row's `dQ/dt`) and your Schur-reduce helper plus the debug
-emitter will pin it precisely. If it doesn't match, we've found a
-collapse-interpretation bug to triage together.
+Your classifier agrees with the hand-reading from §3: row 5 is the
+constraint, row 4 is ordinary physics, rows 1 and 3 are pure-capacitive.
+Good sanity check.
 
-Status on that: the test scaffolding is next up on this branch
-(`osdi_improvements` at `/home/cdaunt/code/circulax/circulax-osdi`) and we
-will share dumps with you as soon as they're done.
+**`schur_reduce` at α=0 (DC-only), singular=False:**
+
+```
+j_eff (4×4)          D          G          S          B
+        D    6.902e-05  2.115e-03 -2.434e-03  2.505e-04
+        G    0          0          0          0
+        S   -6.902e-05 -2.115e-03  2.434e-03 -2.505e-04
+        B    0          0          0          0
+r_eff  [-0.0471, 0, +0.0471, 0]
+```
+
+The G and B rows Schur-reduce to zero at DC, as expected (gate/bulk
+carry no DC conductance). The D/S row structure reproduces the
+terminal-level gds / gm / gmb pattern one would hand-derive from
+PSP103's compact equations. No surprises.
+
+**`schur_reduce` at α=1e11 (dt=10 ps, Backward Euler), singular=False:**
+
+```
+j_eff (4×4)          D          G          S          B
+        D    3.779e-05 -5.078e-03  5.716e-03 -6.756e-04
+        G    3.271e-04  1.709e-02 -1.749e-02  7.754e-05
+        S   -3.613e-04 -1.115e-02  1.293e-02 -1.416e-03
+        B   -3.582e-06 -8.591e-04 -1.151e-03  2.014e-03
+```
+
+Non-trivial. All four rows become non-zero as the reactive network
+couples the gate and bulk into the terminal equations via the
+internal-node path. The `j_eff[G, G] = 17 mS` entry at this α is
+`α · C_G,G` ≈ 1e11 · 170 fF = 17 mS — consistent.
+
+**Finite-differenced `C_eff[D,D]`:** ≈ −1.7 fF. We note your docstring
+warning that `(G_eff, C_eff)` doesn't cleanly split except at α=0, so
+this negative value is just the nonlinearity in α biting us, not a
+physical absurdity.
+
+`scripts/psp103_schur_dump.py` has the full artefact you can diff
+against bosdi's own outputs entry-by-entry.
+
+## 6. Next step: the Schur-reduced circulax assembly
+
+With candidate (2) ruled out and bosdi's `schur_reduce` producing clean
+terminal stamps, the decisive experiment is now a one-shot change in
+`_assemble_osdi_group`: replace the 6×6 `j_eff` stamp with a
+Schur-reduced 4×4 per-device stamp, wire its j_eff/r_eff into circulax's
+KCL block-assembly instead of the full internal-node system, and re-run
+the ring transient.
+
+- If it produces ~937 MHz → our internal-node integration path
+  (specifically the handling of the constraint row and/or the row-4
+  coupling to it) is the bug, and we can either Schur-reduce in the hot
+  path or fix the handling directly.
+- If it still produces ~160 MHz → the discrepancy is in something
+  shared between both paths (osdi_eval itself, or circulax's Newton
+  residual assembly at the terminal-only level, or SDIRK3's treatment
+  of the stamp).
+
+Starting that now on the `osdi_improvements` branch. Will send the
+result as soon as the reduced assembly is working end-to-end.
 
 ## 7. Artifacts
 
@@ -212,11 +257,11 @@ will share dumps with you as soon as they're done.
   over 1 µs, v(n1) waveform).
 - dt-sweep reproducer: `scripts/ring_dt_sweep.py`.
 - Jacobian dump reproducer: `scripts/psp103_jacobian_dump.py`.
+- Schur dump reproducer: `scripts/psp103_schur_dump.py` → `reports/psp103_schur_dump.txt`.
+- C_load sweep runner: `scripts/ring_one_case.py` → `reports/ring_sweep.csv`.
 - Ring test: `tests/test_psp103_ring_oscillator.py::test_ring_oscillator_vs_vacask_reference`.
 - Adapter source: `circulax/components/osdi.py` +
   `circulax/solvers/assembly.py::_assemble_osdi_group`.
 
-Thanks — your feedback moved this from "we don't know where to look" to
-"we have three testable hypotheses and a decision tree". Let us know when
-the `schur_reduce_terminal` and debug-emitter helpers land and we'll run
-them against the ring immediately.
+Thanks for the fast turnaround on `osdi_debug`. The Schur-reduced ring
+is the next experiment on our side.
