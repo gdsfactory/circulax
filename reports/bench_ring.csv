@@ -5,3 +5,8 @@ circulax_fixed,klu_rs_split,16.370,0.56,20000,818.5,288.88,,t1=1000ns
 circulax_adaptive,klu_split,,,,,,,NaN
 circulax_vmap,klu_split,13.414,14.47,,838.6,,4,t1=200ns finite=4/4
 circulax_vmap,klu_split,27.298,28.26,,853.3,,8,t1=200ns finite=8/8
+circulax_vmap,klu_rs_split,13.719,14.52,,857.7,,4,t1=200ns finite=4/4
+circulax_vmap,klu_rs_split,27.226,27.97,,851.0,,8,t1=200ns finite=8/8
+circulax_vmap,klu_rs_split,104.766,106.36,,818.7,,32,t1=200ns finite=32/32
+circulax_vmap,klu_split,15.206,16.33,,950.6,,4,t1=200ns finite=4/4
+circulax_vmap,klu_split,30.242,32.34,,945.3,,8,t1=200ns finite=8/8

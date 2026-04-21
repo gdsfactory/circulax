@@ -103,21 +103,40 @@ that this benchmark doesn't capture:
    transient, AC, HB, and sensitivity through the same component
    graph. VACASK requires separate runs and post-processing.
 
-### vmap caveat (CPU)
+### vmap on CPU (both backends now work)
+
+As of klujax-rs 0.1.7 (April 2026), `refactor_and_solve_f64_p` has a
+vmap batching rule that flattens the vmap axis into KLU's `n_lhs`
+dimension, where the Rust backend parallelises via Rayon.  Both
+klujax and klujax-rs now complete vmap'd circulax runs end-to-end.
 
 | Configuration | Wall (s) | µs / ring / step |
 |---------------|----------|------------------|
-| circulax + klujax, vmap batch = 4, t1 = 200 ns | 13.4 | 839 |
-| circulax + klujax, vmap batch = 8, t1 = 200 ns | 27.3 | 853 |
+| circulax + klujax,    vmap batch = 4, t1 = 200 ns | 15.2 | 951 |
+| circulax + klujax,    vmap batch = 8, t1 = 200 ns | 30.2 | 945 |
+| circulax + klujax-rs, vmap batch = 4, t1 = 200 ns | 13.7 | 858 |
+| circulax + klujax-rs, vmap batch = 8, t1 = 200 ns | 27.2 | 851 |
 
-Linear scaling: doubling batch doubles wall time. On CPU, klujax's KLU
-primitive is sequentialised inside XLA — a vmap'd refactor-and-solve
-loops over the batch one element at a time. So `vmap` here has the same
-total cost as `for` (modulo a fixed JIT overhead that pays back over
-many calls). On GPU this would parallelise; on CPU it doesn't.
-**klujax-rs's `refactor_and_solve_f64` doesn't have a vmap batching
-rule yet** (`NotImplementedError` from the FFI layer); vmap parameter
-sweeps must use `klu_split` for now.
+**Both backends scale linearly with batch on this workload.**
+klujax-rs is ~10 % faster per step than klujax, but the expected
+Rayon parallelism doesn't show up.  The explanation isn't that
+parallelism is broken — it's that for this 9-device circuit the KLU
+solve on a 34 × 34 sparse system is a small fraction of per-step
+work.  Most of the ~850 µs/step is bosdi's OSDI FFI call + Python
+dispatch + XLA primitive launches; parallelising the KLU solve saves
+microseconds out of hundreds.  **On larger circuits (thousand-device
+stacks) Rayon's parallelism should translate to visible speedup** —
+we haven't measured that yet.
+
+On GPU, `jax.vmap` parallelises naturally across the batch dimension
+in XLA's compiled kernels, independent of the klujax-rs Rayon path;
+that's a separate and likely larger speedup, also not yet measured.
+
+**No circulax-side code changes were needed** to pick up the
+klujax-rs batching rule: `TrapRefactoringTransientSolver` (and the
+BDF2 / SDIRK3 refactor variants) already call
+`refactor_and_solve_jacobian`, the exact primitive the new rule is
+registered on.
 
 ## Honest summary
 
