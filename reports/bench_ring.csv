@@ -10,3 +10,8 @@ circulax_vmap,klu_rs_split,27.226,27.97,,851.0,,8,t1=200ns finite=8/8
 circulax_vmap,klu_rs_split,104.766,106.36,,818.7,,32,t1=200ns finite=32/32
 circulax_vmap,klu_split,15.206,16.33,,950.6,,4,t1=200ns finite=4/4
 circulax_vmap,klu_split,30.242,32.34,,945.3,,8,t1=200ns finite=8/8
+circulax_vmap,klu_rs_split,6.614,7.61,,413.5,,4,t1=200ns finite=4/4
+circulax_vmap,klu_rs_split,10.558,11.28,,330.0,,8,t1=200ns finite=8/8
+circulax_vmap,klu_split,10.411,11.18,,325.4,,8,t1=200ns finite=8/8
+circulax_vmap,klu_rs_split,16.869,18.04,,263.6,,16,t1=200ns finite=16/16
+circulax_vmap,klu_rs_split,30.189,31.39,,235.9,,32,t1=200ns finite=32/32

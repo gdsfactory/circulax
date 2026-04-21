@@ -103,40 +103,58 @@ that this benchmark doesn't capture:
    transient, AC, HB, and sensitivity through the same component
    graph. VACASK requires separate runs and post-processing.
 
-### vmap on CPU (both backends now work)
+### vmap on CPU (both backends, parallelism now visible)
 
-As of klujax-rs 0.1.7 (April 2026), `refactor_and_solve_f64_p` has a
-vmap batching rule that flattens the vmap axis into KLU's `n_lhs`
-dimension, where the Rust backend parallelises via Rayon.  Both
-klujax and klujax-rs now complete vmap'd circulax runs end-to-end.
+Two upstream changes landed in April 2026:
 
-| Configuration | Wall (s) | µs / ring / step |
-|---------------|----------|------------------|
-| circulax + klujax,    vmap batch = 4, t1 = 200 ns | 15.2 | 951 |
-| circulax + klujax,    vmap batch = 8, t1 = 200 ns | 30.2 | 945 |
-| circulax + klujax-rs, vmap batch = 4, t1 = 200 ns | 13.7 | 858 |
-| circulax + klujax-rs, vmap batch = 8, t1 = 200 ns | 27.2 | 851 |
+- **klujax-rs 0.1.7** added a vmap batching rule for
+  `refactor_and_solve_f64_p` that flattens the vmap axis into KLU's
+  `n_lhs` dimension, where the Rust backend parallelises via Rayon.
+- **bosdi** (`src/osdi_jax.py`) added a `custom_vmap` rule for
+  `osdi_eval` that similarly flattens `(B, N_dev, …)` → `(B × N_dev,
+  …)` and invokes the batched C++ FFI exactly once per Newton iter
+  regardless of batch.  The rule is stacked inside the existing
+  `custom_jvp` so `jax.grad` and `jax.vmap` compose correctly.
 
-**Both backends scale linearly with batch on this workload.**
-klujax-rs is ~10 % faster per step than klujax, but the expected
-Rayon parallelism doesn't show up.  The explanation isn't that
-parallelism is broken — it's that for this 9-device circuit the KLU
-solve on a 34 × 34 sparse system is a small fraction of per-step
-work.  Most of the ~850 µs/step is bosdi's OSDI FFI call + Python
-dispatch + XLA primitive launches; parallelising the KLU solve saves
-microseconds out of hundreds.  **On larger circuits (thousand-device
-stacks) Rayon's parallelism should translate to visible speedup** —
-we haven't measured that yet.
+Before these changes, `jax.vmap` over a full transient run scaled
+*linearly* with batch — each replica paid a full FFI round-trip per
+Newton iter, and rayon inside the (sequential) FFI couldn't do any
+cross-replica work.  After, scaling is sublinear and real parallel
+speedup appears.
 
-On GPU, `jax.vmap` parallelises naturally across the batch dimension
-in XLA's compiled kernels, independent of the klujax-rs Rayon path;
-that's a separate and likely larger speedup, also not yet measured.
+Measured scaling on our 24-core box, 9-stage PSP103 ring, 200 ns sim
+at dt = 50 ps, `TrapRefactoring` integrator:
 
-**No circulax-side code changes were needed** to pick up the
-klujax-rs batching rule: `TrapRefactoringTransientSolver` (and the
-BDF2 / SDIRK3 refactor variants) already call
-`refactor_and_solve_jacobian`, the exact primitive the new rule is
-registered on.
+| Config | Wall (s) | µs / ring / step | Speedup per ring |
+|--------|----------|------------------|------------------|
+| Scalar (no vmap, klujax-rs) | 3.27 (extrapolated) | 818 | 1.00× |
+| vmap batch = 4,  klujax-rs | 6.61 | 414 | **1.97×** |
+| vmap batch = 8,  klujax-rs | 10.56 | 330 | **2.48×** |
+| vmap batch = 16, klujax-rs | 16.87 | 264 | **3.10×** |
+| vmap batch = 32, klujax-rs | 30.19 | 236 | **3.47×** |
+| vmap batch = 8,  klujax | 10.41 | 325 | 2.52× |
+
+klujax and klujax-rs converge to essentially the same per-step cost
+once the FFI bottleneck is removed — both drop from ~850 µs/step
+scalar to ~325 µs/step at batch = 8 — because the batched osdi_eval
+was the dominant cost, not KLU.  klujax-rs remains nominally faster
+at higher batch (236 µs/step at batch = 32 vs klujax's ~330 µs at
+batch = 8, though we haven't bench'd klujax at batch = 32).
+
+**At batch = 32, amortised per-ring wall drops to 0.94 s for 200 ns
+of sim**, or ~4.7 s per 1 µs-ring.  VACASK's 1 µs single-ring is
+1.19 s, so **the gap shrinks from 14× single-circuit to ~4× per
+ring at batch = 32**, and is still improving (the curve isn't flat
+at 32).  At batch ≥ 64 or on GPU, parity with VACASK per-ring wall
+looks realistic for parameter-sweep workloads.
+
+**No circulax-side code changes were needed** to pick up either
+upstream fix.  `TrapRefactoringTransientSolver` (and the BDF2 /
+SDIRK3 refactor variants) already call
+`refactor_and_solve_jacobian`; the bosdi change is transparent at
+the `osdi_eval` primitive.  Any circulax user whose workload is
+parameter sweeps / stochastic sensitivities / batched optimisation
+benefits automatically by upgrading bosdi + klujax-rs.
 
 ## Honest summary
 
