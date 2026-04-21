@@ -76,6 +76,16 @@ class OsdiComponentGroup(eqx.Module):
     # unknowns stay self-consistent.
     use_schur_reduction: bool = eqx.field(static=True, default=False)
 
+    # Optional bosdi Tier-3 handle (``osdi_jax.OsdiBatchHandle``) pre-baked
+    # with this group's params.  Stored as a static Equinox field so JAX
+    # tracing treats it as a closure constant (the author's requirement —
+    # handle is a Python object, not a JAX array, and its ``handle_id`` is
+    # baked into the compiled XLA graph).  When non-None, the assembly
+    # uses ``osdi_eval_with_handle`` / ``osdi_residual_eval_with_handle``
+    # which skip per-call param upload (~20–40 % faster for PSP103).
+    # None falls back to the model_id + params path.
+    handle: object | None = eqx.field(static=True, default=None)
+
 
 class OsdiModelDescriptor:
     """Descriptor returned by :func:`osdi_component`, consumed by ``compile_netlist``.

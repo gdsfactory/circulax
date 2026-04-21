@@ -79,13 +79,26 @@ def _assemble_osdi_group(
             "Note: bosdi is not available on all platforms (e.g. Windows)."
         ) from _bosdi_err
 
+    # Tier-3 fast path: handle was pre-baked in the compiler with this
+    # group's params, so per-Newton-iter calls skip the params upload.
+    # Handle is stored as eqx.static, so JAX tracing sees it as a closure
+    # constant.  None → legacy model_id + params path.
+    try:
+        from osdi_jax import osdi_eval_with_handle, osdi_residual_eval_with_handle
+        _HAS_TIER3 = True
+    except ImportError:
+        _HAS_TIER3 = False
+
     v_all = y[group.var_indices].astype(jnp.float64)  # (N, num_nodes) — terminals + internal
 
     # Fast path: residual-only Newton inner iters on a frozen Jacobian skip the
     # ∂/∂V pass inside the OSDI binary (~40 % cheaper for PSP103).  Not
     # compatible with Schur reduction (which needs G, C for the complement).
     if residual_only and not group.use_schur_reduction:
-        cur, chg, _ = osdi_residual_eval(group.model_id, v_all, group.params, group.states)
+        if _HAS_TIER3 and group.handle is not None:
+            cur, chg, _ = osdi_residual_eval_with_handle(group.handle, v_all, group.states)
+        else:
+            cur, chg, _ = osdi_residual_eval(group.model_id, v_all, group.params, group.states)
         # Caller on this path discards j_eff; a zero-filled stub keeps the
         # return signature stable without allocating a real dense block.
         j_eff_stub = jnp.zeros(
@@ -93,7 +106,10 @@ def _assemble_osdi_group(
         )
         return cur, chg, j_eff_stub
 
-    cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)
+    if _HAS_TIER3 and group.handle is not None:
+        cur, cond, chg, cap, _ = osdi_eval_with_handle(group.handle, v_all, group.states)
+    else:
+        cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)
 
     G = cond.reshape(-1, group.num_nodes, group.num_nodes)   # (N, n, n)  dI/dV
     C = cap.reshape(-1, group.num_nodes, group.num_nodes)    # (N, n, n)  dQ/dV

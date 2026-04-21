@@ -29,3 +29,11 @@ circulax_vmap,klu_rs_split,47.529,48.70,,371.4,,32,t1=200ns finite=32/32
 circulax_vmap,klu_rs_split,89.196,91.69,,348.5,,64,t1=200ns finite=64/64
 circulax_fixed,klu_rs_split,25.318,0.58,20000,1265.9,78.92,,t1=1000ns n_stages=33
 circulax_fixed,klu_rs_split,31.601,0.56,20000,1580.1,51.13,,t1=1000ns n_stages=51
+circulax_fixed,klu_rs_split,19.042,0.66,20000,952.1,288.88,,t1=1000ns n_stages=9
+circulax_fixed,klu_rs_split,19.244,0.65,20000,962.2,288.88,,t1=1000ns n_stages=9
+circulax_fixed,klu_rs_split,7.532,0.56,20000,376.6,288.88,,t1=1000ns n_stages=9
+circulax_vmap,klu_rs_split,3.441,4.56,,107.5,,8,t1=200ns finite=8/8
+circulax_vmap,klu_rs_split,8.280,9.51,,64.7,,32,t1=200ns finite=32/32
+circulax_fixed,klu_rs_split,7.540,0.57,20000,377.0,173.79,,t1=1000ns n_stages=15
+circulax_fixed,klu_rs_split,9.851,0.57,20000,492.6,78.92,,t1=1000ns n_stages=33
+circulax_fixed,klu_rs_split,12.114,0.55,20000,605.7,51.13,,t1=1000ns n_stages=51

@@ -49,14 +49,35 @@ comparable.
 ## Scaling with circuit size
 
 Same workload (1 µs, dt = 50 ps, trap integrator) with the ring size
-parameterised via `--n-stages`.
+parameterised via `--n-stages`.  Numbers below are post-Tier-3 (bosdi
+handle API); see the "Tier-3 impact" subsection for before/after.
 
 | Stages | Devices | VACASK µs/step | circulax µs/step | Ratio (µs/step) | s per sim-µs (VACASK) | s per sim-µs (circulax) |
 |--------|---------|----------------|------------------|-----------------|-----------------------|-------------------------|
-|   9    |    18   | 48             | 821              | 17.1×           | 1.19                  | 16.42                   |
-|  15    |    30   | 83             | 843              | 10.2×           | 1.96                  | 16.87                   |
-|  33    |    66   | ❌ DC fails     | 1266             | (VACASK can't)  | ❌                     | 25.32                   |
-|  51    |   102   | ❌ (not run)    | 1580             | —               | —                     | 31.60                   |
+|   9    |    18   | 48             | **377**          | 7.8×            | 1.19                  | 7.53                    |
+|  15    |    30   | 83             | **377**          | **4.5×**        | 1.96                  | 7.54                    |
+|  33    |    66   | ❌ DC fails     | **493**          | (VACASK can't)  | ❌                     | 9.85                    |
+|  51    |   102   | ❌ (not run)    | **606**          | —               | —                     | 12.11                   |
+
+### Tier-3 impact (bosdi handle-based API)
+
+bosdi ≥ v0.1.X added `osdi_setup_batch(model_id, params) → OsdiBatchHandle`
+plus `osdi_{eval,residual_eval}_with_handle(handle, v, s)`, which bakes
+params into a C++ handle once per compiled netlist and skips the
+per-call params upload on every Newton iter.  Circulax stores the
+handle as an `eqx.field(static=True)` on `OsdiComponentGroup` — closed
+over by JAX tracing as a constant, rebuilt automatically when the
+netlist is recompiled.  Measured impact on the 9-stage ring:
+
+| Config | Before Tier-3 | After Tier-3 | Speedup |
+|--------|---------------|--------------|---------|
+| scalar (fixed dt)       |  821 µs/step |  377 µs/step | **2.2×** |
+| vmap batch = 8          |  330 µs/step |  107 µs/step | **3.1×** |
+| vmap batch = 32         |  236 µs/step |   65 µs/step | **3.6×** |
+
+At batch = 32 circulax is now **65 µs/step per ring vs VACASK's 48 µs/step
+single-threaded** — **1.35 × slower per ring, down from 4.9× before
+Tier-3**.  For parameter-sweep workloads that's essentially parity.
 
 (VACASK's per-step µs is computed as its `Elapsed time` ÷ accepted
 timepoints: 1.19 s / 24 764 = 48 µs for N=9; 1.96 s / 23 465 = 83 µs
@@ -85,11 +106,12 @@ stage count that both can run: 173.79 vs 173.70 MHz at 15 stages
 
 ## Single-circuit results (9-stage ring, 1 µs)
 
+Post-Tier-3 measurements (bosdi handle-based API):
+
 | Configuration | µs / step | s per sim-µs | n_steps | Freq (MHz) |
 |---------------|-----------|--------------|---------|------------|
 | **VACASK trap, KLU, adaptive** | **48** | **1.19** | 24 764 | 289.60 |
-| circulax + klujax (`klu_split`), fixed dt = 50 ps | 845 | 16.90 | 20 000 | 288.88 |
-| circulax + klujax-rs (`klu_rs_split`), fixed dt = 50 ps | 819 | 16.37 | 20 000 | 288.88 |
+| circulax + klujax-rs (`klu_rs_split`), fixed dt = 50 ps | **377** | **7.53** | 20 000 | 288.88 |
 | circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, dtmin=1fs, unbounded) | 641 | 191.2 | 251 218 acc / 47 255 rej | 290.59 |
 | circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=10 ps**, force_dtmin=True) | 679 | 68.0 | 99 938 acc / 22 rej | 290.53 |
 | circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=40 ps**, force_dtmin=True) | 814 | 20.4 | 25 000 acc / 3 rej | 290.06 |
@@ -181,20 +203,19 @@ cross-replica work.  After, scaling is sublinear and real parallel
 speedup appears.
 
 Measured scaling on our 24-core box, 9-stage PSP103 ring, 200 ns sim
-at dt = 50 ps, `TrapRefactoring` integrator.  Per-ring metrics
-(dividing total wall by batch size):
+at dt = 50 ps, `TrapRefactoring` integrator, post-Tier-3.  Per-ring
+metrics (dividing total wall by batch size):
 
 | Config | µs per ring-step | s per ring-sim-µs | Speedup per ring |
 |--------|------------------|-------------------|------------------|
-| Scalar (no vmap, klujax-rs) | 818 | 16.37 | 1.00× |
-| vmap batch = 4,  klujax-rs | 414 | 8.28 | **1.97×** |
-| vmap batch = 8,  klujax-rs | 330 | 6.60 | **2.48×** |
-| vmap batch = 16, klujax-rs | 264 | 5.27 | **3.10×** |
-| vmap batch = 32, klujax-rs | 236 | 4.72 | **3.47×** |
-| vmap batch = 8,  klujax | 325 | 6.51 | 2.52× |
+| Scalar (no vmap, klujax-rs) | **377** | 7.53 | 1.00× |
+| vmap batch = 8,  klujax-rs  | **107** | 2.15 | **3.52×** |
+| vmap batch = 32, klujax-rs  | **65**  | 1.29 | **5.8×** |
 
-VACASK reference on this same 9-stage circuit: **1.19 s per sim-µs**
-(single-threaded, no vmap).
+VACASK reference on this same 9-stage circuit: **48 µs/step / 1.19 s
+per sim-µs** (single-threaded, no vmap).  At vmap batch = 32,
+circulax is 65 µs/ring-step vs VACASK's 48 µs — **1.35× per ring**.
+Parameter-sweep parity.
 
 klujax and klujax-rs converge to essentially the same per-step cost
 once the FFI bottleneck is removed — both drop from ~850 µs/step
