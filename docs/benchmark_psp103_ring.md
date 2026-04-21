@@ -25,28 +25,54 @@ Circulax's `TrapRefactoring` is the appropriate pick for PSP103's strong
 nonlinearity — it re-factorises the Jacobian at every Newton iteration
 (full quadratic convergence), the same Newton policy VACASK uses.
 
+## Note on measurement
+
+All circulax numbers below are **steady-state** — they exclude JIT
+compile (timed separately as `compile_s`, ~0.5 s one-time per Python
+session for a given sim shape).  JIT is a fixed cost of the JAX model
+that amortises to zero over any workload that calls the same compiled
+function more than once (parameter sweep, optimisation loop, batched
+stochastic runs).
+
+For consistency we report two normalised metrics rather than raw wall:
+
+- **µs per step** — steady-state per-iteration cost, independent of
+  sim length and of the number of steps the stepper chose.
+- **s per sim-µs** (= wall ÷ simulated microseconds) — how long it
+  takes to simulate one microsecond of circuit time.  This is the
+  "throughput" number you'd multiply by for longer sims.
+
+VACASK numbers are reported as-is from its `Elapsed time` output (it
+has no JIT step).  The `s per sim-µs` ratio is therefore directly
+comparable.
+
 ## Scaling with circuit size
 
 Same workload (1 µs, dt = 50 ps, trap integrator) with the ring size
-parameterised via `--n-stages`.  Adds one extra data point per row;
-reports wall time, per-step µs, and the circulax vs VACASK ratio.
+parameterised via `--n-stages`.
 
-| Stages | Devices | VACASK wall | circulax scalar wall | Ratio |
-|--------|---------|-------------|----------------------|-------|
-|   9    |    18   | 1.19 s      | 16.42 s              | 13.8× |
-|  15    |    30   | 1.96 s      | 16.87 s              | **8.6×** |
-|  33    |    66   | ❌ DC homotopy failed | 25.32 s  | (VACASK can't run) |
-|  51    |   102   | ❌ (not attempted)     | 31.60 s  |  |
+| Stages | Devices | VACASK µs/step | circulax µs/step | Ratio (µs/step) | s per sim-µs (VACASK) | s per sim-µs (circulax) |
+|--------|---------|----------------|------------------|-----------------|-----------------------|-------------------------|
+|   9    |    18   | 48             | 821              | 17.1×           | 1.19                  | 16.42                   |
+|  15    |    30   | 83             | 843              | 10.2×           | 1.96                  | 16.87                   |
+|  33    |    66   | ❌ DC fails     | 1266             | (VACASK can't)  | ❌                     | 25.32                   |
+|  51    |   102   | ❌ (not run)    | 1580             | —               | —                     | 31.60                   |
+
+(VACASK's per-step µs is computed as its `Elapsed time` ÷ accepted
+timepoints: 1.19 s / 24 764 = 48 µs for N=9; 1.96 s / 23 465 = 83 µs
+for N=15.  It takes adaptive steps averaging ~40–50 ps here, similar
+to circulax's fixed 50 ps.)
 
 Two takeaways:
 
-- **Circulax's wall is dominated by fixed per-step overhead** (XLA
-  dispatch + Python + FFI boundary crossings, ~660 µs/step) that
-  doesn't scale with circuit size.  Adding devices costs only the
-  actual OSDI evaluation + KLU solve, ~9 µs/step/device on this
-  box.  So circulax's wall scales far flatter than linear with
-  circuit size, and **the VACASK ratio closes as circuits grow** —
-  from 13.8× at 9 stages down to 8.6× at 15 stages.
+- **Circulax's per-step cost is dominated by fixed XLA dispatch + FFI
+  boundary crossings (~660 µs/step)** that doesn't scale with circuit
+  size.  Adding devices costs only the actual OSDI evaluation + KLU
+  solve (~9 µs/step/device on this box).  So circulax's µs/step
+  scales far flatter than linear with circuit size, and **the VACASK
+  µs/step ratio closes as circuits grow** — from 17.1× at 9 stages
+  down to 10.2× at 15 stages.  Extrapolating on the device-count
+  axis, parity is around 1000 devices on this box.
 - **VACASK's DC homotopy fails at 33 stages**.  Circulax's two-phase
   homotopy (source-step + Gmin-step) handles it cleanly and reports a
   correct 78.9 MHz fundamental (= 289 × 9/33 MHz, 0.2 % off the
@@ -57,16 +83,16 @@ Circulax and VACASK still match bit-for-bit on frequency at every
 stage count that both can run: 173.79 vs 173.70 MHz at 15 stages
 (0.05 %).
 
-## Single-circuit results
+## Single-circuit results (9-stage ring, 1 µs)
 
-| Configuration | Wall (s) | µs / step | n_steps | Freq (MHz) |
-|---------------|----------|-----------|---------|------------|
-| **VACASK trap, KLU, adaptive** | **1.19** | **48** | 24 764 | 289.60 |
-| circulax + klujax (`klu_split`), fixed dt = 50 ps | 16.90 | 845 | 20 000 | 288.88 |
-| circulax + klujax-rs (`klu_rs_split`), fixed dt = 50 ps | 16.37 | 819 | 20 000 | 288.88 |
-| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, dtmin=1fs, unbounded) | 191.2 | 641 | 251 218 acc / 47 255 rej | 290.59 |
-| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=10 ps**, force_dtmin=True) | 68.0 | 679 | 99 938 acc / 22 rej | 290.53 |
-| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=40 ps**, force_dtmin=True) | 20.4 | 814 | 25 000 acc / 3 rej | 290.06 |
+| Configuration | µs / step | s per sim-µs | n_steps | Freq (MHz) |
+|---------------|-----------|--------------|---------|------------|
+| **VACASK trap, KLU, adaptive** | **48** | **1.19** | 24 764 | 289.60 |
+| circulax + klujax (`klu_split`), fixed dt = 50 ps | 845 | 16.90 | 20 000 | 288.88 |
+| circulax + klujax-rs (`klu_rs_split`), fixed dt = 50 ps | 819 | 16.37 | 20 000 | 288.88 |
+| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, dtmin=1fs, unbounded) | 641 | 191.2 | 251 218 acc / 47 255 rej | 290.59 |
+| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=10 ps**, force_dtmin=True) | 679 | 68.0 | 99 938 acc / 22 rej | 290.53 |
+| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=40 ps**, force_dtmin=True) | 814 | 20.4 | 25 000 acc / 3 rej | 290.06 |
 
 **Verdict:** VACASK is **~14× faster** wall-clock for single-circuit
 transient simulation. klujax-rs (the Rust port) is ~3 % faster than
@@ -155,16 +181,20 @@ cross-replica work.  After, scaling is sublinear and real parallel
 speedup appears.
 
 Measured scaling on our 24-core box, 9-stage PSP103 ring, 200 ns sim
-at dt = 50 ps, `TrapRefactoring` integrator:
+at dt = 50 ps, `TrapRefactoring` integrator.  Per-ring metrics
+(dividing total wall by batch size):
 
-| Config | Wall (s) | µs / ring / step | Speedup per ring |
-|--------|----------|------------------|------------------|
-| Scalar (no vmap, klujax-rs) | 3.27 (extrapolated) | 818 | 1.00× |
-| vmap batch = 4,  klujax-rs | 6.61 | 414 | **1.97×** |
-| vmap batch = 8,  klujax-rs | 10.56 | 330 | **2.48×** |
-| vmap batch = 16, klujax-rs | 16.87 | 264 | **3.10×** |
-| vmap batch = 32, klujax-rs | 30.19 | 236 | **3.47×** |
-| vmap batch = 8,  klujax | 10.41 | 325 | 2.52× |
+| Config | µs per ring-step | s per ring-sim-µs | Speedup per ring |
+|--------|------------------|-------------------|------------------|
+| Scalar (no vmap, klujax-rs) | 818 | 16.37 | 1.00× |
+| vmap batch = 4,  klujax-rs | 414 | 8.28 | **1.97×** |
+| vmap batch = 8,  klujax-rs | 330 | 6.60 | **2.48×** |
+| vmap batch = 16, klujax-rs | 264 | 5.27 | **3.10×** |
+| vmap batch = 32, klujax-rs | 236 | 4.72 | **3.47×** |
+| vmap batch = 8,  klujax | 325 | 6.51 | 2.52× |
+
+VACASK reference on this same 9-stage circuit: **1.19 s per sim-µs**
+(single-threaded, no vmap).
 
 klujax and klujax-rs converge to essentially the same per-step cost
 once the FFI bottleneck is removed — both drop from ~850 µs/step
@@ -173,12 +203,12 @@ was the dominant cost, not KLU.  klujax-rs remains nominally faster
 at higher batch (236 µs/step at batch = 32 vs klujax's ~330 µs at
 batch = 8, though we haven't bench'd klujax at batch = 32).
 
-**At batch = 32, amortised per-ring wall drops to 0.94 s for 200 ns
-of sim**, or ~4.7 s per 1 µs-ring.  VACASK's 1 µs single-ring is
-1.19 s, so **the gap shrinks from 14× single-circuit to ~4× per
-ring at batch = 32**, and is still improving (the curve isn't flat
-at 32).  At batch ≥ 64 or on GPU, parity with VACASK per-ring wall
-looks realistic for parameter-sweep workloads.
+**At batch = 32, amortised per-ring cost drops to 4.72 s/sim-µs**
+(vs VACASK's 1.19 s/sim-µs single-threaded).  So **the gap shrinks
+from ~14× single-circuit to ~4× per ring at batch = 32**, and is
+still improving (the curve isn't flat at 32 on 24 cores).  At batch
+≥ 64 or on GPU, parity with VACASK per-ring throughput looks
+realistic for parameter-sweep workloads.
 
 **No circulax-side code changes were needed** to pick up either
 upstream fix.  `TrapRefactoringTransientSolver` (and the BDF2 /
