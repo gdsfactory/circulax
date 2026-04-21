@@ -32,6 +32,7 @@ nonlinearity — it re-factorises the Jacobian at every Newton iteration
 | **VACASK trap, KLU, adaptive** | **1.19** | **48** | 24 764 | 289.60 |
 | circulax + klujax (`klu_split`), fixed dt = 50 ps | 16.90 | 845 | 20 000 | 288.88 |
 | circulax + klujax-rs (`klu_rs_split`), fixed dt = 50 ps | 16.37 | 819 | 20 000 | 288.88 |
+| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5) | 191.2 | 641 | 251 218 acc / 47 255 rej | 290.59 |
 
 **Verdict:** VACASK is **~14× faster** wall-clock for single-circuit
 transient simulation. klujax-rs (the Rust port) is ~3 % faster than
@@ -47,13 +48,21 @@ both), and match VACASK's reference (289.60 MHz) to within 0.25 %.
   wall is dominated by the actual KLU solve. The FFI / XLA overhead is
   the bulk of circulax's gap to VACASK on small circuits like this
   9-transistor ring; it doesn't grow with circuit size.
-- **No native adaptive stepping match.** VACASK's adaptive trap
-  produced 24 764 accepted timesteps over 1 µs (so on average ~40 ps
-  per step — slightly tighter than fixed 50 ps because of the kick
-  pulse). Circulax's `diffrax.PIDController` NaN'd on this circuit at
-  the requested tolerance — a known pain point with diffrax + stiff
-  PSP103 stacks. Working around this with a stiff-aware controller is
-  open work.
+- **PID adaptive doesn't help here; it hurts.** Earlier versions of this
+  doc flagged "PID NaN'd — probably matchable cadence" as a path to close
+  the gap. Investigation (`scripts/pid_one.py`,
+  `scripts/bench_pid_investigate.py`) found the NaN was a first-step
+  extrapolation blow-up fixed by setting `dt0` small (≤ 1 e-12 s) —
+  every tested `dt0` from 5 e-11 down to 1 e-14 runs cleanly. But
+  circulax's `diffrax.PIDController` then takes ~12× more accepted
+  timesteps than VACASK per unit simulation time (251 k acc + 47 k
+  rejected over 1 µs vs VACASK's 24 764 acc + 1 rej) because its error
+  estimator is more conservative at the ring's sharp transitions, *and*
+  rejected-step overhead adds a ~16 % tax. Net wall is **11× slower
+  than fixed-dt**, not faster. Fixed dt = 50 ps is the right pick for
+  ring-like oscillators; PID would only pay back on transients with
+  highly disparate timescales. Stiff-aware step-size controllers are an
+  open follow-up.
 
 ## Where circulax is meant to win
 
