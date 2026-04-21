@@ -35,6 +35,8 @@ def _assemble_osdi_group(
     group: OsdiComponentGroup,
     alpha: float,
     dt: float,
+    *,
+    residual_only: bool = False,
 ) -> tuple[Array, Array, Array]:
     """Evaluate one OSDI group via bosdi and return ``(f_l, q_l, j_eff)``.
 
@@ -43,6 +45,14 @@ def _assemble_osdi_group(
         group: The :class:`~circulax.components.osdi.OsdiComponentGroup` to evaluate.
         alpha: Jacobian scaling factor (1.0 for Backward Euler).
         dt:    Timestep used to scale the reactive block.
+        residual_only: When ``True``, skip the ∂/∂V Jacobian pass inside
+            the OSDI evaluator by dispatching to bosdi's
+            ``osdi_residual_eval`` instead of ``osdi_eval``.  Returns a
+            zero-filled ``j_eff`` that callers on the residual-only path
+            discard anyway.  For PSP103 this cuts the per-call cost by
+            ~40 %.  Ignored (and a full eval is performed) when
+            ``group.use_schur_reduction`` is ``True`` because the Schur
+            complement needs the G and C blocks.
 
     Returns:
         ``(f_l, q_l, j_eff)`` — ``f_l`` and ``q_l`` are shape
@@ -61,7 +71,7 @@ def _assemble_osdi_group(
         one step per iteration.
     """
     try:
-        from osdi_jax import osdi_eval
+        from osdi_jax import osdi_eval, osdi_residual_eval
     except ImportError as _bosdi_err:
         raise ImportError(
             "OSDI support requires the 'bosdi' package, which could not be imported. "
@@ -70,6 +80,19 @@ def _assemble_osdi_group(
         ) from _bosdi_err
 
     v_all = y[group.var_indices].astype(jnp.float64)  # (N, num_nodes) — terminals + internal
+
+    # Fast path: residual-only Newton inner iters on a frozen Jacobian skip the
+    # ∂/∂V pass inside the OSDI binary (~40 % cheaper for PSP103).  Not
+    # compatible with Schur reduction (which needs G, C for the complement).
+    if residual_only and not group.use_schur_reduction:
+        cur, chg, _ = osdi_residual_eval(group.model_id, v_all, group.params, group.states)
+        # Caller on this path discards j_eff; a zero-filled stub keeps the
+        # return signature stable without allocating a real dense block.
+        j_eff_stub = jnp.zeros(
+            (v_all.shape[0], group.num_nodes, group.num_nodes), dtype=cur.dtype,
+        )
+        return cur, chg, j_eff_stub
+
     cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)
 
     G = cond.reshape(-1, group.num_nodes, group.num_nodes)   # (N, n, n)  dI/dV
@@ -405,7 +428,12 @@ def assemble_residual_only_real(
 
         if isinstance(group, OsdiComponentGroup):
             # dt is unused here (residual only); alpha/dt factor cancels out.
-            f_l, q_l, _ = _assemble_osdi_group(y_guess, group, alpha=1.0, dt=1.0)
+            # residual_only=True → bosdi's osdi_residual_eval (skips ∂/∂V inside the
+            # OSDI binary, ~40 % cheaper for PSP103).  Ignored when Schur reduction
+            # is on (Schur needs G and C).
+            f_l, q_l, _ = _assemble_osdi_group(
+                y_guess, group, alpha=1.0, dt=1.0, residual_only=True,
+            )
             total_f = total_f.at[group.eq_indices].add(f_l)
             total_q = total_q.at[group.eq_indices].add(q_l)
             continue
@@ -582,7 +610,10 @@ def assemble_residual_only_complex(
         group = component_groups[k]
 
         if isinstance(group, OsdiComponentGroup):
-            f_l, q_l, _ = _assemble_osdi_group(y_guess[:half_size], group, alpha=1.0, dt=1.0)
+            # residual_only=True → bosdi's osdi_residual_eval (skips ∂/∂V pass).
+            f_l, q_l, _ = _assemble_osdi_group(
+                y_guess[:half_size], group, alpha=1.0, dt=1.0, residual_only=True,
+            )
             total_f = total_f.at[group.eq_indices].add(f_l)
             total_q = total_q.at[group.eq_indices].add(q_l)
             continue

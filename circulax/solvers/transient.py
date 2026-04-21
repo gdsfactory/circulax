@@ -59,7 +59,10 @@ def _compute_history(component_groups, y_c, t, num_vars) -> ArrayLike:
     for group in component_groups.values():
         if isinstance(group, OsdiComponentGroup):
             # alpha/dt cancel here — we only need q_l (charges), not j_eff.
-            _, q_l, _ = _assemble_osdi_group(y_c, group, alpha=1.0, dt=1.0)
+            # residual_only=True skips the ∂/∂V pass inside the OSDI binary.
+            _, q_l, _ = _assemble_osdi_group(
+                y_c, group, alpha=1.0, dt=1.0, residual_only=True,
+            )
         else:
             v_locs = y_c[group.var_indices]
             _, q_l = jax.vmap(lambda v, p: group.physics_func(y=v, args=p, t=t))(v_locs, group.params)
