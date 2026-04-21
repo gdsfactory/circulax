@@ -84,7 +84,69 @@ class OsdiComponentGroup(eqx.Module):
     # uses ``osdi_eval_with_handle`` / ``osdi_residual_eval_with_handle``
     # which skip per-call param upload (~20–40 % faster for PSP103).
     # None falls back to the model_id + params path.
+    #
+    # For parameter-optimisation loops (same topology, repeated param
+    # updates), use :meth:`with_params` to build a new group with refreshed
+    # handle and params without re-running ``compile_netlist``.
     handle: object | None = eqx.field(static=True, default=None)
+
+    def with_params(self, new_params: jnp.ndarray) -> "OsdiComponentGroup":
+        """Return a copy of this group with updated params and a fresh handle.
+
+        Use this in parameter-optimisation loops — topology is fixed so
+        the expensive parts of ``compile_netlist`` (union-find, index
+        arrays, Jacobian sparsity) are reused unchanged; only the params
+        array and the Tier-3 handle are swapped.  The handle rebuild is
+        a ~microsecond C++ call (:func:`osdi_jax.osdi_setup_batch`).
+
+        Args:
+            new_params: array of shape ``(N, num_params)`` in the same
+                column order as ``self.params``.  Must be a NumPy-coerceable
+                value (not a traced JAX array — bosdi's Tier-3 API is a
+                one-time C++ call and doesn't participate in tracing).
+
+        Returns:
+            A new :class:`OsdiComponentGroup` with ``params`` = ``new_params``
+            and ``handle`` rebuilt from ``new_params``.  Every other field
+            (var_indices, eq_indices, jac_rows, reg_diag, …) is shared
+            with the original group (no copy).
+
+        Example::
+
+            for iter in range(n_opt):
+                theta = optimizer.ask()
+                groups["nmos"] = groups["nmos"].with_params(theta_to_params(theta))
+                sol = run(...)
+        """
+        import numpy as _np
+
+        new_params = jnp.asarray(new_params, dtype=jnp.float64)
+        new_handle = None
+        try:
+            from osdi_jax import osdi_setup_batch
+            new_handle = osdi_setup_batch(self.model_id, _np.asarray(new_params))
+        except ImportError:
+            pass  # older bosdi without Tier-3; legacy path still works
+        return OsdiComponentGroup(
+            name=self.name,
+            model_id=self.model_id,
+            num_pins=self.num_pins,
+            num_nodes=self.num_nodes,
+            num_params=self.num_params,
+            num_states=self.num_states,
+            params=new_params,
+            states=self.states,
+            var_indices=self.var_indices,
+            eq_indices=self.eq_indices,
+            jac_rows=self.jac_rows,
+            jac_cols=self.jac_cols,
+            reg_diag=self.reg_diag,
+            index_map=self.index_map,
+            is_fdomain=self.is_fdomain,
+            amplitude_param=self.amplitude_param,
+            use_schur_reduction=self.use_schur_reduction,
+            handle=new_handle,
+        )
 
 
 class OsdiModelDescriptor:
