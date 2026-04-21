@@ -32,7 +32,9 @@ nonlinearity — it re-factorises the Jacobian at every Newton iteration
 | **VACASK trap, KLU, adaptive** | **1.19** | **48** | 24 764 | 289.60 |
 | circulax + klujax (`klu_split`), fixed dt = 50 ps | 16.90 | 845 | 20 000 | 288.88 |
 | circulax + klujax-rs (`klu_rs_split`), fixed dt = 50 ps | 16.37 | 819 | 20 000 | 288.88 |
-| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5) | 191.2 | 641 | 251 218 acc / 47 255 rej | 290.59 |
+| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, dtmin=1fs, unbounded) | 191.2 | 641 | 251 218 acc / 47 255 rej | 290.59 |
+| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=10 ps**, force_dtmin=True) | 68.0 | 679 | 99 938 acc / 22 rej | 290.53 |
+| circulax + klujax, PID adaptive (rtol=1e-3 atol=1e-5, **dtmin=40 ps**, force_dtmin=True) | 20.4 | 814 | 25 000 acc / 3 rej | 290.06 |
 
 **Verdict:** VACASK is **~14× faster** wall-clock for single-circuit
 transient simulation. klujax-rs (the Rust port) is ~3 % faster than
@@ -48,21 +50,34 @@ both), and match VACASK's reference (289.60 MHz) to within 0.25 %.
   wall is dominated by the actual KLU solve. The FFI / XLA overhead is
   the bulk of circulax's gap to VACASK on small circuits like this
   9-transistor ring; it doesn't grow with circuit size.
-- **PID adaptive doesn't help here; it hurts.** Earlier versions of this
-  doc flagged "PID NaN'd — probably matchable cadence" as a path to close
-  the gap. Investigation (`scripts/pid_one.py`,
-  `scripts/bench_pid_investigate.py`) found the NaN was a first-step
-  extrapolation blow-up fixed by setting `dt0` small (≤ 1 e-12 s) —
-  every tested `dt0` from 5 e-11 down to 1 e-14 runs cleanly. But
-  circulax's `diffrax.PIDController` then takes ~12× more accepted
-  timesteps than VACASK per unit simulation time (251 k acc + 47 k
-  rejected over 1 µs vs VACASK's 24 764 acc + 1 rej) because its error
-  estimator is more conservative at the ring's sharp transitions, *and*
-  rejected-step overhead adds a ~16 % tax. Net wall is **11× slower
-  than fixed-dt**, not faster. Fixed dt = 50 ps is the right pick for
-  ring-like oscillators; PID would only pay back on transients with
-  highly disparate timescales. Stiff-aware step-size controllers are an
-  open follow-up.
+- **PID adaptive needs a sensible `dtmin` on ring-like oscillators.**
+  Investigation (`scripts/pid_one.py`, `scripts/bench_pid_investigate.py`):
+
+  - The original "PID NaN'd" symptom was a first-step extrapolation
+    blow-up fixed by using a small `dt0` (≤ 1 e-12 s).  Every tested
+    `dt0` from 5 e-11 down to 1 e-14 runs cleanly.
+  - Left unbounded (`dtmin = 1e-15`), circulax's
+    `diffrax.PIDController` takes ~12 × more accepted timesteps than
+    VACASK (251 k acc + **47 k rejected** over 1 µs vs VACASK's 24 764
+    acc + 1 rej) because its error estimator is more conservative at
+    the ring's sharp transitions and hunts for microstructure that
+    isn't there.  Net wall is 11 × slower than fixed-dt.
+  - **Setting `dtmin = 10 ps + force_dtmin=True`** cuts rejections
+    from 47 k → 22 (2000 ×) and accepted steps from 251 k → 100 k.
+    Wall drops from 191 s → 68 s.
+  - **Setting `dtmin = 40 ps`** puts circulax at VACASK's exact cadence
+    (25 000 vs 24 764 accepted steps, only 3 rejections) at 20.4 s
+    wall.  Still slower than fixed-dt (16.9 s) because PID's
+    error-estimator and step-acceptance logic run on every step
+    regardless.
+
+  Takeaway for ring-oscillator-like workloads: use **fixed dt** (fastest
+  and simplest).  For transients with genuinely disparate timescales
+  (slow settling + fast oscillation; startup transients; event capture)
+  PID with a sensible `dtmin` (10–40 ps for ~GHz circuits) pays off.
+  Never run PID without a sensible `dtmin` on a stiff circuit — the
+  controller will burn compute trying to resolve nonexistent
+  microstructure.
 
 ## Where circulax is meant to win
 

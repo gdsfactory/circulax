@@ -123,7 +123,11 @@ print(sol.stats)
 - `rtol=1e-3, atol=1e-6` is a good starting point for most circuits.
 - Tighten tolerances if you see waveform artifacts; loosen them to reduce step count.
 - `dtmax` should be no larger than the fastest feature you care about (e.g., 1/10 of the shortest rise time).
+- **Always set a sensible `dtmin` (and `force_dtmin=True`) on stiff/oscillating circuits.** Without it, the PID error estimator will burn compute hunting for nonexistent microstructure at sharp transitions — we observed a 12× step-count blow-up on a PSP103 ring oscillator when `dtmin` was left at 1 fs. A good rule of thumb for a ring-oscillator-like circuit at ~GHz is `dtmin ≈ 0.1 × dtmax` (allows 10× subdivision at transitions). See `docs/benchmark_psp103_ring.md` for the measurements.
+- `dt0` (initial step) should be small — diffrax's first-step predictor extrapolates from `dt0` and a too-aggressive value blows up Newton on strongly-nonlinear circuits. Use ≤ 1 ps for MOSFET-level circuits; diffrax's PID will ramp up quickly from there.
 - `force_dtmin=True` prevents the solver aborting at very stiff moments; check `num_rejected_steps` to see if this was needed.
+
+**For pure oscillator workloads** (ring oscillators, LC tanks, PLLs in steady state) prefer `ConstantStepSize` — the error estimator's per-step overhead isn't paying back when every stage transitions at the same cadence. We measured a 17% wall penalty for PID-at-matched-cadence vs fixed-dt on a PSP103 ring.
 
 ---
 

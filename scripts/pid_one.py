@@ -2,7 +2,7 @@
 reports/bench_pid.csv so a crash in one config doesn't lose others.
 
 Usage:
-    pixi run python scripts/pid_one.py <dt0_ps> <dtmax_ps> <rtol> <atol> [t1_ns=100]
+    pixi run python scripts/pid_one.py <dt0_ps> <dtmax_ps> <rtol> <atol> [t1_ns=100] [dtmin_ps=0] [force_dtmin=0]
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def period_from_crossings(t, x):
 
 def emit(row):
     CSV.parent.mkdir(parents=True, exist_ok=True)
-    fields = ["dt0_ps", "dtmax_ps", "rtol", "atol", "t1_ns",
+    fields = ["dt0_ps", "dtmin_ps", "dtmax_ps", "rtol", "atol", "t1_ns",
               "status", "last_ok_ns", "accepted", "rejected",
               "freq_MHz", "wall_s"]
     exists = CSV.exists()
@@ -69,10 +69,16 @@ def main():
     p.add_argument("rtol", type=float)
     p.add_argument("atol", type=float)
     p.add_argument("t1_ns", type=float, nargs="?", default=100.0)
+    p.add_argument("dtmin_ps", type=float, nargs="?", default=0.0,
+                   help="0 = effectively unbounded (1e-3 ps).  >0 sets a floor.")
+    p.add_argument("force_dtmin", type=int, nargs="?", default=0,
+                   help="1 = accept a step at dtmin rather than aborting.")
     args = p.parse_args()
 
     dt0 = args.dt0_ps * 1e-12
     dtmax = args.dtmax_ps * 1e-12
+    dtmin = args.dtmin_ps * 1e-12 if args.dtmin_ps > 0 else 1e-15
+    force_dtmin = bool(args.force_dtmin)
     t1 = args.t1_ns * 1e-9
 
     groups, sys_size, port_map = build_netlist(c_load=0)
@@ -84,15 +90,16 @@ def main():
     run = setup_transient(groups, solver, transient_solver=TrapRefactoringTransientSolver)
 
     ctrl = diffrax.PIDController(
-        rtol=args.rtol, atol=args.atol, dtmin=1e-15, dtmax=dtmax,
-        force_dtmin=False,
+        rtol=args.rtol, atol=args.atol, dtmin=dtmin, dtmax=dtmax,
+        force_dtmin=force_dtmin,
     )
     # At least 10 points per fundamental period (assume ~290 MHz ring osc).
     n_save = max(400, int(t1 * 10 * 290e6))
     saveat = diffrax.SaveAt(ts=jnp.linspace(0.0, t1, n_save))
 
-    row = {"dt0_ps": args.dt0_ps, "dtmax_ps": args.dtmax_ps,
-           "rtol": args.rtol, "atol": args.atol, "t1_ns": args.t1_ns}
+    row = {"dt0_ps": args.dt0_ps, "dtmin_ps": args.dtmin_ps,
+           "dtmax_ps": args.dtmax_ps, "rtol": args.rtol,
+           "atol": args.atol, "t1_ns": args.t1_ns}
 
     t0 = time.time()
     try:
