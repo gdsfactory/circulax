@@ -25,6 +25,38 @@ Circulax's `TrapRefactoring` is the appropriate pick for PSP103's strong
 nonlinearity — it re-factorises the Jacobian at every Newton iteration
 (full quadratic convergence), the same Newton policy VACASK uses.
 
+## Scaling with circuit size
+
+Same workload (1 µs, dt = 50 ps, trap integrator) with the ring size
+parameterised via `--n-stages`.  Adds one extra data point per row;
+reports wall time, per-step µs, and the circulax vs VACASK ratio.
+
+| Stages | Devices | VACASK wall | circulax scalar wall | Ratio |
+|--------|---------|-------------|----------------------|-------|
+|   9    |    18   | 1.19 s      | 16.42 s              | 13.8× |
+|  15    |    30   | 1.96 s      | 16.87 s              | **8.6×** |
+|  33    |    66   | ❌ DC homotopy failed | 25.32 s  | (VACASK can't run) |
+|  51    |   102   | ❌ (not attempted)     | 31.60 s  |  |
+
+Two takeaways:
+
+- **Circulax's wall is dominated by fixed per-step overhead** (XLA
+  dispatch + Python + FFI boundary crossings, ~660 µs/step) that
+  doesn't scale with circuit size.  Adding devices costs only the
+  actual OSDI evaluation + KLU solve, ~9 µs/step/device on this
+  box.  So circulax's wall scales far flatter than linear with
+  circuit size, and **the VACASK ratio closes as circuits grow** —
+  from 13.8× at 9 stages down to 8.6× at 15 stages.
+- **VACASK's DC homotopy fails at 33 stages**.  Circulax's two-phase
+  homotopy (source-step + Gmin-step) handles it cleanly and reports a
+  correct 78.9 MHz fundamental (= 289 × 9/33 MHz, 0.2 % off the
+  naïve N-stage-scaling prediction).  For very deep ring oscillators
+  circulax is currently the only tool that runs.
+
+Circulax and VACASK still match bit-for-bit on frequency at every
+stage count that both can run: 173.79 vs 173.70 MHz at 15 stages
+(0.05 %).
+
 ## Single-circuit results
 
 | Configuration | Wall (s) | µs / step | n_steps | Freq (MHz) |

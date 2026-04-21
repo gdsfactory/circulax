@@ -109,10 +109,10 @@ def run_vacask() -> None:
     })
 
 
-def _build_circulax(backend: str):
+def _build_circulax(backend: str, n_stages: int = 9):
     from circulax.solvers import analyze_circuit, setup_transient
     from circulax.solvers.transient import TrapRefactoringTransientSolver
-    groups, sys_size, port_map = build_netlist(c_load=0)
+    groups, sys_size, port_map = build_netlist(c_load=0, n_stages=n_stages)
     solver = analyze_circuit(groups, sys_size, backend=backend)
     high_gmin = eqx.tree_at(lambda s: s.g_leak, solver, 1e-2)
     y_src = high_gmin.solve_dc_source(groups, jnp.zeros(sys_size), n_steps=20)
@@ -123,10 +123,10 @@ def _build_circulax(backend: str):
     return groups, sys_size, port_map, run, y0
 
 
-def run_circulax(backend: str, mode: str, t1_ns: float) -> None:
+def run_circulax(backend: str, mode: str, t1_ns: float, n_stages: int = 9) -> None:
     t1 = t1_ns * 1e-9
     n_save = min(4000, int(t1 / DT))
-    groups, sys_size, port_map, run, y0 = _build_circulax(backend)
+    groups, sys_size, port_map, run, y0 = _build_circulax(backend, n_stages=n_stages)
     n1 = port_map["n1,p1"]
 
     if mode == "fixed":
@@ -166,11 +166,11 @@ def run_circulax(backend: str, mode: str, t1_ns: float) -> None:
         "n_steps": n_actual,
         "us_per_step": f"{wall / max(n_actual, 1) * 1e6:.1f}",
         "freq_MHz": f"{1e-6 / period:.2f}" if period > 0 else "nan",
-        "notes": f"t1={t1_ns:.0f}ns",
+        "notes": f"t1={t1_ns:.0f}ns n_stages={n_stages}",
     })
 
 
-def run_vmap(backend: str, batch: int) -> None:
+def run_vmap(backend: str, batch: int, n_stages: int = 9) -> None:
     """Time ``batch`` rings in parallel via jax.vmap on a SHORT 200 ns window.
 
     For a parameter-sweep workflow the per-ring length matters less than
@@ -178,7 +178,7 @@ def run_vmap(backend: str, batch: int) -> None:
     """
     t1 = 200e-9
     n_save = 200
-    groups, sys_size, port_map, run, y0 = _build_circulax(backend)
+    groups, sys_size, port_map, run, y0 = _build_circulax(backend, n_stages=n_stages)
     saveat = diffrax.SaveAt(ts=jnp.linspace(0.0, t1, n_save))
     controller = diffrax.ConstantStepSize()
 
@@ -219,14 +219,17 @@ def main() -> None:
     p.add_argument("mode", nargs="?", default="fixed")
     p.add_argument("t1_ns", nargs="?", type=float, default=1000.0)
     p.add_argument("batch", nargs="?", type=int, default=4)
+    p.add_argument("--n-stages", type=int, default=9,
+                   help="Ring osc stage count (odd, ≥ 3).  Default 9 matches the VACASK reference.")
     args = p.parse_args()
 
     if args.case == "vacask":
         run_vacask()
     elif args.case == "circulax":
-        run_circulax(args.backend, args.mode, args.t1_ns)
+        run_circulax(args.backend, args.mode, args.t1_ns, n_stages=args.n_stages)
     elif args.case == "vmap":
-        run_vmap(args.backend, int(args.mode) if args.mode.isdigit() else args.batch)
+        batch = int(args.mode) if args.mode.isdigit() else args.batch
+        run_vmap(args.backend, batch, n_stages=args.n_stages)
 
 
 if __name__ == "__main__":

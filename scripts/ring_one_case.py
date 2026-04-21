@@ -31,7 +31,11 @@ sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 CSV_PATH = _REPO / "reports" / "ring_sweep.csv"
 
 
-def build_netlist(c_load: float):
+def build_netlist(c_load: float, n_stages: int = 9):
+    """Build an N-stage CMOS ring oscillator.  ``n_stages`` must be odd."""
+    if n_stages < 3 or n_stages % 2 == 0:
+        msg = f"n_stages must be odd and ≥ 3; got {n_stages}"
+        raise ValueError(msg)
     from fixtures.psp103_models import geom_settings, make_psp103_descriptors
     from circulax import compile_netlist
     from circulax.components.electronic import (
@@ -52,8 +56,8 @@ def build_netlist(c_load: float):
         "Vkick,p1": "kick_n,p1", "Vkick,p2": "GND,p1",
         "Rkick,p1": "kick_n,p1", "Rkick,p2": "n1,p1",
     }
-    for stage in range(1, 10):
-        in_n, out_n = f"n{stage}", f"n{stage % 9 + 1}"
+    for stage in range(1, n_stages + 1):
+        in_n, out_n = f"n{stage}", f"n{stage % n_stages + 1}"
         mn, mp = f"mn{stage}", f"mp{stage}"
         instances[mn] = {"component": "nmos", "settings": mos_n}
         instances[mp] = {"component": "pmos", "settings": mos_p}
