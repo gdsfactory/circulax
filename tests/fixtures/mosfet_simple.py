@@ -44,14 +44,22 @@ def MosfetSimple(
     # Geometry.
     W: float = 10e-6,
     L: float = 1e-6,
-    # Threshold + transconductance.
-    Vt: float = 0.35,
-    KP: float = 300e-6,       # A/V²; process µCox tuned for ~300 MHz ring
-    LAMBDA: float = 0.05,     # 1/V channel-length modulation
+    # Threshold + transconductance (fitted to PSP103 via
+    # scripts/fit_mosfet_params.py at Vds=1.0/Vgs=0.7, Vds=0.6/Vgs=1.2,
+    # Vds=0.6/Vgs=0.3 biases; within 13 % of PSP103 on all three).
+    Vt: float = 0.171,
+    KP: float = 530e-6,       # A/V²  NMOS fit; PMOS ≈ 590e-6
+    LAMBDA: float = 0.0,      # 1/V channel-length modulation (fit picked 0)
+    THETA: float = 0.0,       # 1/V mobility degradation (fit picked 0)
     # Sub-threshold smoothing (soft step near Vt).
     N_SMOOTH: float = 0.04,   # V — softplus scale; smaller → sharper transition
-    # Gate capacitance (Meyer-like, single-piece).
-    COX: float = 3.45e-3,     # F/m² (≈ 3.45 fF/µm² for 1 µm oxide)
+    # Gate capacitance (Meyer-like, single-piece).  8.5e-3 F/m² ≈ 4 nm oxide;
+    # empirically tuned so the 9-stage ring oscillates near PSP103's 289 MHz
+    # with the calibrated Id above.  Real PSP103 Cox (TOXO=1.5 nm) is higher
+    # but Meyer underestimates because it skips charge redistribution in the
+    # channel and the bulk-junction depletion caps; this COX is an effective
+    # lump that compensates.
+    COX: float = 8.5e-3,
 ) -> PhysicsReturn:
     """Simplified smoothed-square-law MOSFET with Meyer gate capacitance.
 
@@ -80,8 +88,10 @@ def MosfetSimple(
     Vdsat_plus = Vgs_eff + 1e-3                   # avoid /0 near cutoff
     sat_ramp = jnp.tanh(Vds / Vdsat_plus)         # smooth linear→sat
 
-    # Canonical strong-inversion sat current with channel-length modulation.
-    Id_strong = 0.5 * beta * Vgs_eff**2 * (1.0 + LAMBDA * jnp.abs(Vds))
+    # Canonical strong-inversion sat current with channel-length modulation
+    # and mobility-degradation factor 1/(1+THETA·Vgs_eff).
+    mobility_factor = 1.0 / (1.0 + THETA * Vgs_eff)
+    Id_strong = 0.5 * beta * Vgs_eff**2 * mobility_factor * (1.0 + LAMBDA * jnp.abs(Vds))
 
     # Assemble.  Multiply by sat_ramp to get smooth linear→saturation.
     # `type` flips the sign for PMOS so drain current direction follows

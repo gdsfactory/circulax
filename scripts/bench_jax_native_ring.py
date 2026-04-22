@@ -72,10 +72,13 @@ def build_ring_netlist(n_stages: int = 9, c_load: float = 0.0) -> dict:
     if n_stages < 3 or n_stages % 2 == 0:
         raise ValueError(f"n_stages must be odd and ≥ 3; got {n_stages}")
 
-    # NMOS: W = 10 µm, L = 1 µm.  PMOS: W = 20 µm, L = 1 µm, TYPE = −1.
-    # Same sizing as the OSDI path.
-    nmos_settings = {"type": 1.0,  "W": 10e-6, "L": 1e-6}
-    pmos_settings = {"type": -1.0, "W": 20e-6, "L": 1e-6}
+    # NMOS: W = 10 µm, L = 1 µm.  PMOS: W = 20 µm, L = 1 µm, type = −1.
+    # Same sizing as the OSDI path.  KP fit separately per polarity against
+    # PSP103 bias points (see scripts/fit_mosfet_params.py).
+    nmos_settings = {"type":  1.0, "W": 10e-6, "L": 1e-6,
+                     "Vt": 0.171, "KP": 530e-6}
+    pmos_settings = {"type": -1.0, "W": 20e-6, "L": 1e-6,
+                     "Vt": 0.169, "KP": 590e-6}
 
     instances: dict = {
         "Vvdd":  {"component": "vsrc", "settings": {"V": 1.2}},
