@@ -1,11 +1,11 @@
-"""Generate a VACASK ring-oscillator sim file for any (odd) stage count.
+"""Emit runme_N.sim for the VACASK ring-osc benchmark at arbitrary N.
 
-Writes to /home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/runme_N.sim
-alongside the existing runme.sim.  Models/subckt identical to the
-N=9 reference benchmark.
+Writes alongside the upstream N=9 template so the generated file can
+reuse the same ``models.inc`` and the ``psp103v4.osdi`` symlink already
+present in ``/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/``.
 
 Usage:
-    pixi run python scripts/gen_vacask_ring.py 33
+    pixi run python benchmarks/ring/vacask_gen.py 33
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 VACASK_DIR = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask")
 
 
-def main(n_stages: int) -> None:
+def emit(n_stages: int) -> Path:
     if n_stages < 3 or n_stages % 2 == 0:
         raise ValueError(f"n_stages must be odd and ≥ 3; got {n_stages}")
 
@@ -37,12 +37,10 @@ def main(n_stages: int) -> None:
         "",
         'i0 (0 1) isource type="pulse" val0=0 val1=10u delay=1n rise=1n fall=1n width=1n',
     ]
-
     for stage in range(1, n_stages + 1):
-        in_n = stage
-        out_n = stage % n_stages + 1
-        lines.append(f"u{stage} ({in_n} {out_n} vdd 0)  inverter w=10u l=1u")
-
+        lines.append(
+            f"u{stage} ({stage} {stage % n_stages + 1} vdd 0)  inverter w=10u l=1u"
+        )
     lines += [
         "",
         "vdd (vdd 0) vsource dc=1.2",
@@ -54,12 +52,12 @@ def main(n_stages: int) -> None:
         "endc",
         "",
     ]
-
-    out_path = VACASK_DIR / f"runme_{n_stages}.sim"
-    out_path.write_text("\n".join(lines))
-    print(f"wrote {out_path}  ({n_stages} stages)")
+    out = VACASK_DIR / f"runme_{n_stages}.sim"
+    out.write_text("\n".join(lines))
+    return out
 
 
 if __name__ == "__main__":
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 33
-    main(n)
+    path = emit(n)
+    print(f"wrote {path}")

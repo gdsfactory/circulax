@@ -4,8 +4,9 @@ The bosdi author flagged that osdi_eval's vmap rule does
 ``jnp.broadcast_to(x[None], ...)`` on non-batched args; under jit this
 is a free XLA view, in eager mode it can force a params-copy per call.
 
-Our scripts/bench_one.py::run_vmap already wraps the vmap'd function
-in ``jax.jit``, but let's confirm with a direct A/B:
+Our earlier vmap benchmark already wrapped the vmap'd function in
+``jax.jit`` (since folded into benchmarks/ring/), but let's confirm
+with a direct A/B:
 
   A. sim_batch = jax.jit(jax.vmap(sim_one))              (current)
   B. sim_batch = jax.jit(jax.vmap(jax.jit(sim_one)))     (inner JIT too)

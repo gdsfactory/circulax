@@ -42,7 +42,7 @@ klujax-rs commit for reference.
 
 ## Measured cost
 
-From `scripts/bench_one.py` in the circulax repo, 9-stage PSP103 ring
+From the earlier vmap harness (since folded into `benchmarks/ring/`), 9-stage PSP103 ring
 oscillator, `TrapRefactoring` + klu_rs_split, 200 ns sim at dt = 50 ps
 (= 4000 timesteps, ~5 Newton iters/step):
 
@@ -197,8 +197,7 @@ lands for free on our side.
 ## Happy to help
 
 - Test a Tier-1 draft against our ring-oscillator benchmark
-  (`scripts/bench_one.py vmap klu_rs_split 4`) and report per-step
-  cost.
+  (`benchmarks/ring/`) and report per-step cost.
 - Share the circulax test setup that exercises vmap'd
   `refactor_and_solve` + vmap'd `osdi_eval` end-to-end, so you can
   reproduce.
