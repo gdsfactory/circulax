@@ -127,7 +127,7 @@ Net gain margin         : 200×  &gt;&gt; 1, oscillation guaranteed
 
 
 System size : 3 unknowns
-Node map    : {'Rdamp,p1': 1, 'L1,p1': 1, 'VDP,p1': 1, 'C1,p1': 1, 'GND,p1': 0, 'Rdamp,p2': 0, 'VDP,p2': 0, 'L1,p2': 0, 'C1,p2': 0, 'L1,i_L': 2}
+Node map    : {'Rdamp,p1': 1, 'VDP,p1': 1, 'C1,p1': 1, 'L1,p1': 1, 'VDP,p2': 0, 'C1,p2': 0, 'L1,p2': 0, 'Rdamp,p2': 0, 'GND,p1': 0, 'L1,i_L': 2}
 Groups      : ['vdp', 'inductor', 'capacitor', 'resistor']
 Oscillator node index: 1
 
@@ -427,12 +427,12 @@ Adam optimisation (200 steps, lr=0.05):
   Step 100: loss=0.03842,  f=8.014 MHz,  L=0.222 µH,  C=1.777 nF,  mu=0.304
 
 
-  Step 150: loss=0.00080,  f=8.002 MHz,  L=0.220 µH,  C=1.800 nF,  mu=0.270
+  Step 150: loss=0.00066,  f=8.001 MHz,  L=0.220 µH,  C=1.796 nF,  mu=0.269
 
 
-  Step 199: loss=0.00008,  f=8.000 MHz,  L=0.219 µH,  C=1.805 nF,  mu=0.261
+  Step 199: loss=0.00006,  f=8.000 MHz,  L=0.220 µH,  C=1.800 nF,  mu=0.261
 
-Final: f=7.9998 MHz  (target 8.0 MHz),  L=0.2192 µH,  C=1.8055 nF,  mu=0.2613
+Final: f=7.9998 MHz  (target 8.0 MHz),  L=0.2199 µH,  C=1.7997 nF,  mu=0.2609
 
 
 Pre-computing 51 HB solutions (stride=4)...
@@ -447,13 +447,13 @@ Pre-computing 51 HB solutions (stride=4)...
   [ 21/51] step  80 — f=7.92 MHz, A=1.238 V, mu=0.330
 
 
-  [ 31/51] step 120 — f=8.00 MHz, A=1.164 V, mu=0.286
+  [ 31/51] step 120 — f=8.00 MHz, A=1.161 V, mu=0.285
 
 
-  [ 41/51] step 160 — f=8.00 MHz, A=1.133 V, mu=0.268
+  [ 41/51] step 160 — f=8.00 MHz, A=1.131 V, mu=0.267
 
 
-  [ 51/51] step 200 — f=8.00 MHz, A=1.120 V, mu=0.261
+  [ 51/51] step 200 — f=8.00 MHz, A=1.119 V, mu=0.261
 Done.
 
 
