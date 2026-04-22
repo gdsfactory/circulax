@@ -92,7 +92,27 @@ def sax_component(fn: callable) -> callable:
 
     physics_wrapper.__name__ = fn.__name__
     physics_wrapper.__doc__ = fn.__doc__
-    physics_wrapper.__signature__ = sig
+
+    # Synthesise a signature that base_component._build_component can consume:
+    # it must begin with the reserved (signals, s) args and expose every SAX
+    # parameter as a keyword-only entry with a default. The wrapper's runtime
+    # body still accepts them via **kwargs.
+    _sax_params = [
+        inspect.Parameter(
+            p.name,
+            inspect.Parameter.KEYWORD_ONLY,
+            default=defaults[p.name],
+            annotation=p.annotation if p.annotation is not inspect.Parameter.empty else inspect.Parameter.empty,
+        )
+        for p in sig.parameters.values()
+    ]
+    physics_wrapper.__signature__ = inspect.Signature(
+        parameters=[
+            inspect.Parameter("signals", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            inspect.Parameter("s", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            *_sax_params,
+        ]
+    )
 
     return component(ports=detected_ports)(physics_wrapper)
 
