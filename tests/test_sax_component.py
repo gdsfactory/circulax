@@ -276,6 +276,61 @@ def test_normalize_model_rejects_invalid() -> None:
         _normalize_model(not_sax, name="bad")
 
 
+def test_sax_component_respects_sdense_port_order() -> None:
+    """Regression: 4-port SDict whose dict-insertion order differs from sorted order.
+
+    ``get_ports(sdict)`` returns ports sorted (``o1, o2, o3, o4``), while
+    ``sdense(sdict)`` orders matrix rows by dict-insertion order (here
+    ``o1, o3, o4, o2``). The wrapper used to discard ``sdense``'s port_map and
+    use the sorted order to index signals, silently scrambling rows/columns of
+    the Y-matrix. For a 2×2 MMI-style directional coupler this made the bar/
+    cross coupling appear where the self-reflection should be; reciprocal
+    devices still passed energy-conservation spot checks so the bug hid.
+
+    Constructing an MMI2x2 S-matrix with unsorted insertion order and comparing
+    against ``y_matrix @ v_vec`` computed in ``sdense``'s own port order.
+    """
+    import sax  # noqa: PLC0415
+
+    from circulax.s_transforms import s_to_y, sax_component  # noqa: PLC0415
+
+    def mmi_2x2(*, tau: float = 0.7071067811865476) -> sax.SDict:
+        # Ideal 50/50 2x2 MMI: bar coupling = tau, cross coupling = j*sqrt(1-tau^2).
+        # `tau` (not `t`) because `t` is reserved for `@source` time-dependent components.
+        # KEY ORDER IS DELIBERATELY NON-SORTED (o1, o3, o4, o2) to trigger the bug.
+        c = jnp.sqrt(1.0 - tau * tau)
+        return {
+            ("o1", "o3"): tau + 0j,
+            ("o3", "o1"): tau + 0j,
+            ("o1", "o4"): 1j * c,
+            ("o4", "o1"): 1j * c,
+            ("o2", "o3"): 1j * c,
+            ("o3", "o2"): 1j * c,
+            ("o2", "o4"): tau + 0j,
+            ("o4", "o2"): tau + 0j,
+        }
+
+    # Reference computed directly from the S-matrix using sdense's port order.
+    sdict = mmi_2x2()
+    s_matrix, port_map = sax.sdense(sdict)
+    y_ref = s_to_y(s_matrix)
+    v_by_port = {"o1": 1.0 + 0j, "o2": 0.2 + 0.1j, "o3": -0.3 + 0j, "o4": 0.5 - 0.2j}
+    matrix_order = sorted(port_map, key=port_map.get)
+    v_vec = jnp.array([v_by_port[p] for p in matrix_order], dtype=jnp.complex128)
+    i_ref = y_ref @ v_vec
+    expected = {p: i_ref[port_map[p]] for p in v_by_port}
+
+    # Component-level output must match port-for-port.
+    cls = sax_component(mmi_2x2)
+    inst = cls()
+    f, q = inst(**v_by_port)
+    assert q == {}
+    for p in v_by_port:
+        assert jnp.allclose(f[p], expected[p], atol=1e-10), (
+            f"port {p!r} scrambled: got {complex(f[p])}, expected {complex(expected[p])}"
+        )
+
+
 def test_compile_netlist_auto_wraps_sax() -> None:
     """End-to-end: a netlist with a raw SAX model in models_map compiles without manual wrapping."""
     from circulax.compiler import compile_netlist  # noqa: PLC0415
