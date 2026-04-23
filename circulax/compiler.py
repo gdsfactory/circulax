@@ -198,6 +198,11 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         models_map: Mapping from model name strings to
             :class:`~circulax.components.base_component.CircuitComponent`
             subclasses, e.g. ``{"Resistor": Resistor, "Capacitor": Capacitor}``.
+            Raw SAX model functions (callable with all-defaulted parameters and
+            a ``sax.SDict``/``sax.SDense``/``sax.SCoo``/``sax.SType`` return
+            annotation) are accepted directly and auto-wrapped via
+            :func:`~circulax.s_transforms.sax_component`; no manual decoration
+            required.
 
     Returns:
         A three-tuple ``(compiled_groups, sys_size, port_to_node_map)`` where:
@@ -227,6 +232,16 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             constructor signature of its component class.
 
     """
+    # Auto-wrap raw SAX model functions into CircuitComponent classes so callers
+    # can pass PDKs of plain SAX models straight through the netlist interface.
+    # CircuitComponent subclasses pass through unchanged; anything else raises.
+    # ``"ground"`` is a reserved sentinel whose entry is never actually
+    # dereferenced (ground instances are skipped below), so it is left alone.
+    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+    models_map = {
+        k: (v if k == "ground" else _normalize_model(v, name=k)) for k, v in models_map.items()
+    }
+
     port_to_node_map, num_nodes = build_net_map(netlist)
 
     # Buckets: Key = (comp_type_name, tree_structure), Value = list of instances

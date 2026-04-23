@@ -47,5 +47,26 @@ jobs:
           environments: ${{ matrix.env }}
           cache: false
 
-      - name: Run tests
+      - name: Run fast tests
         run: pixi run -e ${{ matrix.env }} pytest_run
+
+  test_long:
+    # Slow tests (notebook execution) only run on push to main, not on PRs,
+    # so PR feedback stays fast while main keeps a full-coverage check.
+    name: "test_long / ubuntu-latest / py313"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: latest
+          environments: py313
+          cache: false
+
+      - name: Run all tests including @pytest.mark.long (notebooks)
+        run: pixi run -e py313 pytest_all

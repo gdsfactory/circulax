@@ -169,7 +169,8 @@ nbrun            = { cmd = ["/bin/sh", "-c", "find examples -name '*.ipynb' -not
 nbdocs           = { cmd = ["/bin/sh", "-c", "rm -rf docs/examples && mkdir -p docs/examples && jupyter nbconvert --config docs/nbconvert_config.py --to markdown && find examples -name '*.gif' | xargs -I GIF cp GIF docs/examples/"], depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
 docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
-pytest_run       = { cmd = ["pytest", "tests",], depends-on = ["install_ipkernel"] }
+pytest_run       = { cmd = ["pytest", "tests",], depends-on = ["install_ipkernel"], description = "Fast tests only (excludes @pytest.mark.long, e.g. notebook execution)" }
+pytest_all       = { cmd = ["pytest", "tests", "-m", "long or not long"], depends-on = ["install_ipkernel"], description = "All tests including @pytest.mark.long (notebook execution)" }
 lint_format      = "ruff format"
 lint_check       = "ruff -v check"
 build            = { cmd = "uv build", description = "Build sdist and wheel into dist/" }
@@ -202,6 +203,13 @@ benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }
 # ---------------------------------------------------------------------------
 
 [tool.pytest.ini_options]
+# `long` marks slow tests (e.g. notebook execution) that are skipped by default.
+# Run them explicitly via `pixi run pytest_all` or
+# `pytest -m "long or not long"`.
+markers = [
+    "long: slow tests (e.g. notebook execution); excluded from the default run",
+]
+addopts = "-m 'not long'"
 filterwarnings = [
     "ignore::numpy.exceptions.ComplexWarning",
     "ignore:Complex dtype support in Diffrax:UserWarning",
