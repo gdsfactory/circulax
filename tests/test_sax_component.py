@@ -7,6 +7,8 @@ physics wrapper's ``__signature__`` did not include the reserved ``signals``
 and ``s`` arguments that ``base_component._build_component`` requires.
 """
 
+import functools
+
 import jax
 import jax.numpy as jnp
 import pytest
@@ -103,3 +105,87 @@ def test_sax_component_handles_param_without_default() -> None:
     # Missing default is filled by the decorator with 1.0.
     assert jnp.allclose(inst.coupling, 1.0)
     assert jnp.allclose(inst.loss, 0.0)
+
+
+def test_sax_component_accepts_functools_partial() -> None:
+    """SAX PDKs bind fab-specific defaults via ``functools.partial``; the
+    decorator must unwrap these so ``__name__`` lookup does not crash.
+
+    Regression: previously raised ``AttributeError: 'functools.partial'
+    object has no attribute '__name__'``.
+    """
+    wg = functools.partial(straight, neff=2.5, ng=3.6)
+    cls = sax_component(wg)
+    # Class name falls back to the unwrapped base function.
+    assert cls.__name__ == "straight"
+    inst = cls()
+    # Partial-bound args become the component's defaults.
+    assert jnp.allclose(inst.neff, 2.5)
+    assert jnp.allclose(inst.ng, 3.6)
+    # Non-bound params keep their SAX defaults.
+    assert jnp.allclose(inst.length, 10.0)
+
+
+def test_sax_component_partial_with_name_override() -> None:
+    """The ``name=`` kwarg sets the class name — needed for PDK dicts where
+    many partials share the same underlying ``straight``."""
+    wg = functools.partial(straight, length=5.0)
+    cls = sax_component(wg, name="wg_short")
+    assert cls.__name__ == "wg_short"
+    assert jnp.allclose(cls().length, 5.0)
+
+
+def test_sax_component_nested_partials() -> None:
+    """Nested partials are unwrapped to the innermost callable."""
+    outer = functools.partial(functools.partial(straight, neff=2.5), length=50.0)
+    cls = sax_component(outer)
+    assert cls.__name__ == "straight"
+    inst = cls()
+    assert jnp.allclose(inst.neff, 2.5)
+    assert jnp.allclose(inst.length, 50.0)
+
+
+def test_sax_component_numeric_port_names_are_sanitized() -> None:
+    """Some SAX PDKs label ports numerically ('1', '2'); namedtuple field
+    names must be valid identifiers, so the decorator prefixes digits with
+    ``'p'``.
+
+    Regression: previously raised ``ValueError: Type names and field names
+    must be valid identifiers: '1'``.
+    """
+
+    def numeric_port_wg(length: float = 10.0, neff: float = 2.4) -> dict:
+        phase = jnp.exp(1j * 2 * jnp.pi * neff * length / 1.55)
+        return {
+            ("1", "1"): 0.0 + 0j,
+            ("1", "2"): phase,
+            ("2", "1"): phase,
+            ("2", "2"): 0.0 + 0j,
+        }
+
+    cls = sax_component(numeric_port_wg)
+    assert set(cls.ports) == {"p1", "p2"}
+
+    inst = cls(length=5.0)
+    f_dict, q_dict = inst(p1=1.0 + 0j, p2=0.0 + 0j)
+    # Returned current dict keys are sanitized port names.
+    assert set(f_dict) == {"p1", "p2"}
+    assert q_dict == {}
+
+
+def test_sax_component_pdk_dict_pattern() -> None:
+    """Exercise the dict-comprehension pattern the user flagged in the bug report:
+
+    ``{k: sax_component(v, name=k) for k, v in pdk.items()}``
+    """
+    pdk = {
+        "wg_short": functools.partial(straight, length=5.0),
+        "wg_long": functools.partial(straight, length=100.0),
+    }
+    circulax_models = {k: sax_component(v, name=k) for k, v in pdk.items()}
+
+    assert set(circulax_models) == {"wg_short", "wg_long"}
+    assert circulax_models["wg_short"].__name__ == "wg_short"
+    assert circulax_models["wg_long"].__name__ == "wg_long"
+    assert jnp.allclose(circulax_models["wg_short"]().length, 5.0)
+    assert jnp.allclose(circulax_models["wg_long"]().length, 100.0)

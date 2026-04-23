@@ -4,6 +4,7 @@ Utilities for converting between S-parameter and admittance representations,
 and for wrapping SAX model functions as circulax components.
 """
 
+import functools
 import inspect
 from typing import Any
 
@@ -12,6 +13,33 @@ import jax.numpy as jnp
 from sax import get_ports, sdense
 
 from circulax.components.base_component import CircuitComponent, Signals, States, _extract_param, component
+
+
+def _unwrap(fn: callable) -> callable:
+    """Return the innermost wrapped callable of a ``functools.partial`` chain."""
+    while isinstance(fn, functools.partial):
+        fn = fn.func
+    return fn
+
+
+def _sanitize_port(name: str) -> str:
+    """Coerce a SAX port label into a valid Python identifier.
+
+    ``base_component`` builds a namedtuple from the port tuple, so port names
+    must be valid identifiers. SAX PDKs occasionally use numeric labels
+    (e.g. ``'1'``, ``'2'``); those are prefixed with ``'p'``. Other
+    non-identifier characters are replaced with ``'_'``. Already-valid names
+    pass through unchanged.
+    """
+    s = str(name)
+    if s.isidentifier():
+        return s
+    if s and s[0].isdigit():
+        s = "p" + s
+    s = "".join(c if c.isalnum() or c == "_" else "_" for c in s)
+    if not s.isidentifier():
+        s = "p_" + s
+    return s
 
 
 @jax.jit
@@ -35,7 +63,7 @@ def s_to_y(S: jax.Array, z0: float = 1.0) -> jax.Array:
     return (1.0 / z0) * (eye - S) @ jnp.linalg.inv(eye + S)
 
 
-def sax_component(fn: callable) -> callable:
+def sax_component(fn: callable, *, name: str | None = None) -> callable:
     """Decorator to convert a SAX model function into a circulax component.
 
     Inspects ``fn`` at decoration time to discover its port interface via a
@@ -56,21 +84,34 @@ def sax_component(fn: callable) -> callable:
        discovered ports, producing a :class:`~circulax.components.base_component.CircuitComponent`
        subclass.
 
+    ``fn`` may be a plain function or a :class:`functools.partial` wrapping
+    one (SAX PDKs typically use partials to bind fab-specific defaults).
+    Partials are unwrapped to the innermost callable for ``__name__`` /
+    ``__doc__`` recovery; :func:`inspect.signature` handles the parameter
+    reduction.
+
     Args:
         fn: A SAX model function whose keyword arguments are scalar
             parameters and whose return value is a SAX S-parameter dict.
             All parameters must have defaults, or will be substituted with
             ``1.0`` during the dry run.
+        name: Optional override for the resulting class name. Useful when
+            wrapping :class:`functools.partial` objects where several
+            partials share the same underlying ``__name__`` — e.g.
+            ``{key: sax_component(val, name=key) for key, val in pdk.items()}``.
 
     Returns:
         A :class:`~circulax.components.base_component.CircuitComponent`
-        subclass named after ``fn``.
+        subclass named after ``name`` (if given) else after the unwrapped
+        function.
 
     Raises:
         RuntimeError: If the dry run fails for any reason.
 
     """
     sig = inspect.signature(fn)
+    base_fn = _unwrap(fn)
+    cls_name = name if name is not None else getattr(base_fn, "__name__", "SaxComponent")
     defaults = {
         param.name: param.default if param.default is not inspect.Parameter.empty else 1.0 for param in sig.parameters.values()
     }
@@ -79,19 +120,25 @@ def sax_component(fn: callable) -> callable:
         dummy_s_dict = fn(**defaults)
         detected_ports = get_ports(dummy_s_dict)
     except Exception as exc:
-        msg = f"Failed to dry-run SAX component '{fn.__name__}': {exc}"
+        msg = f"Failed to dry-run SAX component '{cls_name}': {exc}"
         raise RuntimeError(msg) from exc
+
+    # base_component builds a namedtuple over the port tuple, which requires
+    # every port name to be a valid Python identifier. Some SAX PDKs label
+    # ports numerically ('1', '2'); coerce those to identifiers while keeping
+    # the index ordering.
+    port_names = tuple(_sanitize_port(p) for p in detected_ports)
 
     def physics_wrapper(signals: Signals, s: States, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
         s_dict = fn(**kwargs)
         s_matrix, _ = sdense(s_dict)
         y_matrix = s_to_y(s_matrix)
-        v_vec = jnp.array([getattr(signals, p) for p in detected_ports], dtype=jnp.complex128)
+        v_vec = jnp.array([getattr(signals, p) for p in port_names], dtype=jnp.complex128)
         i_vec = y_matrix @ v_vec
-        return {p: i_vec[i] for i, p in enumerate(detected_ports)}, {}
+        return {p: i_vec[i] for i, p in enumerate(port_names)}, {}
 
-    physics_wrapper.__name__ = fn.__name__
-    physics_wrapper.__doc__ = fn.__doc__
+    physics_wrapper.__name__ = cls_name
+    physics_wrapper.__doc__ = getattr(base_fn, "__doc__", None)
 
     # Synthesise a signature that base_component._build_component can consume:
     # it must begin with the reserved (signals, s) args and expose every SAX
@@ -114,7 +161,7 @@ def sax_component(fn: callable) -> callable:
         ]
     )
 
-    return component(ports=detected_ports)(physics_wrapper)
+    return component(ports=port_names)(physics_wrapper)
 
 
 def _build_fdomain_component(
