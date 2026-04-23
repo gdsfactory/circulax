@@ -10,7 +10,9 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import sax
 from sax import get_ports, sdense
+from sax.saxtypes import try_into
 
 from circulax.components.base_component import CircuitComponent, Signals, States, _extract_param, component
 
@@ -295,3 +297,77 @@ def fdomain_component(ports: tuple[str, ...]) -> Any:
 
     """
     return lambda fn: _build_fdomain_component(fn, ports)
+
+
+# ---------------------------------------------------------------------------
+# SAX model auto-detection (for compile_netlist)
+# ---------------------------------------------------------------------------
+
+# Annotated SAX return types that a model function may declare. All three
+# single-mode S-matrix containers are supported because SAX PDKs use all of
+# them, and `sax_component` wraps any of them via :func:`sax.sdense`.
+_SAX_RETURN_TYPES: tuple = (sax.SDict, sax.SDense, sax.SCoo, sax.SType)
+_SAX_RETURN_NAMES: frozenset = frozenset({"SDict", "SDense", "SCoo", "SType"})
+
+
+def _is_sax_model(obj: Any) -> bool:
+    """Return True if ``obj`` is a plain SAX model function.
+
+    Two-layered check:
+
+    1. **SAX structural validator** — ``sax.saxtypes.try_into[sax.Model](obj)``
+       applies SAX's own Pydantic-based `val_model` (callable, no positional-only
+       / `*args` / `**kwargs`, every parameter has a default, not a model
+       factory). Delegating to SAX means we match its canonical conventions and
+       inherit any future tightening automatically.
+    2. **Return annotation check** — the raw return annotation must be one of
+       :data:`sax.SDict`, :data:`sax.SDense`, :data:`sax.SCoo`, or
+       :data:`sax.SType`. SAX's own validator does not enforce this at runtime,
+       so we do it here to keep the auto-wrap pathway strict. Both PEP 563
+       string annotations and evaluated TypeAlias objects are handled.
+
+    Classes are rejected up-front so :class:`CircuitComponent` subclasses (and
+    any user-authored classes) never match and fall through to the direct-use
+    branch in :func:`_normalize_model`.
+    """
+    if inspect.isclass(obj):
+        return False
+    if try_into[sax.Model](obj) is None:
+        return False
+    try:
+        ann = inspect.signature(obj).return_annotation
+    except (TypeError, ValueError):
+        return False
+    if ann is inspect.Signature.empty:
+        return False
+    # PEP 563 / `from __future__ import annotations` — compare by last name.
+    # JAX's `pjit` wrapper preserves the string form (e.g. ``'sax.SDict'``).
+    if isinstance(ann, str):
+        return ann.split(".")[-1] in _SAX_RETURN_NAMES
+    # Evaluated form: compare identity against the SAX TypeAlias exports.
+    # `get_type_hints` resolves aliases to their structural form and breaks
+    # identity comparison, so we intentionally skip it here.
+    return any(ann is t for t in _SAX_RETURN_TYPES)
+
+
+def _normalize_model(obj: Any, *, name: str) -> type[CircuitComponent]:
+    """Return a :class:`CircuitComponent` class for the given netlist model entry.
+
+    * If ``obj`` is already a :class:`CircuitComponent` subclass, it is returned unchanged.
+    * If ``obj`` is a SAX model function (see :func:`_is_sax_model`), it is wrapped
+      via :func:`sax_component` and the resulting subclass is returned.
+    * Otherwise, a :class:`TypeError` is raised with a clear message.
+
+    Called by :func:`circulax.compiler.compile_netlist` to auto-wrap raw SAX
+    model functions so they can be passed directly in the netlist ``models`` dict.
+    """
+    if inspect.isclass(obj) and issubclass(obj, CircuitComponent):
+        return obj
+    if _is_sax_model(obj):
+        return sax_component(obj, name=name)
+    raise TypeError(
+        f"Model {name!r} must be a CircuitComponent subclass or a SAX model "
+        f"function (callable with all-defaulted parameters and a "
+        f"`-> sax.SDict | sax.SDense | sax.SCoo | sax.SType` return annotation). "
+        f"Got {type(obj).__name__}: {obj!r}"
+    )

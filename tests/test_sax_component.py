@@ -189,3 +189,108 @@ def test_sax_component_pdk_dict_pattern() -> None:
     assert circulax_models["wg_long"].__name__ == "wg_long"
     assert jnp.allclose(circulax_models["wg_short"]().length, 5.0)
     assert jnp.allclose(circulax_models["wg_long"]().length, 100.0)
+
+
+# ---------------------------------------------------------------------------
+# Auto-detection (compile_netlist normalizer)
+# ---------------------------------------------------------------------------
+
+
+def test_is_sax_model_accepts_all_three_s_types() -> None:
+    """SAX PDKs ship SDict, SDense, and SCoo models — all three must auto-detect."""
+    import sax  # noqa: PLC0415
+
+    from circulax.s_transforms import _is_sax_model  # noqa: PLC0415
+
+    def m_sdict(*, wl: float = 1.55) -> sax.SDict:
+        return {("in0", "out0"): 1.0 + 0j}
+
+    def m_sdense(*, wl: float = 1.55) -> sax.SDense:
+        return jnp.eye(2, dtype=complex), {"in0": 0, "out0": 1}
+
+    def m_scoo(*, wl: float = 1.55) -> sax.SCoo:
+        return jnp.array([0]), jnp.array([1]), jnp.array([1.0 + 0j]), {"in0": 0, "out0": 1}
+
+    def m_stype(*, wl: float = 1.55) -> sax.SType:
+        return {("in0", "out0"): 1.0 + 0j}
+
+    assert _is_sax_model(m_sdict)
+    assert _is_sax_model(m_sdense)
+    assert _is_sax_model(m_scoo)
+    assert _is_sax_model(m_stype)
+    # Real SAX PDK model — the whole point of auto-detect.
+    assert _is_sax_model(straight)
+    # functools.partial wrapping a SAX model.
+    assert _is_sax_model(functools.partial(straight, length=5.0))
+
+
+def test_is_sax_model_rejects_non_sax() -> None:
+    """Rejection cases: no-default arg, wrong return annotation, classes."""
+    import sax  # noqa: PLC0415
+
+    from circulax.components.electronic import Resistor  # noqa: PLC0415
+    from circulax.s_transforms import _is_sax_model  # noqa: PLC0415
+
+    def bad_no_default(wl: float) -> sax.SDict:  # positional no-default
+        return {("in0", "out0"): 1.0 + 0j}
+
+    def bad_wrong_return(*, wl: float = 1.55) -> dict:  # wrong return annotation
+        return {("in0", "out0"): 1.0 + 0j}
+
+    def bad_no_return_ann(*, wl: float = 1.55):  # missing return annotation
+        return {("in0", "out0"): 1.0 + 0j}
+
+    assert not _is_sax_model(bad_no_default)
+    assert not _is_sax_model(bad_wrong_return)
+    assert not _is_sax_model(bad_no_return_ann)
+    # CircuitComponent classes must not be mistaken for SAX models.
+    assert not _is_sax_model(Resistor)
+
+
+def test_normalize_model_passes_through_circuit_component() -> None:
+    """A CircuitComponent subclass must be returned unchanged."""
+    from circulax.components.electronic import Resistor  # noqa: PLC0415
+    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+
+    assert _normalize_model(Resistor, name="R") is Resistor
+
+
+def test_normalize_model_wraps_sax_function() -> None:
+    """A raw SAX function must be wrapped into a CircuitComponent subclass."""
+    from circulax.components.base_component import CircuitComponent  # noqa: PLC0415
+    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+
+    cls = _normalize_model(straight, name="wg")
+    assert issubclass(cls, CircuitComponent)
+    assert set(cls.ports) == {"in0", "out0"}
+
+
+def test_normalize_model_rejects_invalid() -> None:
+    """Anything that is neither a CircuitComponent nor a SAX model must raise TypeError."""
+    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+
+    def not_sax(x):  # no default, no return annotation
+        return x
+
+    with pytest.raises(TypeError, match="CircuitComponent subclass or a SAX model"):
+        _normalize_model(not_sax, name="bad")
+
+
+def test_compile_netlist_auto_wraps_sax() -> None:
+    """End-to-end: a netlist with a raw SAX model in models_map compiles without manual wrapping."""
+    from circulax.compiler import compile_netlist  # noqa: PLC0415
+
+    # Two waveguides in a loop — minimal topology that connects every port.
+    netlist = {
+        "instances": {
+            "wg1": {"component": "straight", "settings": {"length": 10.0}},
+            "wg2": {"component": "straight", "settings": {"length": 20.0}},
+        },
+        "connections": {
+            "wg1,out0": "wg2,in0",
+            "wg2,out0": "wg1,in0",
+        },
+    }
+    # `straight` is a plain SAX PjitFunction — passed directly, no sax_component() call.
+    groups, _sys_size, _port_map = compile_netlist(netlist, {"straight": straight})
+    assert "straight" in groups
