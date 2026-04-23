@@ -25,6 +25,7 @@ def _find_notebooks(*dir_parts: str) -> Generator[Path, None, None]:
         yield path
 
 
+@pytest.mark.long
 @pytest.mark.parametrize("path", sorted(_find_notebooks("examples")))
 def test_nbs(path: Path | str) -> None:
     fn = Path(path).name
