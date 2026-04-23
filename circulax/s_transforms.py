@@ -133,11 +133,19 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
 
     def physics_wrapper(signals: Signals, s: States, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
         s_dict = fn(**kwargs)
-        s_matrix, _ = sdense(s_dict)
+        # `sdense` returns the S-matrix *and* a port_map keyed in dict-insertion
+        # order (dict[raw_port, matrix_row_index]). `get_ports` returns ports
+        # sorted alphabetically — the two can differ (e.g. an MMI2x2 SDict
+        # built {(o1,o1):…,(o3,o3):…,(o4,o4):…,(o2,o2):…}). We must use the
+        # port_map to line up v_vec with the rows/cols of y_matrix; using the
+        # sorted order silently scrambles coupling between non-adjacent rows.
+        s_matrix, port_map = sdense(s_dict)
         y_matrix = s_to_y(s_matrix)
-        v_vec = jnp.array([getattr(signals, p) for p in port_names], dtype=jnp.complex128)
+        matrix_order = sorted(port_map, key=port_map.get)  # raw names, matrix-row order
+        sanitized_in_order = [_sanitize_port(p) for p in matrix_order]
+        v_vec = jnp.array([getattr(signals, p) for p in sanitized_in_order], dtype=jnp.complex128)
         i_vec = y_matrix @ v_vec
-        return {p: i_vec[i] for i, p in enumerate(port_names)}, {}
+        return {p: i_vec[k] for k, p in enumerate(sanitized_in_order)}, {}
 
     physics_wrapper.__name__ = cls_name
     physics_wrapper.__doc__ = getattr(base_fn, "__doc__", None)
