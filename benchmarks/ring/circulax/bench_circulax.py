@@ -25,7 +25,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-_REPO = Path(__file__).resolve().parents[2]
+_REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO / "tests"))
 sys.path.insert(0, str(_REPO / "scripts"))
 

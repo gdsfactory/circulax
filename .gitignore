@@ -11,3 +11,9 @@ docs/references/
 *code-workspace
 site/*
 circulax/_version.py
+
+# Benchmark artefacts: simulator outputs and locally-compiled OSDI binaries
+benchmarks/**/*.raw
+benchmarks/**/*.osdi
+benchmarks/**/runme_*.sim
+benchmarks/**/runme_*.sp

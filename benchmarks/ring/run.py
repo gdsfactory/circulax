@@ -26,7 +26,11 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-sys.path.insert(0, str(HERE))
+# Each simulator's setup lives in its own subfolder; bench_circulax.py and the
+# vacask/ngspice template generators are imported from there.
+sys.path.insert(0, str(HERE / "circulax"))
+sys.path.insert(0, str(HERE / "vacask"))
+sys.path.insert(0, str(HERE / "ngspice"))
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, "/home/cdaunt/code/vacask/VACASK/python")
 
@@ -66,8 +70,8 @@ def _vacask_freq(raw_path: Path, ignore_before_s: float = 100e-9) -> float | Non
         return None
     return _freq_from_crossings(t[mask], v1[mask])
 
-VACASK_UPSTREAM = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask")
-NGSPICE_UPSTREAM = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/ngspice")
+VACASK_DIR = HERE / "vacask"
+NGSPICE_DIR = HERE / "ngspice"
 CSV_PATH = HERE / "results.csv"
 README = HERE / "README.md"
 
@@ -76,14 +80,14 @@ DEFAULT_N = [3, 9, 15, 21, 27, 31, 33]
 
 def _vacask_runme(n: int) -> Path:
     if n == 9:
-        return VACASK_UPSTREAM / "runme.sim"
+        return VACASK_DIR / "runme.sim"
     from vacask_gen import emit
     return emit(n)
 
 
 def _ngspice_runme(n: int) -> Path:
     if n == 9:
-        return NGSPICE_UPSTREAM / "runme.sim"
+        return NGSPICE_DIR / "runme.sim"
     from ngspice_gen import emit
     return emit(n)
 

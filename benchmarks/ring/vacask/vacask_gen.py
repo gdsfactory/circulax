@@ -1,11 +1,11 @@
 """Emit runme_N.sim for the VACASK ring-osc benchmark at arbitrary N.
 
-Writes alongside the upstream N=9 template so the generated file can
-reuse the same ``models.inc`` and the ``psp103v4.osdi`` symlink already
-present in ``/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/``.
+Writes into this directory so the generated file picks up the local
+``models.inc`` and ``psp103v4.osdi`` symlinks (which point at the
+upstream VACASK install).
 
 Usage:
-    pixi run python benchmarks/ring/vacask_gen.py 33
+    pixi run python benchmarks/ring/vacask/vacask_gen.py 33
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-VACASK_DIR = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask")
+VACASK_DIR = Path(__file__).resolve().parent
 
 
 def emit(n_stages: int) -> Path:

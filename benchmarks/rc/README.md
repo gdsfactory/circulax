@@ -14,8 +14,8 @@ fixed step → 1 M time points.  Mirrors
 <!-- RESULTS -->
 | Simulator | Wall (s) | Compile (s) | n_steps | µs/step | Status |
 |-----------|----------|-------------|---------|---------|--------|
-| vacask | 1.08 | — | 1005006 | 1.07 | ok |
-| ngspice | 1.07 | — | 1006013 | 1.06 | ok |
-| circulax | 4.50 | 0.48 | 1000000 | 4.50 | ok |
-_2026-04-22_
+| vacask | 1.27 | — | 1005006 | 1.26 | ok |
+| ngspice | 1.35 | — | 1006013 | 1.33 | ok |
+| circulax | 6.61 | 0.53 | 1000000 | 6.61 | ok |
+_2026-04-27_
 <!-- /RESULTS -->

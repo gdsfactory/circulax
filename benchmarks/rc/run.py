@@ -3,9 +3,9 @@
 Invocations:
     pixi run python benchmarks/rc/run.py
 
-Reads the upstream VACASK benchmark templates directly from
-/home/cdaunt/code/vacask/VACASK/benchmark/rc/{vacask,ngspice}/ and
-times them alongside the local circulax.py runner.
+Each simulator has its own setup folder next to this file
+(``vacask/``, ``ngspice/``, ``circulax/``) — see each subfolder for
+the netlist or python script invoked.
 """
 
 from __future__ import annotations
@@ -20,12 +20,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-# Package first, then folder — so `import circulax` hits the installed
-# package and `import bench_circulax` hits the local file.
-sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE / "circulax"))
 sys.path.insert(0, str(REPO))
 
-UPSTREAM = Path("/home/cdaunt/code/vacask/VACASK/benchmark/rc")
+VACASK_DIR = HERE / "vacask"
+NGSPICE_DIR = HERE / "ngspice"
 CSV_PATH = HERE / "results.csv"
 README = HERE / "README.md"
 
@@ -35,14 +34,13 @@ def run_vacask() -> dict:
     vacask = shutil.which("vacask") or "/home/cdaunt/opt/vacask/bin/vacask"
     if not Path(vacask).exists():
         return {"simulator": "vacask", "status": "not_installed"}
-    sim_dir = UPSTREAM / "vacask"
-    if not (sim_dir / "runme.sim").exists():
+    if not (VACASK_DIR / "runme.sim").exists():
         return {"simulator": "vacask", "status": "missing_upstream_template"}
 
     t0 = time.perf_counter()
     proc = subprocess.run(
         [vacask, "--skip-embed", "--skip-postprocess", "--no-output", "runme.sim"],
-        cwd=sim_dir, capture_output=True, text=True, timeout=1800, check=False,
+        cwd=VACASK_DIR, capture_output=True, text=True, timeout=1800, check=False,
     )
     wall = time.perf_counter() - t0
     if proc.returncode != 0:
@@ -63,14 +61,13 @@ def run_ngspice() -> dict:
     ngspice = shutil.which("ngspice")
     if ngspice is None:
         return {"simulator": "ngspice", "status": "not_installed"}
-    sim_dir = UPSTREAM / "ngspice"
-    if not (sim_dir / "runme.sim").exists():
+    if not (NGSPICE_DIR / "runme.sim").exists():
         return {"simulator": "ngspice", "status": "missing_upstream_template"}
 
     t0 = time.perf_counter()
     proc = subprocess.run(
         [ngspice, "-b", "runme.sim"],
-        cwd=sim_dir, capture_output=True, text=True, timeout=1800, check=False,
+        cwd=NGSPICE_DIR, capture_output=True, text=True, timeout=1800, check=False,
     )
     wall = time.perf_counter() - t0
     if proc.returncode != 0:

@@ -1,10 +1,10 @@
-"""Emit runme_N.sim for the ngspice ring-osc benchmark at arbitrary N.
+"""Emit runme_N.sp for the ngspice ring-osc benchmark at arbitrary N.
 
-Writes alongside the upstream N=9 template so the generated file can
-reuse ``models.inc`` and ngspice's ``pre_osdi psp103v4.osdi`` hook.
+Writes into this directory so the generated file picks up the local
+``models.inc`` symlink and the locally-compiled ``psp103v4.osdi``.
 
 Usage:
-    pixi run python benchmarks/ring/ngspice_gen.py 33
+    pixi run python benchmarks/ring/ngspice/ngspice_gen.py 33
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-NGSPICE_DIR = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/ngspice")
+NGSPICE_DIR = Path(__file__).resolve().parent
 
 
 def emit(n_stages: int) -> Path:

@@ -1,0 +1,1 @@
+/home/cdaunt/code/vacask/VACASK/benchmark/ring/ngspice/models.inc
