@@ -133,6 +133,27 @@ def run_vacask(n: int) -> dict:
     }
 
 
+def _ensure_psp103_osdi(work_dir: Path) -> bool:
+    """Compile psp103.va → psp103v4.osdi in work_dir if missing.
+
+    ngspice 45.2 is happy with OSDI 0.4 output from openvaf-r 23.5.0.
+    """
+    osdi = work_dir / "psp103v4.osdi"
+    if osdi.exists():
+        return True
+    openvaf = shutil.which("openvaf-r") or shutil.which("openvaf")
+    if openvaf is None:
+        return False
+    va = Path("/home/cdaunt/code/vacask/VACASK/devices/psp103v4/psp103.va")
+    if not va.exists():
+        return False
+    proc = subprocess.run(
+        [openvaf, str(va), "-o", str(osdi)],
+        capture_output=True, text=True, check=False,
+    )
+    return proc.returncode == 0 and osdi.exists()
+
+
 def run_ngspice(n: int) -> dict:
     ngspice = shutil.which("ngspice")
     if ngspice is None:
@@ -140,6 +161,8 @@ def run_ngspice(n: int) -> dict:
     runme = _ngspice_runme(n)
     if not runme.exists():
         return {"simulator": "ngspice", "n_stages": n, "status": "missing_template"}
+    if not _ensure_psp103_osdi(runme.parent):
+        return {"simulator": "ngspice", "n_stages": n, "status": "osdi_compile_failed"}
 
     t0 = time.perf_counter()
     proc = subprocess.run(
@@ -151,10 +174,9 @@ def run_ngspice(n: int) -> dict:
         return {"simulator": "ngspice", "n_stages": n,
                 "status": f"rc={proc.returncode}", "wall_s": wall}
     m = re.search(r"Total elapsed time[^\d]*([\d.]+)", proc.stdout)
-    # Parse the integer "Accepted timepoints = N" line; length(time) is
-    # in scientific notation so \d+ would only capture the leading digit.
-    accepted = re.search(r"Accepted timepoints\s*=\s*(\d+)", proc.stdout)
-    nsteps = int(accepted.group(1)) if accepted else 0
+    # ngspice 45 emits "No. of Data Rows : N" rather than "Accepted timepoints"
+    rows = re.search(r"No\.\s*of\s+Data\s+Rows\s*:\s*(\d+)", proc.stdout)
+    nsteps = int(rows.group(1)) if rows else 0
     el = float(m.group(1)) if m else wall
     return {
         "simulator": "ngspice", "n_stages": n, "status": "ok",
@@ -199,15 +221,31 @@ def write_results(rows: list[dict]) -> None:
 def render_readme_table(rows: list[dict]) -> str:
     """Pivot by N: one row per stage count, columns per simulator.
 
-    Circulax is split into two columns: the OSDI path (PSP103 via the
-    bosdi FFI) and the XLA-only path (simplified pure-JAX MOSFET).  The
-    gap between those two isolates the cost of the OSDI interface.
+    All timing columns are µs/step (= wall_s / n_steps × 1e6 for circulax;
+    sim_reported_s / n_steps × 1e6 for VACASK).  VA also shows JIT cost.
     """
 
-    def _fmt_wall(r: dict) -> str:
-        if isinstance(r.get("wall_s"), (int, float)) and r.get("status") == "ok":
-            return f"{r['wall_s']:.2f}"
-        return r.get("status", "—")
+    def _fmt_us(r: dict) -> str:
+        if r.get("status") != "ok":
+            return r.get("status", "—")
+        u = r.get("us_per_step")
+        if isinstance(u, (int, float)):
+            return f"{u:.1f}"
+        # Fall back to wall_s / n_steps if us_per_step missing.
+        w, n = r.get("wall_s"), r.get("n_steps")
+        if isinstance(w, (int, float)) and isinstance(n, (int, float)) and n > 0:
+            return f"{w / n * 1e6:.1f}"
+        return "—"
+
+    def _fmt_va(r: dict) -> str:
+        """µs/step; append JIT cost in parens when available."""
+        base = _fmt_us(r)
+        if base in ("—",) or r.get("status") != "ok":
+            return base
+        c = r.get("compile_s")
+        if isinstance(c, (int, float)):
+            return f"{base} (JIT {c:.0f}s)"
+        return base
 
     def _fmt_freq(r: dict) -> str:
         return (f"{r['freq_MHz']:.1f}"
@@ -227,18 +265,18 @@ def render_readme_table(rows: list[dict]) -> str:
         by_n.setdefault(int(n), {})[r.get("simulator", "?")] = r
 
     header = (
-        "| N | VACASK (s) | OSDI (s) | XLA (s) | Freq VACASK (MHz) | OSDI Δf | XLA Δf |\n"
-        "|---|------------|----------|---------|-------------------|---------|--------|"
+        "| N | VACASK (µs/step) | ngspice (µs/step) | circulax (µs/step) | Freq VACASK (MHz) | circulax Δf |\n"
+        "|---|------------------|-------------------|--------------------|-------------------|-------------|"
     )
     lines = [header]
     for n in sorted(by_n):
         v = by_n[n].get("vacask", {})
+        ng = by_n[n].get("ngspice", {})
         c_osdi = by_n[n].get("circulax_osdi", {})
-        c_xla = by_n[n].get("circulax_xla", {})
         ref_f = v.get("freq_MHz") if isinstance(v.get("freq_MHz"), (int, float)) else None
         lines.append(
-            f"| {n} | {_fmt_wall(v)} | {_fmt_wall(c_osdi)} | {_fmt_wall(c_xla)} "
-            f"| {_fmt_freq(v)} | {_fmt_err(c_osdi, ref_f)} | {_fmt_err(c_xla, ref_f)} |"
+            f"| {n} | {_fmt_us(v)} | {_fmt_us(ng)} | {_fmt_us(c_osdi)} "
+            f"| {_fmt_freq(v)} | {_fmt_err(c_osdi, ref_f)} |"
         )
     return "\n".join(lines)
 
@@ -262,15 +300,11 @@ def main(argv: list[str] | None = None) -> None:
         argv = sys.argv[1:]
     n_list = [int(x) for x in argv] if argv else DEFAULT_N
 
-    # ngspice is intentionally skipped on the ring: the upstream template
-    # loads psp103v4.osdi via `pre_osdi`, but ngspice 45 only supports
-    # OSDI 0.3 while the openvaf-r binary on this machine emits 0.4.  See
-    # README "Known failures at large N" for the full story.
     rows: list[dict] = []
     for n in n_list:
         for label, fn in (("vacask", run_vacask),
-                          ("circulax_osdi", run_circulax_osdi),
-                          ("circulax_xla", run_circulax_xla)):
+                          ("ngspice", run_ngspice),
+                          ("circulax_osdi", run_circulax_osdi)):
             print(f"[N={n}] {label}…", flush=True)
             try:
                 r = fn(n)
