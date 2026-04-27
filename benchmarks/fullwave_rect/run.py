@@ -43,7 +43,7 @@ jax.config.update("jax_enable_x64", True)
 
 import diffrax  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from bench_utils.ngspice import run_ngspice  # noqa: E402
 from bench_utils.plotting import plot_comparison  # noqa: E402
@@ -119,7 +119,7 @@ STEP_CONTROLLER = diffrax.PIDController(
 )
 
 HERE = pathlib.Path(__file__).parent
-CIR_FILE = HERE / "circuits" / "fullwave_rect.cir"
+CIR_FILE = HERE / "ngspice" / "fullwave_rect.cir"
 NG_OUTPUT = pathlib.Path("/tmp/ngspice_fullwave_rect.dat")
 PLOT_OUTPUT = HERE / "fullwave_rect_comparison.png"
 

@@ -49,7 +49,7 @@ jax.config.update("jax_enable_x64", True)
 
 import diffrax  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from bench_utils.ngspice import run_ngspice  # noqa: E402
 from bench_utils.plotting import plot_comparison  # noqa: E402
@@ -130,7 +130,7 @@ STEP_CONTROLLER = diffrax.PIDController(
 )
 
 HERE = pathlib.Path(__file__).parent
-CIR_FILE = HERE / "circuits" / "diode_clipper.cir"
+CIR_FILE = HERE / "ngspice" / "diode_clipper.cir"
 NG_OUTPUT = pathlib.Path("/tmp/ngspice_diode_clipper.dat")
 PLOT_OUTPUT = HERE / "diode_clipper_hb_comparison.png"
 

@@ -48,7 +48,7 @@ jax.config.update("jax_enable_x64", True)
 
 import diffrax  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.base_component import PhysicsReturn, Signals, States, component  # noqa: E402
