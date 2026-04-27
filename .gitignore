@@ -17,3 +17,7 @@ benchmarks/**/*.raw
 benchmarks/**/*.osdi
 benchmarks/**/runme_*.sim
 benchmarks/**/runme_*.sp
+
+# Local debug scratch — kept on disk, never tracked
+scripts/debug/
+scripts/__pycache__/
