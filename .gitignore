@@ -15,3 +15,5 @@ docs/images/lcr_animation.gif
 docs/examples/*.gif
 examples/**/*.gif
 circulax/_version.py
+debug_scripts/
+cmz_optimisation.gif
