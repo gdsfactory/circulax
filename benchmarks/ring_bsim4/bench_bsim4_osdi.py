@@ -33,7 +33,8 @@ from circulax.components.electronic import (  # noqa: E402
 from circulax.components.osdi import osdi_component  # noqa: E402
 from circulax.solvers import analyze_circuit, setup_transient  # noqa: E402
 from circulax.solvers.transient import TrapFactorizedTransientSolver  # noqa: E402
-from circulax.va.va_defaults import parse_va_defaults_expanded  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for va_defaults
+from va_defaults import parse_va_defaults_expanded  # noqa: E402
 
 BSIM4_OSDI = REPO / "circulax" / "components" / "osdi" / "compiled" / "bsim4v8.osdi"
 BSIM4_VA = REPO / "tests" / "data" / "va" / "bsim4v8.va"
