@@ -37,16 +37,30 @@ class Circuit:
         groups: dict,
         sys_size: int,
         port_map: dict[str, int],
+        rtol: float = 1e-8,
+        atol: float = 1e-8,
+        max_steps: int = 100,
     ) -> None:
         self.solver = solver
         self.groups = groups
         self.sys_size = sys_size
         self.port_map = port_map
+        self.rtol = rtol
+        self.atol = atol
+        self.max_steps = max_steps
 
     def _n(self) -> int:
         return self.sys_size * (2 if self.solver.is_complex else 1)
 
-    def __call__(self, y_guess: jax.Array | None = None, **params: Any) -> jax.Array:
+    def __call__(
+        self,
+        y_guess: jax.Array | None = None,
+        *,
+        rtol: float | None = None,
+        atol: float | None = None,
+        max_steps: int | None = None,
+        **params: Any,
+    ) -> jax.Array:
         """Solve the circuit for the given global parameters.
 
         Scalar params produce a single solve returning shape ``(n,)``.
@@ -56,6 +70,12 @@ class Circuit:
 
         Args:
             y_guess: Initial guess for the Newton solver. Defaults to zeros.
+            rtol: Relative tolerance override. Defaults to value from
+                :func:`compile_circuit` (``1e-8``).
+            atol: Absolute tolerance override. Defaults to value from
+                :func:`compile_circuit` (``1e-8``).
+            max_steps: Max Newton iterations override. Defaults to value
+                from :func:`compile_circuit` (``100``).
             **params: Global parameter values to forward to matching component
                 groups, e.g. ``wavelength_nm=1310.0`` or
                 ``wavelength_nm=jnp.linspace(1260, 1360, 1000)``.
@@ -67,6 +87,10 @@ class Circuit:
             ValueError: If multiple array params have different leading dims.
 
         """
+        rtol = self.rtol if rtol is None else rtol
+        atol = self.atol if atol is None else atol
+        max_steps = self.max_steps if max_steps is None else max_steps
+
         arrays = {k: jnp.asarray(v) for k, v in params.items()}
         batch_keys = [k for k, v in arrays.items() if v.ndim > 0]
 
@@ -74,7 +98,9 @@ class Circuit:
             y_guess = jnp.zeros(self._n())
 
         if not batch_keys:
-            return self.solver.solve_dc(apply_global_params(self.groups, arrays), y_guess)
+            return self.solver.solve_dc(
+                apply_global_params(self.groups, arrays), y_guess, rtol=rtol, atol=atol, max_steps=max_steps
+            )
 
         batch_sizes = {k: arrays[k].shape[0] for k in batch_keys}
         if len(set(batch_sizes.values())) > 1:
@@ -86,7 +112,9 @@ class Circuit:
         def solve_single(*batch_vals: jax.Array) -> jax.Array:
             kw = dict(zip(batch_keys, batch_vals, strict=True))
             kw.update(scalar_params)
-            return self.solver.solve_dc(apply_global_params(self.groups, kw), y_guess)
+            return self.solver.solve_dc(
+                apply_global_params(self.groups, kw), y_guess, rtol=rtol, atol=atol, max_steps=max_steps
+            )
 
         return jax.vmap(solve_single)(*[arrays[k] for k in batch_keys])
 
@@ -120,7 +148,10 @@ class Circuit:
             A new :class:`Circuit` with the updated groups.
 
         """
-        return Circuit(self.solver, groups, self.sys_size, self.port_map)
+        return Circuit(
+            self.solver, groups, self.sys_size, self.port_map,
+            rtol=self.rtol, atol=self.atol, max_steps=self.max_steps,
+        )
 
 
 def compile_circuit(
@@ -130,6 +161,9 @@ def compile_circuit(
     backend: str = "default",
     is_complex: bool = False,
     g_leak: float = 1e-9,
+    rtol: float = 1e-8,
+    atol: float = 1e-8,
+    max_steps: int = 100,
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
 
@@ -148,13 +182,19 @@ def compile_circuit(
         is_complex: If ``True``, treat the circuit as complex-valued (photonic).
             The solution vector will have length ``2 * sys_size``.
         g_leak: Leakage conductance for regularisation. Defaults to ``1e-9``.
+        rtol: Relative tolerance for the Newton solver. Defaults to ``1e-8``.
+        atol: Absolute tolerance for the Newton solver. Defaults to ``1e-8``.
+            Tighten further (e.g. ``1e-10``) for very high-amplitude photonic
+            problems where the source is much larger than 1.
+        max_steps: Max Newton iterations. Defaults to ``100``.
 
     Returns:
         A :class:`Circuit` ready to call with ``circuit(**params)``.
+        Tolerances can be overridden per-call: ``circuit(..., atol=1e-10)``.
 
     Example::
 
-        circuit = compile_circuit(net_dict, models_map, is_complex=True)
+        circuit = compile_circuit(net_dict, models_map, is_complex=True, atol=1e-10)
         solutions = jax.jit(circuit)(wavelength_nm=jnp.linspace(1260, 1360, 2000))
         field_out = circuit.get_port_field(solutions, "Detector,p1")
 
@@ -164,4 +204,7 @@ def compile_circuit(
 
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
     solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak)
-    return Circuit(solver=solver, groups=groups, sys_size=sys_size, port_map=port_map)
+    return Circuit(
+        solver=solver, groups=groups, sys_size=sys_size, port_map=port_map,
+        rtol=rtol, atol=atol, max_steps=max_steps,
+    )
