@@ -6,10 +6,39 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write      # needed to create/update GitHub Releases
   id-token: write
 
 jobs:
+  release-notes:
+    name: "release / GitHub Release"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # git-cliff needs full history to read all tags
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@git-cliff
+
+      - name: Generate release notes for this tag
+        run: git cliff --current --strip header > RELEASE_NOTES.md
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          IS_PRE=${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') }}
+          PRE_FLAG=""
+          [ "$IS_PRE" = "true" ] && PRE_FLAG="--prerelease"
+          if gh release view "$TAG" &>/dev/null; then
+            # Release already exists (e.g. tagged via GitHub UI) — update its body
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md $PRE_FLAG
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file RELEASE_NOTES.md $PRE_FLAG
+          fi
+
   build:
     name: "build / sdist + wheel"
     runs-on: ubuntu-latest

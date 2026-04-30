@@ -30,13 +30,6 @@ dependencies = [
     "klujax>=0.5.0"]
 
 [project.optional-dependencies]
-test = [
-    "pytest>=8",
-    "papermill",
-    "ipykernel>=6.29.5",   # required by papermill to execute notebooks
-    "schemdraw",
-    "jupyter-dash",        # pulls plotly + dash; used by inverse_design notebooks
-]
 docs = [
     "ipykernel>=6.29.5",
     "nbconvert",
@@ -63,7 +56,7 @@ docs = [
     "kaleido>=1.2.0,<2"
 ]
 dev = [
-    "circulax[test,docs]",
+    "circulax[docs]",
     "black",
     "ruff",
     "mypy",
@@ -135,14 +128,22 @@ python = "3.12.*"
 python = "3.13.*"
 tqdm = ">=4.67.1,<5"
 
-# Test feature — used by CI environments
+# Test feature — lean CI environment (no docs, no dev tooling)
+# Used for the non-default Python matrix (py311, py312).
 [tool.pixi.feature.test.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["test"] }
+circulax = { path = ".", editable = true }
+pytest = ">=8"
+pytest-xdist = "*"
 
-# Dev tooling feature
+# Dev tooling feature — full local development environment
+# Includes git-cliff (changelog), uv (build), and the docs/papermill extras.
+[tool.pixi.feature.dev.pypi-dependencies]
+circulax = { path = ".", editable = true, extras = ["dev"] }
+
 [tool.pixi.feature.dev.dependencies]
 tqdm = ">=4.67.1,<5"
 uv = ">=0.6"
+git-cliff = ">=2"
 
 # Benchmark feature — NGSpice accuracy comparison
 [tool.pixi.feature.benchmark.dependencies]
@@ -169,7 +170,7 @@ nbrun            = { cmd = ["/bin/sh", "-c", "find examples -name '*.ipynb' -not
 nbdocs           = { cmd = ["/bin/sh", "-c", "rm -rf docs/examples && mkdir -p docs/examples && jupyter nbconvert --config docs/nbconvert_config.py --to markdown && find examples -name '*.gif' | xargs -I GIF cp GIF docs/examples/"], depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
 docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
-pytest_run       = { cmd = ["pytest", "tests",], depends-on = ["install_ipkernel"], description = "Fast tests only (excludes @pytest.mark.long, e.g. notebook execution)" }
+pytest_run       = { cmd = ["pytest", "tests", "-m", "not long"], description = "Fast tests only — skips @pytest.mark.long (notebook execution)" }
 pytest_all       = { cmd = ["pytest", "tests", "-m", "long or not long"], depends-on = ["install_ipkernel"], description = "All tests including @pytest.mark.long (notebook execution)" }
 lint_format      = "ruff format"
 lint_check       = "ruff -v check"
@@ -178,6 +179,8 @@ build-wheel      = { cmd = "uv build --wheel", description = "Build wheel only" 
 build-sdist      = { cmd = "uv build --sdist", description = "Build sdist only" }
 build-conda      = { cmd = "pixi build", description = "Build conda package" }
 clean-dist       = { cmd = "rm -rf dist/", description = "Remove build artifacts" }
+changelog        = { cmd = "git cliff --output CHANGELOG.md", description = "Regenerate full CHANGELOG.md from git history" }
+changelog-unreleased = { cmd = "git cliff --unreleased", description = "Preview changelog entries since the last tag" }
 bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_testbench.py"],        description = "RC pulse testbench" }
 bench_cascade    = { cmd = ["python", "benchmarking/diode_cascade_testbench.py"],   description = "Diode cascade testbench" }
 bench_rectifier  = { cmd = ["python", "benchmarking/fullwave_rect_testbench.py"],   description = "Full-wave rectifier testbench" }
@@ -190,10 +193,11 @@ bench_lc_ladder  = { cmd = ["python", "benchmarking/lc_ladder_testbench.py"],   
 [tool.pixi.environments]
 default = { features = ["py313", "dev"], solve-group = "py313" }
 
-# CI matrix — minimal, no dev extras
-py311 = { features = ["py311", "dev"], solve-group = "py311" }
-py312 = { features = ["py312", "dev"], solve-group = "py312" }
-py313 = { features = ["py313", "dev"], solve-group = "py313" }
+# CI matrix: non-default Pythons use the lean 'test' feature (no dev tooling,
+# no docs/papermill) so the matrix solves quickly and only tests core behaviour.
+py311 = { features = ["py311", "test"], solve-group = "py311" }
+py312 = { features = ["py312", "test"], solve-group = "py312" }
+py313 = { features = ["py313", "dev"],  solve-group = "py313" }
 
 # Benchmark environment — includes NGSpice for accuracy comparisons
 benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }

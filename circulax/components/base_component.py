@@ -374,7 +374,21 @@ def _build_component(  # noqa: C901
             return _user_fn(signals, s, **kw)
 
     annotations = {p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any) for p in param_specs}
-    defaults = {p.name: p.default for p in param_specs}
+
+    # Distinguish JAX-traced params (numeric scalars / arrays) from static
+    # config fields (strings, None, bools). Static fields are carried on the
+    # Equinox module but not stacked across instances or traced through
+    # transformations — useful for absorbing GDSFactory-style "config"
+    # settings like ``cross_section="strip"`` or ``width=None``.
+    def _is_static_default(v: Any) -> bool:
+        return v is None or isinstance(v, (str, bool))
+
+    defaults: dict[str, Any] = {}
+    for p in param_specs:
+        if _is_static_default(p.default):
+            defaults[p.name] = eqx.field(default=p.default, static=True)
+        else:
+            defaults[p.name] = p.default
 
     namespace = {
         "__annotations__": annotations,

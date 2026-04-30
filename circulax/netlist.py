@@ -66,12 +66,18 @@ def build_net_map(netlist: dict) -> tuple[dict[str, int], int]:
     """
     g = nx.Graph()
 
-    # Add connections
+    # Add connections (SAX-style ``connections`` dict)
     for src, targets in netlist.get("connections", {}).items():
         if isinstance(targets, str):
             targets = [targets]
         for tgt in targets:
             g.add_edge(src, tgt)
+
+    # Add nets (GDSFactory-style ``nets`` list of {"p1": ..., "p2": ...} dicts).
+    # Equivalent to connections; supported so circulax accepts modern GDSFactory
+    # netlists directly without an explicit nets→connections conversion.
+    for net in netlist.get("nets", []):
+        g.add_edge(net["p1"], net["p2"])
 
     # Find connected components (nets)
     components = list(nx.connected_components(g))
