@@ -132,6 +132,8 @@ tqdm = ">=4.67.1,<5"
 # Used for the non-default Python matrix (py311, py312).
 [tool.pixi.feature.test.pypi-dependencies]
 circulax = { path = ".", editable = true }
+pytest = ">=8"
+pytest-xdist = "*"
 
 # Dev tooling feature — full local development environment
 # Includes git-cliff (changelog), uv (build), and the docs/papermill extras.
