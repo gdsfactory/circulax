@@ -196,6 +196,16 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             ``"settings"`` key (parameter dict forwarded to the component
             constructor). A ``"GND"`` instance with ``component="ground"`` is
             recognised and skipped; see ``models_map`` note on reserved types.
+
+            **Settings filtering**: settings whose value is ``None`` are
+            dropped (GDSFactory convention — ``None`` means "use the model
+            default"). Settings whose key is not declared on the model are
+            also silently ignored, which allows GDSFactory netlists carrying
+            geometry-only keys (e.g. ``dy``, ``dx``, ``cross_section``) to
+            be passed directly without preprocessing.  *Note*: a mis-spelled
+            parameter name will be silently ignored rather than raising an
+            error; double-check spelling if a parameter appears to have no
+            effect.
         models_map: Mapping from model name strings to
             :class:`~circulax.components.base_component.CircuitComponent`
             subclasses, e.g. ``{"Resistor": Resistor, "Capacitor": Capacitor}``.
