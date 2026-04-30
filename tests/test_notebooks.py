@@ -1,16 +1,24 @@
-"""Test execution of notebooks in the nbs directory."""
+"""Test execution of notebooks in the examples directory.
+
+These tests are marked ``@pytest.mark.long`` and are only run in the full
+``pytest_all`` task (not ``pytest_run``).  They also require ``papermill``
+to be installed — if it is not, the whole module is skipped with a clear
+message rather than failing with an ImportError.
+"""
 
 import shutil
 from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from papermill.engines import papermill_engines
-from papermill.execute import raise_for_execution_errors
-from papermill.iorw import load_notebook_node
+
+papermill = pytest.importorskip(
+    "papermill",
+    reason="papermill not installed — skipping notebook tests (install circulax[docs])",
+)
 
 TEST_DIR = Path(__file__).resolve().parent.parent
-NBS_DIR = TEST_DIR / "examlples"
+NBS_DIR = TEST_DIR / "examples"
 NBS_FAIL_DIR = TEST_DIR / "failed"
 
 shutil.rmtree(NBS_FAIL_DIR, ignore_errors=True)
@@ -29,12 +37,12 @@ def _find_notebooks(*dir_parts: str) -> Generator[Path, None, None]:
 @pytest.mark.parametrize("path", sorted(_find_notebooks("examples")))
 def test_nbs(path: Path | str) -> None:
     fn = Path(path).name
-    nb = load_notebook_node(str(path))
-    nb = papermill_engines.execute_notebook_with_engine(
+    nb = papermill.iorw.load_notebook_node(str(path))
+    nb = papermill.engines.papermill_engines.execute_notebook_with_engine(
         engine_name=None,
         nb=nb,
         kernel_name="circulax",
         input_path=str(path),
         output_path=None,
     )
-    raise_for_execution_errors(nb, str(NBS_FAIL_DIR / fn))
+    papermill.execute.raise_for_execution_errors(nb, str(NBS_FAIL_DIR / fn))
