@@ -47,7 +47,10 @@ def attach_testbench(
         loads: Same format as ``sources``. Loads are typically resistors
             acting as photodetectors or matched terminations. Auto-name:
             ``f"load_{port}"``.
-        gnd: Device ports to tie directly to GND.
+        gnd: Device ports to tie directly to GND.  The ``"GND"``
+            instance and the ``"ground"`` component type are reserved in
+            circulax — no ``"ground"`` entry is required in the ``models``
+            dict passed to :func:`~circulax.circuit.compile_circuit`.
 
     Returns:
         A new netlist with ``instances`` and ``nets`` keys, ready for

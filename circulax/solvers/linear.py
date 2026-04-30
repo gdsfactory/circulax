@@ -150,8 +150,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         component_groups: dict[str, Any],
         y_guess: jax.Array,
         source_scale: float = 1.0,
-        rtol: float = 1e-8,
-        atol: float = 1e-8,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
         max_steps: int = 100,
     ) -> tuple[jax.Array, jax.Array]:
         """Inner Newton-Raphson loop, optionally with source scaling.
@@ -207,8 +207,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         self,
         component_groups: dict[str, Any],
         y_guess: jax.Array,
-        rtol: float = 1e-8,
-        atol: float = 1e-8,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
         max_steps: int = 100,
     ) -> jax.Array:
         """DC operating point via damped Newton-Raphson.
@@ -228,8 +228,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         self,
         component_groups: dict[str, Any],
         y_guess: jax.Array,
-        rtol: float = 1e-8,
-        atol: float = 1e-8,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
         max_steps: int = 100,
     ) -> tuple[jax.Array, jax.Array]:
         """DC Operating Point with convergence status.
@@ -267,8 +267,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         y_guess: jax.Array,
         g_start: float = 1e-2,
         n_steps: int = 10,
-        rtol: float = 1e-8,
-        atol: float = 1e-8,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
         max_steps: int = 100,
     ) -> jax.Array:
         """DC Operating Point via GMIN stepping (homotopy rescue).
@@ -312,8 +312,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         component_groups: dict[str, Any],
         y_guess: jax.Array,
         n_steps: int = 10,
-        rtol: float = 1e-8,
-        atol: float = 1e-8,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
         max_steps: int = 100,
     ) -> jax.Array:
         """DC Operating Point via source stepping (homotopy rescue).
@@ -354,8 +354,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         g_start: float = 1e-2,
         n_gmin: int = 10,
         n_source: int = 10,
-        rtol: float = 1e-8,
-        atol: float = 1e-8,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
         max_steps: int = 100,
     ) -> jax.Array:
         """DC Operating Point with automatic homotopy fallback.

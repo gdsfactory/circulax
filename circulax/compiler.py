@@ -195,10 +195,13 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             a ``"component"`` key (model name string) and an optional
             ``"settings"`` key (parameter dict forwarded to the component
             constructor). A ``"GND"`` instance with ``component="ground"`` is
-            recognised and skipped.
+            recognised and skipped; see ``models_map`` note on reserved types.
         models_map: Mapping from model name strings to
             :class:`~circulax.components.base_component.CircuitComponent`
             subclasses, e.g. ``{"Resistor": Resistor, "Capacitor": Capacitor}``.
+            ``"ground"`` is a **reserved** component type — it does not need
+            to appear in this map (instances with ``component="ground"`` or
+            named ``"GND"`` are skipped automatically).
             Raw SAX model functions (callable with all-defaulted parameters and
             a ``sax.SDict``/``sax.SDense``/``sax.SCoo``/``sax.SType`` return
             annotation) are accepted directly and auto-wrapped via
@@ -233,14 +236,21 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             constructor signature of its component class.
 
     """
+    # ``"ground"`` is a reserved component type — instances with
+    # ``component="ground"`` (or named ``"GND"``) are skipped during
+    # compilation and never looked up in ``models_map``.  Users do NOT need
+    # to include ``"ground"`` in the models map; if they do, the entry is
+    # silently ignored.
+    _RESERVED = frozenset({"ground"})
+
     # Auto-wrap raw SAX model functions into CircuitComponent classes so callers
     # can pass PDKs of plain SAX models straight through the netlist interface.
     # CircuitComponent subclasses pass through unchanged; anything else raises.
-    # ``"ground"`` is a reserved sentinel whose entry is never actually
-    # dereferenced (ground instances are skipped below), so it is left alone.
     from circulax.s_transforms import _normalize_model  # noqa: PLC0415
     models_map = {
-        k: (v if k == "ground" else _normalize_model(v, name=k)) for k, v in models_map.items()
+        k: _normalize_model(v, name=k)
+        for k, v in models_map.items()
+        if k not in _RESERVED
     }
 
     port_to_node_map, num_nodes = build_net_map(netlist)

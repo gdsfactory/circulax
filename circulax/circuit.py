@@ -37,8 +37,8 @@ class Circuit:
         groups: dict,
         sys_size: int,
         port_map: dict[str, int],
-        rtol: float = 1e-8,
-        atol: float = 1e-8,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
         max_steps: int = 100,
     ) -> None:
         self.solver = solver
@@ -71,9 +71,9 @@ class Circuit:
         Args:
             y_guess: Initial guess for the Newton solver. Defaults to zeros.
             rtol: Relative tolerance override. Defaults to value from
-                :func:`compile_circuit` (``1e-8``).
+                :func:`compile_circuit` (``1e-6``).
             atol: Absolute tolerance override. Defaults to value from
-                :func:`compile_circuit` (``1e-8``).
+                :func:`compile_circuit` (``1e-6``).
             max_steps: Max Newton iterations override. Defaults to value
                 from :func:`compile_circuit` (``100``).
             **params: Global parameter values to forward to matching component
@@ -161,8 +161,8 @@ def compile_circuit(
     backend: str = "default",
     is_complex: bool = False,
     g_leak: float = 1e-9,
-    rtol: float = 1e-8,
-    atol: float = 1e-8,
+    rtol: float = 1e-6,
+    atol: float = 1e-6,
     max_steps: int = 100,
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
@@ -182,19 +182,19 @@ def compile_circuit(
         is_complex: If ``True``, treat the circuit as complex-valued (photonic).
             The solution vector will have length ``2 * sys_size``.
         g_leak: Leakage conductance for regularisation. Defaults to ``1e-9``.
-        rtol: Relative tolerance for the Newton solver. Defaults to ``1e-8``.
-        atol: Absolute tolerance for the Newton solver. Defaults to ``1e-8``.
+        rtol: Relative tolerance for the Newton solver. Defaults to ``1e-6``.
+        atol: Absolute tolerance for the Newton solver. Defaults to ``1e-6``.
             Tighten further (e.g. ``1e-10``) for very high-amplitude photonic
             problems where the source is much larger than 1.
         max_steps: Max Newton iterations. Defaults to ``100``.
 
     Returns:
         A :class:`Circuit` ready to call with ``circuit(**params)``.
-        Tolerances can be overridden per-call: ``circuit(..., atol=1e-10)``.
+        Tolerances can be overridden per-call: ``circuit(..., atol=1e-9)``.
 
     Example::
 
-        circuit = compile_circuit(net_dict, models_map, is_complex=True, atol=1e-10)
+        circuit = compile_circuit(net_dict, models_map, is_complex=True, atol=1e-9)
         solutions = jax.jit(circuit)(wavelength_nm=jnp.linspace(1260, 1360, 2000))
         field_out = circuit.get_port_field(solutions, "Detector,p1")
 
