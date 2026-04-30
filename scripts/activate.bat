@@ -1,7 +1,12 @@
 @echo off
 REM Load .env from the project root if it exists.
-if exist "%PIXI_PROJECT_ROOT%\.env" (
-    for /f "usebackq tokens=1,* delims==" %%A in ("%PIXI_PROJECT_ROOT%\.env") do (
-        if not "%%A"=="" if not "%%A:~0,1%"=="#" set "%%A=%%B"
-    )
+REM Requires delayed expansion for substring checks on FOR loop variables.
+if not exist "%PIXI_PROJECT_ROOT%\.env" goto :eof
+
+setlocal enabledelayedexpansion
+for /f "usebackq tokens=1,* delims==" %%A in ("%PIXI_PROJECT_ROOT%\.env") do (
+    set "_line=%%A"
+    if not "!_line!"=="" if not "!_line:~0,1!"=="#" set "%%A=%%B"
 )
+endlocal
+:eof

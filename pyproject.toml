@@ -167,10 +167,10 @@ circulax = { path = ".", editable = true }
 # ---------------------------------------------------------------------------
 
 [tool.pixi.tasks]
-copy_readme      = { cmd = ["python", "-c", "import shutil, re, pathlib; shutil.copy('ReadMe.md', 'docs/index.md'); p=pathlib.Path('docs/index.md'); p.write_text(re.sub(r'docs/', '', p.read_text()))"], description = "Copy README into docs/ and strip docs/ prefixes" }
+copy_readme      = { cmd = ["python", "scripts/copy_readme.py"],   description = "Copy README into docs/ and strip docs/ prefixes" }
 install_ipkernel = "python -m ipykernel install --user --name circulax"
-nbrun            = { cmd = ["python", "-c", "import subprocess, sys, pathlib; nbs = [str(p) for p in pathlib.Path('examples').rglob('*.ipynb') if '.ipynb_checkpoints' not in str(p)]; [subprocess.run([sys.executable, '-m', 'papermill', nb, nb, '-k', 'circulax'], check=True) for nb in nbs]"], depends-on = ["install_ipkernel"], description = "Execute all notebooks in-place with papermill" }
-nbdocs           = { cmd = ["python", "-c", "import shutil, subprocess, sys, pathlib; d=pathlib.Path('docs/examples'); shutil.rmtree(d, ignore_errors=True); d.mkdir(parents=True); subprocess.run([sys.executable, '-m', 'jupyter', 'nbconvert', '--config', 'docs/nbconvert_config.py', '--to', 'markdown'], check=True); [shutil.copy(g, d) for g in pathlib.Path('examples').rglob('*.gif')]"], depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
+nbrun            = { cmd = ["python", "scripts/run_notebooks.py"], depends-on = ["install_ipkernel"], description = "Execute all notebooks in-place with papermill" }
+nbdocs           = { cmd = ["python", "scripts/build_docs.py"],    depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
 docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
 pytest_run       = { cmd = ["pytest", "tests", "-m", "not long"], description = "Fast tests only — skips @pytest.mark.long (notebook execution)" }
@@ -181,7 +181,7 @@ build            = { cmd = "uv build", description = "Build sdist and wheel into
 build-wheel      = { cmd = "uv build --wheel", description = "Build wheel only" }
 build-sdist      = { cmd = "uv build --sdist", description = "Build sdist only" }
 build-conda      = { cmd = "pixi build", description = "Build conda package" }
-clean-dist       = { cmd = ["python", "-c", "import shutil; shutil.rmtree('dist', ignore_errors=True)"], description = "Remove build artifacts" }
+clean-dist       = { cmd = ["python", "scripts/clean_dist.py"],    description = "Remove build artefacts" }
 changelog        = { cmd = "git cliff --output CHANGELOG.md", description = "Regenerate full CHANGELOG.md from git history" }
 changelog-unreleased = { cmd = "git cliff --unreleased", description = "Preview changelog entries since the last tag" }
 bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_testbench.py"],        description = "RC pulse testbench" }
