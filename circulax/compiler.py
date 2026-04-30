@@ -1,5 +1,6 @@
 """Compiles the group into ComponentGroups and organizes the node index."""
 
+import dataclasses
 import inspect
 from collections import defaultdict
 from functools import cache, wraps
@@ -263,7 +264,16 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             raise ValueError(msg)
 
         comp_cls = models_map[comp_type]
-        settings = data.get("settings", {})
+        # GDSFactory netlists carry geometry settings that don't appear on
+        # the simulation model (e.g. ``dy``/``dx`` on a ``coupler_strip``
+        # instance, or ``allow_min_radius_violation`` on a ``bend_euler``).
+        # Filter to fields the model actually declares, and drop ``None``
+        # values (GDSFactory convention: ``None`` means "use the default").
+        known_fields = {f.name for f in dataclasses.fields(comp_cls)}
+        settings = {
+            k: v for k, v in data.get("settings", {}).items()
+            if v is not None and k in known_fields
+        }
 
         # A. Create Equinox Object
         try:
