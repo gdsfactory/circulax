@@ -25,6 +25,9 @@ def MyComponent(signals, s, [t], **params):
     # 2. Return (Flows, Storage)
 ```
 
+!!! note "CamelCase function names"
+    Component functions use **CamelCase** (`Resistor`, `VoltageSourceAC`) because the decorator promotes them into `equinox.Module` **classes** — Python convention for classes. In the netlist `"component"` key you reference them by whatever string key you pass to `compile_netlist`'s `models` dict, which is typically the lowercase name (e.g. `"resistor"`). The two names are independent.
+
 
 ### Arguments
 
