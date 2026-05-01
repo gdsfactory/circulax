@@ -54,7 +54,7 @@ docs = [
     "mkdocs-glightbox>=0.4.0",
     "mkdocs-minify-plugin>=0.8.0",
     "jupyter-dash",
-    "kaleido>=1.2.0,<2"
+    "kaleido>=1.2.0,<2",
 ]
 dev = [
     "circulax[docs]",
@@ -148,6 +148,7 @@ circulax = { path = ".", editable = true, extras = ["dev"] }
 tqdm = ">=4.67.1,<5"
 uv = ">=0.6"
 git-cliff = ">=2"
+schemdraw = ">=0.18"
 
 # Benchmark feature — NGSpice accuracy comparison
 [tool.pixi.feature.benchmark.dependencies]
