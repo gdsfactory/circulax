@@ -51,12 +51,10 @@ jobs:
         run: pixi run -e ${{ matrix.env }} pytest_run
 
   test_long:
-    # Slow tests (notebook execution) only run on push to main, not on PRs,
-    # so PR feedback stays fast while main keeps a full-coverage check.
-    # Only on Linux — papermill notebook execution is not tested on Windows/macOS.
+    # Slow tests (notebook execution) run on PRs to main and on push to main.
+    # Only on Linux / py313 — papermill notebook execution is not tested on Windows/macOS.
     name: "test_long / ubuntu-latest / py313"
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
 
     steps:
       - uses: actions/checkout@v4
