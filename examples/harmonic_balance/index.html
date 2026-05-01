@@ -80,7 +80,7 @@ Q-factor           : 3.162
 </span><span id=__span-3-30><a href=#__codelineno-3-30 id=__codelineno-3-30 name=__codelineno-3-30></a><span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>"System size: </span><span class=si>{</span><span class=n>num_vars</span><span class=si>}</span><span class=s2> variables"</span><span class=p>)</span>
 </span><span id=__span-3-31><a href=#__codelineno-3-31 id=__codelineno-3-31 name=__codelineno-3-31></a><span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>"Node map: </span><span class=si>{</span><span class=n>net_map</span><span class=si>}</span><span class=s2>"</span><span class=p>)</span>
 </span></code></pre></div> <div class="language-text highlight"><pre><span></span><code>System size: 6 variables
-Node map: {'C1,p1': 1, 'L1,p2': 1, 'Vs,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'L1,p1': 2, 'R1,p2': 2, 'Vs,p1': 3, 'R1,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
+Node map: {'C1,p1': 1, 'L1,p2': 1, 'C1,p2': 0, 'Vs,p2': 0, 'GND,p1': 0, 'L1,p1': 2, 'R1,p2': 2, 'R1,p1': 3, 'Vs,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
 </code></pre></div> <div class="language-python highlight"><pre><span></span><code><span id=__span-4-1><a href=#__codelineno-4-1 id=__codelineno-4-1 name=__codelineno-4-1></a><span class=c1># DC operating point (zero for a purely AC circuit)</span>
 </span><span id=__span-4-2><a href=#__codelineno-4-2 id=__codelineno-4-2 name=__codelineno-4-2></a><span class=n>y_dc</span> <span class=o>=</span> <span class=n>circuit</span><span class=p>()</span>
 </span><span id=__span-4-3><a href=#__codelineno-4-3 id=__codelineno-4-3 name=__codelineno-4-3></a>
