@@ -13,6 +13,13 @@ import jax.numpy as jnp
 from circulax.components.base_component import PhysicsReturn, Signals
 from circulax.netlist import build_net_map
 
+try:
+    from bosdi.circulax import OsdiComponentGroup, OsdiModelDescriptor, _BOSDI_AVAILABLE
+except ImportError:
+    OsdiComponentGroup = None  # type: ignore[assignment,misc]
+    OsdiModelDescriptor = None  # type: ignore[assignment]
+    _BOSDI_AVAILABLE = False
+
 
 def ensure_time_signature(model_func: callable) -> callable:
     """Wraps a model function to ensure it accepts a 't' keyword argument.
@@ -255,10 +262,17 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
 
     # Auto-wrap raw SAX model functions into CircuitComponent classes so callers
     # can pass PDKs of plain SAX models straight through the netlist interface.
-    # CircuitComponent subclasses pass through unchanged; anything else raises.
+    # CircuitComponent subclasses pass through unchanged; OsdiModelDescriptor
+    # objects are passed through as-is (handled separately below); anything else raises.
     from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+
+    def _maybe_normalize(k: str, v: Any) -> Any:
+        if OsdiModelDescriptor is not None and isinstance(v, OsdiModelDescriptor):
+            return v
+        return _normalize_model(v, name=k)
+
     models_map = {
-        k: _normalize_model(v, name=k)
+        k: _maybe_normalize(k, v)
         for k, v in models_map.items()
         if k not in _RESERVED
     }
@@ -267,6 +281,8 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
 
     # Buckets: Key = (comp_type_name, tree_structure), Value = list of instances
     buckets = defaultdict(list)
+    # Separate bucket for OSDI instances (keyed by comp_type only)
+    osdi_buckets: dict[str, list] = defaultdict(list)
     sys_size = num_nodes
 
     # --- 2. Process Instances ---
@@ -284,6 +300,34 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             raise ValueError(msg)
 
         comp_cls = models_map[comp_type]
+        settings = data.get("settings", {})
+
+        # OSDI components use a descriptor object instead of an Equinox class.
+        if OsdiModelDescriptor is not None and isinstance(comp_cls, OsdiModelDescriptor):
+            if not _BOSDI_AVAILABLE:
+                raise ImportError(
+                    f"Component '{name}' uses an OSDI model but the bosdi runtime "
+                    "(osdi_loader) is not available. Install circulax[verilog-a] to "
+                    "enable OSDI support. Note: OSDI is not available on all platforms."
+                )
+            port_indices = []
+            for port in comp_cls.ports:
+                key = f"{name},{port}"
+                if key in port_to_node_map:
+                    port_indices.append(port_to_node_map[key])
+                else:
+                    msg = (
+                        f"Port '{port}' on '{name}' is unconnected.\n"
+                        f"Your netlist connections must include '{key}'"
+                    )
+                    raise ValueError(msg)
+            osdi_buckets[comp_type].append({
+                "params_dict": comp_cls.make_instance(settings),
+                "ports": port_indices,
+                "name": name,
+            })
+            continue
+
         # GDSFactory netlists carry geometry settings that don't appear on
         # the simulation model (e.g. ``dy``/``dx`` on a ``coupler_strip``
         # instance, or ``allow_min_radius_violation`` on a ``bend_euler``).
@@ -291,7 +335,7 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         # values (GDSFactory convention: ``None`` means "use the default").
         known_fields = {f.name for f in dataclasses.fields(comp_cls)}
         settings = {
-            k: v for k, v in data.get("settings", {}).items()
+            k: v for k, v in settings.items()
             if v is not None and k in known_fields
         }
 
@@ -379,6 +423,76 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             index_map=index_map,
             is_fdomain=getattr(comp_cls, "_is_fdomain", False),
             amplitude_param=getattr(comp_cls, "amplitude_param", ""),
+        )
+
+    # --- Process OSDI buckets (requires circulax[verilog-a] / bosdi) ---
+    for comp_type, items in osdi_buckets.items():
+        descriptor: OsdiModelDescriptor = models_map[comp_type]
+        group_name = comp_type
+        n_dev = len(items)
+        n_pins = descriptor.model.num_pins
+        n_nodes = descriptor.model.num_nodes          # terminals + non-collapsed internal
+        n_internal = n_nodes - n_pins                 # extra unknowns per instance
+
+        params_arr = jnp.array(
+            [[item["params_dict"][k] for k in descriptor.param_names] for item in items],
+            dtype=jnp.float64,
+        )  # (N, num_params)
+        states_arr = jnp.zeros((n_dev, descriptor.model.num_states), dtype=jnp.float64)
+
+        # Bosdi Tier-3: pre-bake params into an OsdiBatchHandle so per-Newton-iter
+        # OSDI calls skip the params upload (~20–40 % faster for PSP103).
+        handle = None
+        try:
+            import numpy as _np  # noqa: PLC0415
+
+            from osdi_jax import osdi_setup_batch  # noqa: PLC0415
+            handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
+        except ImportError:
+            pass  # older bosdi without Tier-3; legacy model_id + params path still works
+
+        # Regularisation diagonal: 1.0 only on internal reactive-only nodes.
+        # External terminal nodes never need it — the wider circuit KCL provides
+        # their equations.  Internal reactive-only nodes have no equation from
+        # any other component, so j_eff[i,:] would be zero without this term.
+        is_internal = jnp.arange(n_nodes) >= n_pins
+        is_reactive = ~jnp.array(descriptor.model.resistive_mask, dtype=bool)
+        reg_mask = (is_internal & is_reactive).astype(jnp.float64)
+        reg_diag = jnp.diag(reg_mask)  # (num_nodes, num_nodes)
+
+        # Build (N, n_nodes) index array: terminal indices first, then one new
+        # state slot per internal node per instance (appended to global state vector).
+        all_var_idx_list = []
+        for item in items:
+            terminal_indices = item["ports"]
+            internal_indices = []
+            for _i in range(n_internal):
+                internal_indices.append(sys_size)
+                sys_size += 1
+            all_var_idx_list.append(terminal_indices + internal_indices)
+
+        all_var_idx = jnp.array(all_var_idx_list, dtype=jnp.int32)  # (N, n_nodes)
+
+        jac_rows = jnp.broadcast_to(all_var_idx[:, :, None], (n_dev, n_nodes, n_nodes)).reshape(-1)
+        jac_cols = jnp.broadcast_to(all_var_idx[:, None, :], (n_dev, n_nodes, n_nodes)).reshape(-1)
+
+        compiled_groups[group_name] = OsdiComponentGroup(
+            name=group_name,
+            model_id=descriptor.model.id,
+            num_pins=n_pins,
+            num_nodes=n_nodes,
+            num_params=descriptor.model.num_params,
+            num_states=descriptor.model.num_states,
+            params=params_arr,
+            states=states_arr,
+            var_indices=all_var_idx,
+            eq_indices=all_var_idx,
+            jac_rows=jac_rows,
+            jac_cols=jac_cols,
+            reg_diag=reg_diag,
+            index_map={item["name"]: i for i, item in enumerate(items)},
+            use_schur_reduction=getattr(descriptor, "use_schur_reduction", False),
+            handle=handle,
         )
 
     return compiled_groups, sys_size, port_to_node_map

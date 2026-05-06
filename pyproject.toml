@@ -31,6 +31,7 @@ dependencies = [
     "klujax>=0.5.0"]
 
 [project.optional-dependencies]
+verilog-a = ["bosdi>=0.2.0"]
 docs = [
     "ipykernel>=6.29.5",
     "nbconvert",

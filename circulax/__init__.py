@@ -9,3 +9,11 @@ from circulax.s_transforms import fdomain_component
 from circulax.solvers import analyze_circuit, setup_ac_sweep, setup_harmonic_balance, setup_transient
 from circulax.testbench import attach_testbench
 from circulax.utils import apply_global_params, update_group_params, update_params_dict
+
+# Optional Verilog-A / OSDI support — available when bosdi is installed.
+# Install via: pip install circulax[verilog-a]
+try:
+    from bosdi.circulax import osdi_component  # noqa: F401
+    from circulax.components.va_component import va_component  # noqa: F401
+except ImportError:
+    pass
