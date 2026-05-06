@@ -1,0 +1,19 @@
+IHP mosvar DC sweep, Tier-1 reference
+
+load "mosvar.osdi"
+
+model mv mosvar
+
+model v vsource
+v1 (g 0) v dc=0
+v2 (bi 0) v dc=0
+
+subckt mvtest()
+  m1 (g bi 0) mv
+ends
+
+control
+  elaborate circuit("mvtest")
+  sweep v1 instance="v1" parameter="dc" from=-2.0 to=2.0 step=0.2
+    analysis dcsweep op
+endc
