@@ -188,8 +188,12 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             sol = self._solve_impl(all_vals, -total_f_grounded)
             delta = sol.value
 
+            # Scale-invariant damping based on the *current* solution norm
+            # (not y+delta, which creates positive feedback and runaway on
+            # exponential I-V devices like MOSFETs).
             max_change = jnp.max(jnp.abs(delta))
-            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            y_scale = jnp.maximum(jnp.max(jnp.abs(y)), 1.0)
+            damping = jnp.minimum(1.0, DAMPING_FACTOR * y_scale / (max_change + DAMPING_EPS))
 
             return y + delta * damping
 
