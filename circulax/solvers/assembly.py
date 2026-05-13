@@ -27,6 +27,137 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+try:
+    from bosdi.circulax import OsdiComponentGroup
+except ImportError:
+    OsdiComponentGroup = None
+
+
+def _assemble_osdi_group(
+    y: Array,
+    group,
+    alpha: float,
+    dt: float,
+    *,
+    residual_only: bool = False,
+) -> tuple[Array, Array, Array]:
+    """Evaluate one OSDI group via bosdi and return ``(f_l, q_l, j_eff)``."""
+    try:
+        from osdi_jax import osdi_eval, osdi_residual_eval
+    except ImportError as _bosdi_err:
+        raise ImportError(
+            "OSDI support requires the 'bosdi' package, which could not be imported. "
+            "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
+            "Note: bosdi is not available on all platforms (e.g. Windows)."
+        ) from _bosdi_err
+
+    try:
+        from osdi_jax import osdi_eval_with_handle, osdi_residual_eval_with_handle
+        _HAS_TIER3 = True
+    except ImportError:
+        _HAS_TIER3 = False
+
+    v_all = y[group.var_indices].astype(jnp.float64)
+
+    if residual_only and not group.use_schur_reduction:
+        if _HAS_TIER3 and group.handle is not None:
+            cur, chg, _ = osdi_residual_eval_with_handle(group.handle, v_all, group.states)
+        else:
+            cur, chg, _ = osdi_residual_eval(group.model_id, v_all, group.params, group.states)
+        j_eff_stub = jnp.zeros(
+            (v_all.shape[0], group.num_nodes, group.num_nodes), dtype=cur.dtype,
+        )
+        return cur, chg, j_eff_stub
+
+    if _HAS_TIER3 and group.handle is not None:
+        cur, cond, chg, cap, _ = osdi_eval_with_handle(group.handle, v_all, group.states)
+    else:
+        cur, cond, chg, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)
+
+    G = cond.reshape(-1, group.num_nodes, group.num_nodes)
+    C = cap.reshape(-1, group.num_nodes, group.num_nodes)
+
+    if group.use_schur_reduction:
+        return _schur_reduce_osdi_stamp(
+            v_all=v_all, cur=cur, chg=chg, G=G, C=C,
+            alpha=alpha, dt=dt, group=group,
+        )
+
+    j_eff = G + (alpha / dt) * C + group.reg_diag
+    return cur, chg, j_eff
+
+
+def _schur_reduce_osdi_stamp(
+    *,
+    v_all: Array,
+    cur: Array,
+    chg: Array,
+    G: Array,
+    C: Array,
+    alpha: float,
+    dt: float,
+    group,
+    gmin: float = 1e-12,
+) -> tuple[Array, Array, Array]:
+    """Schur-reduce the per-device stamp and pad back to num_nodes."""
+    N = G.shape[0]
+    T = group.num_pins
+    I = group.num_nodes - T
+
+    G_TT = G[:, :T, :T]
+    G_TI = G[:, :T, T:]
+    G_IT = G[:, T:, :T]
+    G_II = G[:, T:, T:]
+    C_TT = C[:, :T, :T]
+    C_TI = C[:, :T, T:]
+    C_IT = C[:, T:, :T]
+    C_II = C[:, T:, T:]
+    cur_T = cur[:, :T]
+    cur_I = cur[:, T:]
+    chg_T = chg[:, :T]
+    chg_I = chg[:, T:]
+
+    eye_I = jnp.eye(I, dtype=G.dtype)
+
+    G_II_reg = G_II + gmin * eye_I
+    rhs_dc = jnp.concatenate(
+        [G_IT, cur_I[..., None], chg_I[..., None]], axis=-1
+    )
+    sol_dc = jnp.linalg.solve(G_II_reg, rhs_dc)
+    X_dc = sol_dc[..., :T]
+    cur_back = sol_dc[..., T]
+    chg_back = sol_dc[..., T + 1]
+
+    cur_eff_T = cur_T - jnp.einsum("nij,nj->ni", G_TI, cur_back)
+    chg_eff_T = chg_T - jnp.einsum("nij,nj->ni", G_TI, chg_back)
+
+    v_T = v_all[:, :T]
+    v_I = v_all[:, T:]
+    v_I_pred = cur_back - jnp.einsum("nij,nj->ni", X_dc, v_T)
+
+    a_over_dt = alpha / dt
+    A_TT = G_TT + a_over_dt * C_TT
+    A_TI = G_TI + a_over_dt * C_TI
+    A_IT = G_IT + a_over_dt * C_IT
+    A_II = G_II + a_over_dt * C_II
+    A_II_reg = A_II + gmin * eye_I
+    X_jac = jnp.linalg.solve(A_II_reg, A_IT)
+    j_eff_T = A_TT - A_TI @ X_jac
+
+    n = group.num_nodes
+    j_padded = jnp.zeros((N, n, n), dtype=j_eff_T.dtype)
+    j_padded = j_padded.at[:, :T, :T].set(j_eff_T)
+    j_padded = j_padded.at[:, T:, :T].set(X_dc)
+    j_padded = j_padded.at[:, T:, T:].set(jnp.broadcast_to(eye_I, (N, I, I)))
+
+    cur_padded = jnp.concatenate([cur_eff_T, v_I - v_I_pred], axis=-1)
+    chg_padded = jnp.concatenate([chg_eff_T, jnp.zeros_like(v_I)], axis=-1)
+    return cur_padded, chg_padded, j_padded
+
+
+def _is_osdi(group) -> bool:
+    return OsdiComponentGroup is not None and isinstance(group, OsdiComponentGroup)
+
 
 def _real_physics(v: Array, p: Array, group, t1: float) -> tuple[Array, Array]:
     return group.physics_func(y=v, args=p, t=t1)
@@ -126,6 +257,13 @@ def assemble_system_real(
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
 
+        if _is_osdi(group):
+            f_l, q_l, j_eff = _assemble_osdi_group(y_guess, group, alpha, dt)
+            total_f = total_f.at[group.eq_indices].add(f_l)
+            total_q = total_q.at[group.eq_indices].add(q_l)
+            vals_list.append(j_eff.reshape(-1))
+            continue
+
         if group.is_fdomain:
             # F-domain component: evaluate admittance at f=0 (DC).
             v_locs = y_guess[group.var_indices]
@@ -186,6 +324,12 @@ def assemble_gc_real(
         group = component_groups[k]
         n_entries = int(jnp.array(group.jac_rows).reshape(-1).shape[0])
 
+        if _is_osdi(group):
+            _, _, j_eff = _assemble_osdi_group(y_guess, group, alpha=1.0, dt=1.0)
+            g_vals_list.append(j_eff.reshape(-1).astype(y_guess.dtype))
+            c_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
+            continue
+
         if group.is_fdomain:
             # Fdomain groups are re-evaluated per-frequency in ac_sweep.
             # Emit zero blocks so COO alignment with _build_index_arrays is preserved.
@@ -237,6 +381,14 @@ def assemble_residual_only_real(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+
+        if _is_osdi(group):
+            f_l, q_l, _ = _assemble_osdi_group(
+                y_guess, group, alpha=1.0, dt=1.0, residual_only=True,
+            )
+            total_f = total_f.at[group.eq_indices].add(f_l)
+            total_q = total_q.at[group.eq_indices].add(q_l)
+            continue
 
         if group.is_fdomain:
             # F-domain groups have no time-domain physics; their contribution is
@@ -314,6 +466,16 @@ def assemble_system_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+
+        if _is_osdi(group):
+            f_l, q_l, j_eff = _assemble_osdi_group(y_guess[:half_size], group, alpha, dt)
+            total_f = total_f.at[group.eq_indices].add(f_l)
+            total_q = total_q.at[group.eq_indices].add(q_l)
+            vals_blocks[0].append(j_eff.reshape(-1))
+            vals_blocks[1].append(jnp.zeros(j_eff.size, dtype=jnp.float64))
+            vals_blocks[2].append(jnp.zeros(j_eff.size, dtype=jnp.float64))
+            vals_blocks[3].append(jnp.zeros(j_eff.size, dtype=jnp.float64))
+            continue
 
         if group.is_fdomain:
             # F-domain component: evaluate admittance at f=0 (DC) — complex circuit path.
@@ -396,6 +558,14 @@ def assemble_residual_only_complex(
 
     for k in sorted(component_groups.keys()):
         group = component_groups[k]
+
+        if _is_osdi(group):
+            f_l, q_l, _ = _assemble_osdi_group(
+                y_guess[:half_size], group, alpha=1.0, dt=1.0, residual_only=True,
+            )
+            total_f = total_f.at[group.eq_indices].add(f_l)
+            total_q = total_q.at[group.eq_indices].add(q_l)
+            continue
 
         if group.is_fdomain:
             # F-domain groups have no time-domain physics; their contribution is
