@@ -35,7 +35,6 @@ from osdi_debug import classify_rows, format_jacobian_table, schur_reduce
 from osdi_jax import osdi_eval
 from osdi_loader import load_osdi_model
 
-
 BIAS = {"V_D": 1.0, "V_G": 0.7, "V_S": 0.0, "V_B": 0.0}
 V_INT_GUESS = 0.5   # intermediate guess, doesn't affect row classification
 
@@ -88,12 +87,12 @@ def main() -> None:
     n_pins = model.num_pins
 
     print("=" * 78)
-    print(f"PSP103 NMOS W=10 um L=1 um | VACASK psp103n card")
+    print("PSP103 NMOS W=10 um L=1 um | VACASK psp103n card")
     print(
         f"Bias: V_D={BIAS['V_D']}, V_G={BIAS['V_G']}, V_S={BIAS['V_S']}, "
         f"V_B={BIAS['V_B']}, V_int0=V_int1={V_INT_GUESS} (guess)"
     )
-    print(f"Node order: D, G, S, B, int0, int1  (post-collapse)")
+    print("Node order: D, G, S, B, int0, int1  (post-collapse)")
     print(f"num_pins = {n_pins}, num_nodes = {model.num_nodes}, num_params = {model.num_params}")
     print(f"collapsible_pairs (raw OSDI indices): {model.collapsible_pairs}")
     print("=" * 78)
@@ -132,7 +131,7 @@ def main() -> None:
         j = np.asarray(res.j_eff)
         r = np.asarray(res.r_eff)
         print(f"\n--- {label} --- singular={res.singular}")
-        print(format_matrix(f"j_eff (4x4)", j, LABELS[:n_pins]))
+        print(format_matrix("j_eff (4x4)", j, LABELS[:n_pins]))
         for i, lbl in enumerate(LABELS[:n_pins]):
             print(f"  r_eff[{lbl:>4}] = {r[i]:+.6e}")
 

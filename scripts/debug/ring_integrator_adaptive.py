@@ -75,8 +75,8 @@ def run(label: str, *, integrator_cls, stepsize_controller, dt0: float = 1e-12,
 if __name__ == "__main__":
     from circulax.solvers.transient import (
         BDF2FactorizedTransientSolver,
-        SDIRK3FactorizedTransientSolver,
         FactorizedTransientSolver,
+        SDIRK3FactorizedTransientSolver,
     )
 
     groups, sys_size, port_map, solver = compile_ring(c_load=0.0)

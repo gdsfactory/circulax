@@ -28,14 +28,12 @@ import dataclasses
 import importlib.util
 import os
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
@@ -104,9 +102,10 @@ def _build_va_descriptor():
     ``bosdi.va.ir_client.compile_va_unopt`` docstring.
     """
     from bosdi.va.ir_client import compile_va_unopt
-    from circulax.va import lower
     from circulax.va.emitter import emit_source
     from circulax.va.va_defaults import parse_va_defaults_expanded
+
+    from circulax.va import lower
 
     cwd = os.getcwd()
     try:
@@ -209,13 +208,12 @@ def run(variant: str) -> dict:
             except Exception as exc:
                 results[v] = f"ERROR: {type(exc).__name__}: {exc}"
         return {"variant": variant, "iv": results}
-    elif variant == "va":
+    if variant == "va":
         cls, defs = _build_va_descriptor()
         inst = _va_instance(cls, defs)
         results = _dc_sweep_va_static(inst)
         return {"variant": variant, "iv": results}
-    else:
-        raise SystemExit(f"unknown variant: {variant}")
+    raise SystemExit(f"unknown variant: {variant}")
 
 
 def _print_table(res: dict) -> None:

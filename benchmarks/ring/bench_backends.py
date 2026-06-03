@@ -30,16 +30,13 @@ Usage:
 """
 from __future__ import annotations
 
-import atexit
 import csv
 import os
 import re
-import shutil
-import subprocess
 import sys
 import time
-import warnings
 from pathlib import Path
+
 
 # Patch KLUHandleManager.__del__ in both klujax and klujax_rs to be a no-op.
 # Both implementations try to call jax.core.Tracer inside __del__ after JAX has
@@ -57,7 +54,6 @@ def _patch_klu_del(mod_name: str) -> None:
 # Applied after first _run_circulax call (which triggers the lazy klujax import).
 # Also re-applied after klujax_rs load inside _activate_klujax_rs.
 
-import numpy as np
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -134,6 +130,7 @@ def _deactivate_klujax_rs() -> None:
         if "klujax_rs" in sys.modules:
             del sys.modules["klujax_rs"]
         import importlib
+
         import klujax as _real
         sys.modules["klujax"] = _real
     except ImportError:

@@ -84,7 +84,7 @@ def render_table(by_v: dict[float, dict[str, float]]) -> str:
         row = by_v[v]
         vac, osdi, va = row.get("vacask"), row.get("osdi"), row.get("va")
         def _fmt(x):
-            return f"{x:>14.4e}" if isinstance(x, float) else f"{str(x):>14}"
+            return f"{x:>14.4e}" if isinstance(x, float) else f"{x!s:>14}"
         def _ratio(num, den):
             if not isinstance(num, float) or not isinstance(den, float):
                 return "—".rjust(9)

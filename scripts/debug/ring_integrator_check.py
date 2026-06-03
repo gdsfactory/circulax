@@ -69,12 +69,12 @@ if __name__ == "__main__":
         BDF2FactorizedTransientSolver,
         BDF2RefactoringTransientSolver,
         BDF2VectorizedTransientSolver,
+        FactorizedTransientSolver,
+        RefactoringTransientSolver,
         SDIRK3FactorizedTransientSolver,
         SDIRK3RefactoringTransientSolver,
         SDIRK3VectorizedTransientSolver,
         VectorizedTransientSolver,
-        FactorizedTransientSolver,
-        RefactoringTransientSolver,
     )
 
     # Order-1 Backward Euler variants

@@ -61,9 +61,13 @@ def make_psp103_descriptors_schur():
 
 def build_ring(c_load: float):
     from fixtures.psp103_models import geom_settings
+
     from circulax import compile_netlist
     from circulax.components.electronic import (
-        Capacitor, Resistor, SmoothPulse, VoltageSource,
+        Capacitor,
+        Resistor,
+        SmoothPulse,
+        VoltageSource,
     )
 
     psp103n, psp103p = make_psp103_descriptors_schur()
@@ -165,7 +169,7 @@ def run_schur_ring(c_load: float = 50e-15, t1: float = 50e-9, dt0: float = 1e-12
     print(f"  period = {1e9/freq:.3f} ns  ({freq/1e6:.2f} MHz)")
     print(f"  swing  = {v.max() - v.min():.3f} V")
     print(f"  VACASK reference: 1.07 ns (937 MHz) — ratio = {freq / 936.81e6:.3f}")
-    print(f"  circulax (full 6x6, klu_split_factor): 6.26 ns (160 MHz)")
+    print("  circulax (full 6x6, klu_split_factor): 6.26 ns (160 MHz)")
 
 
 if __name__ == "__main__":

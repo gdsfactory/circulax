@@ -18,7 +18,6 @@ from __future__ import annotations
 import time
 
 import diffrax
-import equinox as eqx
 import jax
 import jax.numpy as jnp
 
@@ -60,7 +59,9 @@ def run() -> dict:
     """Run the rc transient.  Returns a dict with wall_s, compile_s, us_per_step."""
     from circulax import compile_netlist
     from circulax.components.electronic import (
-        Capacitor, PulseVoltageSource, Resistor,
+        Capacitor,
+        PulseVoltageSource,
+        Resistor,
     )
     from circulax.solvers import analyze_circuit, setup_transient
     from circulax.solvers.transient import TrapFactorizedTransientSolver

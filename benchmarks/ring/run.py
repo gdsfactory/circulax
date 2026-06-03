@@ -186,7 +186,7 @@ def run_ngspice(n: int) -> dict:
 
 
 def run_circulax_osdi(n: int) -> dict:
-    """circulax with PSP103 via OSDI FFI (bosdi → compiled .osdi)."""
+    """Circulax with PSP103 via OSDI FFI (bosdi → compiled .osdi)."""
     import bench_circulax as cxmod
     r = cxmod.run(n_stages=n, variant="osdi")
     r["simulator"] = "circulax_osdi"
@@ -194,7 +194,7 @@ def run_circulax_osdi(n: int) -> dict:
 
 
 def run_circulax_xla(n: int) -> dict:
-    """circulax with the simplified pure-JAX MOSFET (no OSDI, no FFI).
+    """Circulax with the simplified pure-JAX MOSFET (no OSDI, no FFI).
 
     Isolates how much of the circulax wall time is attributable to
     the OSDI FFI boundary.  The device model here is ~20 % off PSP103
@@ -208,7 +208,7 @@ def run_circulax_xla(n: int) -> dict:
 
 
 def run_circulax_va(n: int) -> dict:
-    """circulax with PSP103 lowered from MIR → pure XLA (no FFI boundary).
+    """Circulax with PSP103 lowered from MIR → pure XLA (no FFI boundary).
 
     First-call JIT dominates (~320 s DC + ~320 s transient per N value);
     wall_s reports the post-JIT timed run; compile_s carries the JIT cost.

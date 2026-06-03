@@ -15,19 +15,18 @@ import numpy as np
 sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
 
-import jax  # noqa: E402
+import jax
 
 jax.config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp  # noqa: E402
-from osdi_jax import osdi_eval  # noqa: E402
-from osdi_loader import load_osdi_model  # noqa: E402
-
 from fixtures.psp103_models import (  # noqa: E402
     PSP103_OSDI,
     geom_settings,
     make_psp103_descriptors,
 )
+from osdi_jax import osdi_eval  # noqa: E402
+from osdi_loader import load_osdi_model  # noqa: E402
 
 
 def classify_row(g_row: np.ndarray, c_row: np.ndarray, tol: float = 1e-9) -> str:

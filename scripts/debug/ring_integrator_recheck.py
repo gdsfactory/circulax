@@ -28,6 +28,7 @@ sys.path.insert(0, str(_REPO / "scripts"))
 sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 
 from benchmarks.ring.circulax.ring_one_case import build_netlist
+
 from circulax.solvers import analyze_circuit, setup_transient
 from circulax.solvers.transient import (
     BDF2FactorizedTransientSolver,

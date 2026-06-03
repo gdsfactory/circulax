@@ -59,9 +59,11 @@ def _build_circuit(variant: str):
     elif variant == "va":
         import importlib.util
         import tempfile
-        from circulax.va import compile_va, lower
+
         from circulax.va.emitter import emit_source
         from circulax.va.va_defaults import parse_va_defaults_expanded
+
+        from circulax.va import compile_va, lower
 
         _DIODE_VA = _REPO / "tests" / "data" / "va" / "diode.va"
         dump = compile_va(str(_DIODE_VA))

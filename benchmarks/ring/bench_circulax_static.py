@@ -25,18 +25,24 @@ jax.config.update("jax_enable_x64", True)
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tests"))
 
+from circulax.va.emitter import emit_source  # noqa: E402
+from circulax.va.va_defaults import parse_va_defaults_expanded  # noqa: E402
+from fixtures.psp103_models import (  # noqa: E402
+    PSP103N_DEFAULTS,
+    PSP103P_DEFAULTS,
+    geom_settings,
+)
+
 from circulax import compile_netlist  # noqa: E402
 from circulax.components.electronic import (  # noqa: E402
-    Capacitor, Resistor, SmoothPulse, VoltageSource,
+    Capacitor,
+    Resistor,
+    SmoothPulse,
+    VoltageSource,
 )
 from circulax.solvers import analyze_circuit, setup_transient  # noqa: E402
 from circulax.solvers.transient import TrapFactorizedTransientSolver  # noqa: E402
 from circulax.va import compile_va, lower  # noqa: E402
-from circulax.va.emitter import emit_source  # noqa: E402
-from circulax.va.va_defaults import parse_va_defaults_expanded  # noqa: E402
-from fixtures.psp103_models import (  # noqa: E402
-    PSP103N_DEFAULTS, PSP103P_DEFAULTS, geom_settings,
-)
 
 VA = REPO / "tests" / "data" / "va" / "psp103v4" / "psp103.va"
 
@@ -106,7 +112,7 @@ def main():
     solver = analyze_circuit(groups, sys_size, backend="klu_split")
 
     print("DC homotopy with VDD/2 warm-start...", flush=True)
-    from test_psp103_ring_oscillator import _va_ring_warm_start  # noqa: PLC0415
+    from test_psp103_ring_oscillator import _va_ring_warm_start
     y_warm = _va_ring_warm_start(sys_size, port_map, vdd=1.2)
     t0 = time.perf_counter()
     high_gmin = eqx.tree_at(lambda s: s.g_leak, solver, 1e-2)
@@ -155,8 +161,8 @@ def main():
     # Detect oscillation frequency at n1 (first ring node)
     ts = np.asarray(sol.ts)
     ys = np.asarray(sol.ys)
-    if 'n1,p1' in port_map:
-        v1 = ys[:, port_map['n1,p1']]
+    if "n1,p1" in port_map:
+        v1 = ys[:, port_map["n1,p1"]]
         mask = ts > 100e-9
         if mask.any():
             v = v1[mask]; t = ts[mask]

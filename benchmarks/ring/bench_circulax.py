@@ -66,14 +66,15 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
     if variant == "va":
         import dataclasses
         import importlib.util
-        import subprocess
         import tempfile
-        from circulax import compile_netlist
-        from circulax.components.electronic import Capacitor, Resistor, SmoothPulse, VoltageSource
-        from circulax.va import compile_va_unopt_with_split, lower
+
         from circulax.va.emitter import emit_source
         from circulax.va.va_defaults import parse_va_defaults_expanded
         from fixtures.psp103_models import PSP103N_DEFAULTS, PSP103P_DEFAULTS, geom_settings
+
+        from circulax import compile_netlist
+        from circulax.components.electronic import Capacitor, Resistor, SmoothPulse, VoltageSource
+        from circulax.va import compile_va_unopt_with_split, lower
 
         _PSP103_VA = _REPO / "tests" / "data" / "va" / "psp103v4" / "psp103.va"
         # unopt-MIR-with-split: correct phi structure (nested conditionals
@@ -161,9 +162,13 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
         )
     if variant == "jax-native":
         from fixtures.mosfet_simple import MosfetSimple
+
         from circulax import compile_netlist
         from circulax.components.electronic import (
-            Capacitor, Resistor, SmoothPulse, VoltageSource,
+            Capacitor,
+            Resistor,
+            SmoothPulse,
+            VoltageSource,
         )
 
         nmos_settings = {"type":  1.0, "W": 10e-6, "L": 1e-6,

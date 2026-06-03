@@ -26,9 +26,8 @@ def run(label: str, c_load: float, integrator_name: str = "BDF2", use_schur: boo
     from circulax.solvers import analyze_circuit, setup_transient
     from circulax.solvers.transient import (
         BDF2FactorizedTransientSolver,
-        SDIRK3FactorizedTransientSolver,
-        VectorizedTransientSolver,
         FactorizedTransientSolver,
+        SDIRK3FactorizedTransientSolver,
     )
     integrators = {
         "BE":    FactorizedTransientSolver,
@@ -38,13 +37,20 @@ def run(label: str, c_load: float, integrator_name: str = "BDF2", use_schur: boo
     integrator_cls = integrators[integrator_name]
 
     if use_schur:
-        from fixtures.psp103_models import (
-            PSP103_OSDI, PSP103N_DEFAULTS, PSP103P_DEFAULTS, geom_settings,
-        )
-        from circulax import compile_netlist
         from circulax.components.osdi import osdi_component
+        from fixtures.psp103_models import (
+            PSP103_OSDI,
+            PSP103N_DEFAULTS,
+            PSP103P_DEFAULTS,
+            geom_settings,
+        )
+
+        from circulax import compile_netlist
         from circulax.components.electronic import (
-            Capacitor, Resistor, SmoothPulse, VoltageSource,
+            Capacitor,
+            Resistor,
+            SmoothPulse,
+            VoltageSource,
         )
         nmos = osdi_component(osdi_path=PSP103_OSDI, ports=("D","G","S","B"),
                               default_params=PSP103N_DEFAULTS, use_schur_reduction=True)

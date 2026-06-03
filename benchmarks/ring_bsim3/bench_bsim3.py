@@ -99,10 +99,14 @@ def _dom_freq(t: np.ndarray, v: np.ndarray) -> float:
 
 def _make_va_classes():
     """Compile BSIM3v3 VA → Python component classes (cached after first call)."""
-    import dataclasses, importlib.util, tempfile
-    from circulax.va import compile_va, lower
+    import dataclasses
+    import importlib.util
+    import tempfile
+
     from circulax.va.emitter import emit_source
     from circulax.va.va_defaults import parse_va_defaults_expanded
+
+    from circulax.va import compile_va, lower
 
     defs = parse_va_defaults_expanded(_VA)
     dump = compile_va(str(_VA))
@@ -145,7 +149,7 @@ _VA_CLASSES = None   # cached across run() calls
 
 def _build_ring(n_stages: int, variant: str):
     from circulax import compile_netlist
-    from circulax.components.electronic import VoltageSource, SmoothPulse, Resistor
+    from circulax.components.electronic import Resistor, SmoothPulse, VoltageSource
 
     instances = {
         "Vvdd":  {"component": "vsrc",  "settings": {"V": 1.8}},

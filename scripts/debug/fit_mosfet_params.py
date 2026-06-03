@@ -80,7 +80,7 @@ def fit(ref: list, label: str, x0=None) -> tuple[float, float, float, float]:
     print(f"\n{label}:  Vt={Vt:.4f}  KP={KP * 1e6:.1f} µA/V²  "
           f"LAMBDA={LAMBDA:.4f}  THETA={THETA:.4f}")
     print(f"  log-RMS error = {res.fun:.4f}")
-    print(f"  bias table:")
+    print("  bias table:")
     print(f"    {'W':>4s} {'L':>4s} {'Vds':>5s} {'Vgs':>5s} {'Id_ref (µA)':>12s} "
           f"{'Id_fit (µA)':>12s} {'ratio':>7s}")
     for W, L, Vds, Vgs, Id_ref in ref:

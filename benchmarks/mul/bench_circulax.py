@@ -104,7 +104,9 @@ def build_netlist():
 def run() -> dict:
     from circulax import compile_netlist
     from circulax.components.electronic import (
-        Capacitor, Resistor, VoltageSourceAC,
+        Capacitor,
+        Resistor,
+        VoltageSourceAC,
     )
     from circulax.solvers import analyze_circuit, setup_transient
     from circulax.solvers.transient import TrapFactorizedTransientSolver

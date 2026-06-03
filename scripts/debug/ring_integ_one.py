@@ -68,6 +68,7 @@ def main() -> None:
     opts = p.parse_args()
 
     from benchmarks.ring.circulax.ring_one_case import build_netlist
+
     from circulax.solvers import analyze_circuit, setup_transient
     from circulax.solvers.transient import (
         BDF2FactorizedTransientSolver,

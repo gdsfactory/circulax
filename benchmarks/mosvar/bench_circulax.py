@@ -76,9 +76,10 @@ def _build_osdi_descriptor():
 def _build_va_descriptor():
     """Lower IHP mosvar.va via the unopt-MIR path."""
     from bosdi.va.ir_client import compile_va_unopt
-    from circulax.va import lower
     from circulax.va.emitter import emit_source
     from circulax.va.va_defaults import parse_va_defaults_expanded
+
+    from circulax.va import lower
 
     cwd = os.getcwd()
     try:
@@ -142,7 +143,8 @@ def _dc_one_bias_osdi(v_g: float, mv) -> float:
 
 def _dc_sweep_va_static(inst) -> dict[float, float]:
     """For 3-port mosvar with internal nodes, we need a netlist DC solve too —
-    static eval doesn't give the operating point of internal nodes."""
+    static eval doesn't give the operating point of internal nodes.
+    """
     raise NotImplementedError("VA path uses _dc_one_bias_va via netlist DC solve")
 
 
@@ -187,7 +189,7 @@ def run(variant: str) -> dict:
             except Exception as exc:
                 results[v] = f"ERROR: {type(exc).__name__}: {exc}"
         return {"variant": variant, "iv": results}
-    elif variant == "va":
+    if variant == "va":
         cls, _defs = _build_va_descriptor()
         print(f"VA-unopt class built: {cls.__name__}")
         results = {}
@@ -198,8 +200,7 @@ def run(variant: str) -> dict:
             except Exception as exc:
                 results[v] = f"ERROR: {type(exc).__name__}: {exc}"
         return {"variant": variant, "iv": results}
-    else:
-        raise SystemExit(f"unknown variant: {variant}")
+    raise SystemExit(f"unknown variant: {variant}")
 
 
 def _print_table(res: dict) -> None:
