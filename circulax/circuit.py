@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+import kfnetlist as kfnl
 
 from circulax.utils import apply_global_params
 
@@ -155,7 +156,7 @@ class Circuit:
 
 
 def compile_circuit(
-    net_dict: dict,
+    net_dict: dict | kfnl.Netlist,
     models_map: dict,
     *,
     backend: str = "default",
@@ -167,36 +168,20 @@ def compile_circuit(
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
 
-    Convenience wrapper that runs :func:`~circulax.compiler.compile_netlist`
-    and :func:`~circulax.solvers.linear.analyze_circuit` in one call.
+    Accepts either a ``kfnetlist.Netlist`` or a SAX-format dict.
 
     Args:
-        net_dict: SAX-format netlist dict with ``instances``, ``connections``,
-            and optionally ``ports`` keys.
-        models_map: Mapping from component type name strings to
-            :class:`~circulax.components.base_component.CircuitComponent`
-            subclasses.
-        backend: Linear solver backend. One of ``"default"``, ``"dense"``,
-            ``"sparse"``, ``"klu"``, ``"klu_split"``. Defaults to
-            ``"default"`` (``klu_split``).
+        net_dict: Netlist (kfnetlist.Netlist or SAX-format dict).
+        models_map: Mapping from component type name strings to component classes.
+        backend: Linear solver backend (``"default"``, ``"dense"``, ``"klu"`` etc.).
         is_complex: If ``True``, treat the circuit as complex-valued (photonic).
-            The solution vector will have length ``2 * sys_size``.
-        g_leak: Leakage conductance for regularisation. Defaults to ``1e-9``.
-        rtol: Relative tolerance for the Newton solver. Defaults to ``1e-6``.
-        atol: Absolute tolerance for the Newton solver. Defaults to ``1e-6``.
-            Tighten further (e.g. ``1e-10``) for very high-amplitude photonic
-            problems where the source is much larger than 1.
-        max_steps: Max Newton iterations. Defaults to ``100``.
+        g_leak: Leakage conductance for regularisation.
+        rtol: Relative tolerance for the Newton solver.
+        atol: Absolute tolerance for the Newton solver.
+        max_steps: Max Newton iterations.
 
     Returns:
         A :class:`Circuit` ready to call with ``circuit(**params)``.
-        Tolerances can be overridden per-call: ``circuit(..., atol=1e-9)``.
-
-    Example::
-
-        circuit = compile_circuit(net_dict, models_map, is_complex=True, atol=1e-9)
-        solutions = jax.jit(circuit)(wavelength_nm=jnp.linspace(1260, 1360, 2000))
-        field_out = circuit.get_port_field(solutions, "Detector,p1")
 
     """
     from circulax.compiler import compile_netlist

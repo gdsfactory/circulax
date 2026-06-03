@@ -9,12 +9,13 @@ from typing import Any
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import kfnetlist as kfnl
 
 from circulax.components.base_component import PhysicsReturn, Signals
-from circulax.netlist import build_net_map
+from circulax.netlist import build_net_map_kfnetlist, sax_to_kfnetlist
 
 try:
-    from bosdi.circulax import OsdiComponentGroup, OsdiModelDescriptor, _BOSDI_AVAILABLE
+    from bosdi.circulax import _BOSDI_AVAILABLE, OsdiComponentGroup, OsdiModelDescriptor
 except ImportError:
     OsdiComponentGroup = None  # type: ignore[assignment,misc]
     OsdiModelDescriptor = None  # type: ignore[assignment]
@@ -172,99 +173,19 @@ def solve_connectivity(connections: dict) -> dict:  # noqa: C901
     return node_map, node_counter
 
 
-def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]:  # noqa: C901, PLR0912, PLR0915
+def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dict, int, dict]:  # noqa: C901, PLR0912, PLR0915
     """Compile a netlist into batched, vectorized component groups ready for simulation.
 
-    This function bridges the gap between a human-readable netlist description and
-    the internal representation required by the ODE solver. It resolves net
-    connectivity, instantiates component objects, assigns state variable indices,
-    and batches components of the same type into vectorized groups for efficient
-    JAX execution.
-
-    The compilation proceeds in three stages:
-
-    1. **Connectivity resolution** — ``build_net_map`` assigns a unique integer
-       node index to every net, returning a flat map of ``"Instance,Port"`` keys
-       to node indices.
-    2. **Instance processing** — each instance is instantiated as an Equinox
-       object using its settings, its port indices are looked up in the node map,
-       and it is placed into a bucket keyed by ``(component_type, tree_structure)``.
-       The tree structure is included in the key so that instances whose static
-       fields differ (e.g. a callable parameter) are never incorrectly batched
-       together.
-    3. **Vectorization** — each bucket is stacked into a single
-       :class:`ComponentGroup` with batched parameters and pre-computed Jacobian
-       sparsity index arrays, ready to be passed directly to the solver.
-
-    Args:
-        netlist: Circuit description dict. Expected to contain an
-            ``"instances"`` key mapping instance names to dicts with at least
-            a ``"component"`` key (model name string) and an optional
-            ``"settings"`` key (parameter dict forwarded to the component
-            constructor). A ``"GND"`` instance with ``component="ground"`` is
-            recognised and skipped; see ``models_map`` note on reserved types.
-
-            **Settings filtering**: settings whose value is ``None`` are
-            dropped (GDSFactory convention — ``None`` means "use the model
-            default"). Settings whose key is not declared on the model are
-            also silently ignored, which allows GDSFactory netlists carrying
-            geometry-only keys (e.g. ``dy``, ``dx``, ``cross_section``) to
-            be passed directly without preprocessing.  *Note*: a mis-spelled
-            parameter name will be silently ignored rather than raising an
-            error; double-check spelling if a parameter appears to have no
-            effect.
-        models_map: Mapping from model name strings to
-            :class:`~circulax.components.base_component.CircuitComponent`
-            subclasses, e.g. ``{"Resistor": Resistor, "Capacitor": Capacitor}``.
-            ``"ground"`` is a **reserved** component type — it does not need
-            to appear in this map (instances with ``component="ground"`` or
-            named ``"GND"`` are skipped automatically).
-            Raw SAX model functions (callable with all-defaulted parameters and
-            a ``sax.SDict``/``sax.SDense``/``sax.SCoo``/``sax.SType`` return
-            annotation) are accepted directly and auto-wrapped via
-            :func:`~circulax.s_transforms.sax_component`; no manual decoration
-            required.
+    Accepts either a ``kfnetlist.Netlist`` (preferred) or a SAX-format dict
+    (auto-converted via :func:`sax_to_kfnetlist`).
 
     Returns:
-        A three-tuple ``(compiled_groups, sys_size, port_to_node_map)`` where:
-
-        - **compiled_groups** (``dict[str, ComponentGroup]``) — maps group name
-            to a fully vectorized :class:`ComponentGroup`. If all instances of a
-            type share the same tree structure there is one group per type, named
-            after the type (e.g. ``"Resistor"``). When a type is split across
-            multiple structures the groups are numbered (``"Resistor_0"``,
-            ``"Resistor_1"``, …).
-        - **sys_size** (``int``) — total number of scalar unknowns in the system
-            vector ``y``, equal to the number of nets plus the total number of
-            state variables across all instances. This is the length of the array
-            passed to the solver.
-        - **port_to_node_map** (``dict[str, int]``) — maps both
-            ``"Instance,port"`` and ``"Instance,state"`` keys to their integer
-            indices in the global state vector ``y``. Port keys resolve to shared
-            node indices (multiple ports on the same net share one index); state
-            keys resolve to unique per-instance indices. Use this to extract
-            specific node voltages or internal state variables from the solution.
-
-    Raises:
-        ValueError: If a component type listed in the netlist is not present in
-            ``models_map``, or if a port declared on a component class has no
-            corresponding entry in the netlist connections.
-        TypeError: If the settings dict for an instance does not match the
-            constructor signature of its component class.
+        ``(compiled_groups, sys_size, port_to_node_map)``
 
     """
-    # ``"ground"`` is a reserved component type — instances with
-    # ``component="ground"`` (or named ``"GND"``) are skipped during
-    # compilation and never looked up in ``models_map``.  Users do NOT need
-    # to include ``"ground"`` in the models map; if they do, the entry is
-    # silently ignored.
     _RESERVED = frozenset({"ground"})
 
-    # Auto-wrap raw SAX model functions into CircuitComponent classes so callers
-    # can pass PDKs of plain SAX models straight through the netlist interface.
-    # CircuitComponent subclasses pass through unchanged; OsdiModelDescriptor
-    # objects are passed through as-is (handled separately below); anything else raises.
-    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+    from circulax.s_transforms import _normalize_model
 
     def _maybe_normalize(k: str, v: Any) -> Any:
         if OsdiModelDescriptor is not None and isinstance(v, OsdiModelDescriptor):
@@ -277,7 +198,12 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         if k not in _RESERVED
     }
 
-    port_to_node_map, num_nodes = build_net_map(netlist)
+    # --- 1. Normalize to kfnetlist.Netlist ---
+    settings_override: dict[str, dict[str, Any]] = {}
+    if isinstance(netlist, dict):
+        netlist, settings_override = sax_to_kfnetlist(netlist)
+
+    port_to_node_map, num_nodes = build_net_map_kfnetlist(netlist)
 
     # Buckets: Key = (comp_type_name, tree_structure), Value = list of instances
     buckets = defaultdict(list)
@@ -286,12 +212,9 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
     sys_size = num_nodes
 
     # --- 2. Process Instances ---
-    instances = netlist.get("instances", {})
+    for name, inst in netlist.instances.items():
+        comp_type = inst.component
 
-    for name, data in instances.items():
-        comp_type = data["component"]
-
-        # Skip ground (it's just a marker, already handled in build_net_map)
         if comp_type == "ground" or name == "GND":
             continue
 
@@ -300,7 +223,7 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             raise ValueError(msg)
 
         comp_cls = models_map[comp_type]
-        settings = data.get("settings", {})
+        settings = settings_override.get(name, inst.settings or {})
 
         # OSDI components use a descriptor object instead of an Equinox class.
         if OsdiModelDescriptor is not None and isinstance(comp_cls, OsdiModelDescriptor):
@@ -444,9 +367,8 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         # OSDI calls skip the params upload (~20–40 % faster for PSP103).
         handle = None
         try:
-            import numpy as _np  # noqa: PLC0415
-
-            from osdi_jax import osdi_setup_batch  # noqa: PLC0415
+            import numpy as _np
+            from osdi_jax import osdi_setup_batch
             handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
         except ImportError:
             pass  # older bosdi without Tier-3; legacy model_id + params path still works
