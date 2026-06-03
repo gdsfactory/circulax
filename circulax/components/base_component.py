@@ -472,6 +472,7 @@ def _build_component(  # noqa: C901
         Raises:
             TypeError: physics function did not declare ``init`` arg.
             RuntimeError: ``.setup`` was already registered on this class.
+
         """
         if not has_init_arg:
             msg = (

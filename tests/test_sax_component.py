@@ -198,9 +198,9 @@ def test_sax_component_pdk_dict_pattern() -> None:
 
 def test_is_sax_model_accepts_all_three_s_types() -> None:
     """SAX PDKs ship SDict, SDense, and SCoo models — all three must auto-detect."""
-    import sax  # noqa: PLC0415
+    import sax
 
-    from circulax.s_transforms import _is_sax_model  # noqa: PLC0415
+    from circulax.s_transforms import _is_sax_model
 
     def m_sdict(*, wl: float = 1.55) -> sax.SDict:
         return {("in0", "out0"): 1.0 + 0j}
@@ -226,10 +226,10 @@ def test_is_sax_model_accepts_all_three_s_types() -> None:
 
 def test_is_sax_model_rejects_non_sax() -> None:
     """Rejection cases: no-default arg, wrong return annotation, classes."""
-    import sax  # noqa: PLC0415
+    import sax
 
-    from circulax.components.electronic import Resistor  # noqa: PLC0415
-    from circulax.s_transforms import _is_sax_model  # noqa: PLC0415
+    from circulax.components.electronic import Resistor
+    from circulax.s_transforms import _is_sax_model
 
     def bad_no_default(wl: float) -> sax.SDict:  # positional no-default
         return {("in0", "out0"): 1.0 + 0j}
@@ -249,16 +249,16 @@ def test_is_sax_model_rejects_non_sax() -> None:
 
 def test_normalize_model_passes_through_circuit_component() -> None:
     """A CircuitComponent subclass must be returned unchanged."""
-    from circulax.components.electronic import Resistor  # noqa: PLC0415
-    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+    from circulax.components.electronic import Resistor
+    from circulax.s_transforms import _normalize_model
 
     assert _normalize_model(Resistor, name="R") is Resistor
 
 
 def test_normalize_model_wraps_sax_function() -> None:
     """A raw SAX function must be wrapped into a CircuitComponent subclass."""
-    from circulax.components.base_component import CircuitComponent  # noqa: PLC0415
-    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+    from circulax.components.base_component import CircuitComponent
+    from circulax.s_transforms import _normalize_model
 
     cls = _normalize_model(straight, name="wg")
     assert issubclass(cls, CircuitComponent)
@@ -267,7 +267,7 @@ def test_normalize_model_wraps_sax_function() -> None:
 
 def test_normalize_model_rejects_invalid() -> None:
     """Anything that is neither a CircuitComponent nor a SAX model must raise TypeError."""
-    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
+    from circulax.s_transforms import _normalize_model
 
     def not_sax(x):  # no default, no return annotation
         return x
@@ -290,9 +290,9 @@ def test_sax_component_respects_sdense_port_order() -> None:
     Constructing an MMI2x2 S-matrix with unsorted insertion order and comparing
     against ``y_matrix @ v_vec`` computed in ``sdense``'s own port order.
     """
-    import sax  # noqa: PLC0415
+    import sax
 
-    from circulax.s_transforms import s_to_y, sax_component  # noqa: PLC0415
+    from circulax.s_transforms import s_to_y, sax_component
 
     def mmi_2x2(*, tau: float = 0.7071067811865476) -> sax.SDict:
         # Ideal 50/50 2x2 MMI: bar coupling = tau, cross coupling = j*sqrt(1-tau^2).
@@ -333,7 +333,7 @@ def test_sax_component_respects_sdense_port_order() -> None:
 
 def test_compile_netlist_auto_wraps_sax() -> None:
     """End-to-end: a netlist with a raw SAX model in models_map compiles without manual wrapping."""
-    from circulax.compiler import compile_netlist  # noqa: PLC0415
+    from circulax.compiler import compile_netlist
 
     # Two waveguides in a loop — minimal topology that connects every port.
     netlist = {

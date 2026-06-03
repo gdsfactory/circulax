@@ -12,12 +12,13 @@ For new code, import from ``bosdi.va`` directly.
 Raises:
     ImportError: If ``bosdi`` is not installed. Install via
         ``pip install circulax[verilog-a]``.
+
 """
 
 import sys
 
 try:
-    import bosdi.va  # noqa: F401
+    import bosdi.va
 except ImportError as _err:
     raise ImportError(
         "circulax.va requires the 'bosdi' package. "
@@ -25,7 +26,17 @@ except ImportError as _err:
     ) from _err
 
 # Re-export the public API at the top level (``from circulax.va import lower``).
-from bosdi.va import *  # noqa: F401, F403
+# Submodule aliases so ``from circulax.va.lowering import _BINOP_FOLDS`` and
+# similar deep imports keep working.
+import bosdi.va.dump_parser
+import bosdi.va.emitter
+import bosdi.va.ir_client
+import bosdi.va.lowering
+import bosdi.va.mir
+import bosdi.va.sccp
+import bosdi.va.uniform_params
+import bosdi.va.va_defaults
+from bosdi.va import *  # noqa: F403
 from bosdi.va import (  # noqa: F401  — explicit names so linters / IDEs see them
     AbstimeInput,
     Block,
@@ -63,17 +74,6 @@ from bosdi.va import (  # noqa: F401  — explicit names so linters / IDEs see t
     uniform_static_params,
     write_source,
 )
-
-# Submodule aliases so ``from circulax.va.lowering import _BINOP_FOLDS`` and
-# similar deep imports keep working.
-import bosdi.va.dump_parser     # noqa: E402
-import bosdi.va.emitter         # noqa: E402
-import bosdi.va.ir_client       # noqa: E402
-import bosdi.va.lowering        # noqa: E402
-import bosdi.va.mir             # noqa: E402
-import bosdi.va.sccp            # noqa: E402
-import bosdi.va.uniform_params  # noqa: E402
-import bosdi.va.va_defaults     # noqa: E402
 
 for _sub in ("dump_parser", "emitter", "ir_client", "lowering",
              "mir", "sccp", "uniform_params", "va_defaults"):

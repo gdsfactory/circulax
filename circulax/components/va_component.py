@@ -243,7 +243,8 @@ def _install_custom_jvp(
 
         # With symbolic_zeros=True JAX passes ``SymbolicZero`` (or ``Zero``)
         # for unperturbed arguments.  Materialise only when needed.
-        from jax._src.ad_util import SymbolicZero as _SymZ, Zero as _Zero  # noqa: PLC0415
+        from jax._src.ad_util import SymbolicZero as _SymZ
+        from jax._src.ad_util import Zero as _Zero
 
         def _is_zero(leaf: Any) -> bool:
             return isinstance(leaf, (_SymZ, _Zero))

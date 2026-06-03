@@ -6,7 +6,6 @@ import pytest
 from circulax import attach_testbench, compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource
 
-
 _MODELS = {
     "resistor": Resistor,
     "source_voltage": VoltageSource,
