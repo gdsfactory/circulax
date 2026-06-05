@@ -58,27 +58,30 @@ def build_net_map_kfnetlist(nl: kfnl.Netlist) -> tuple[dict[str, int], int]:
     """Map every port in a kfnetlist.Netlist to a node index.
 
     Each ``Net`` in the netlist becomes one electrical node.  Nets
-    containing a ``PortRef`` whose instance is ``"GND"`` are assigned
-    node index 0.
+    containing a ``PortRef`` whose instance is ``"GND"`` or whose instance
+    component is ``"ground"`` are assigned node index 0.
 
     Returns:
         port_to_idx: ``{"Instance,port": node_id, ...}``
         num_nets: next free node index (== number of non-ground nets + 1).
 
     """
-    nl.sort()
     port_to_idx: dict[str, int] = {}
     current_idx = 1
 
     for net in nl.nets:
         is_ground = any(
-            isinstance(m, kfnl.PortRef) and m.instance == "GND" for m in net
+            isinstance(m, kfnl.PortRef)
+            and (m.instance == "GND" or (m.instance in nl.instances and nl.instances[m.instance].component == "ground"))
+            for m in net
         )
         net_id = 0 if is_ground else current_idx
 
         for member in net:
             if isinstance(member, kfnl.PortRef):
                 port_to_idx[f"{member.instance},{member.port}"] = net_id
+            elif isinstance(member, kfnl.NetlistPort):
+                port_to_idx[member.name] = net_id
 
         if not is_ground:
             current_idx += 1
@@ -133,8 +136,10 @@ def sax_to_kfnetlist(
             settings_override[name] = raw_settings
 
     # --- ports ---
-    for port_name in sax_dict.get("ports", {}):
+    top_port_targets: list[tuple[str, str]] = []
+    for port_name, target in sax_dict.get("ports", {}).items():
         nl.create_port(port_name)
+        top_port_targets.append((port_name, target))
 
     # --- connectivity: union-find over SAX connections + GDSFactory nets ---
     parent: dict[str, str] = {}
@@ -152,6 +157,13 @@ def sax_to_kfnetlist(
         if ra != rb:
             parent[ra] = rb
 
+    def _port_ref(port_str: str) -> kfnl.PortRef:
+        if "," not in port_str:
+            msg = f"Expected SAX port reference 'instance,port', got {port_str!r}"
+            raise ValueError(msg)
+        inst, port = port_str.split(",", 1)
+        return kfnl.PortRef(instance=inst, port=port)
+
     for src, targets in sax_dict.get("connections", {}).items():
         if isinstance(targets, str):
             targets = [targets]
@@ -166,16 +178,22 @@ def sax_to_kfnetlist(
         _find(p2)
         _union(p1, p2)
 
+    for _port_name, target in top_port_targets:
+        _find(target)
+
     # Group ports by their root → one kfnetlist.Net per group
     groups: dict[str, list[str]] = defaultdict(list)
     for port in parent:
         groups[_find(port)].append(port)
 
-    for members in groups.values():
-        refs = []
+    top_ports_by_root: dict[str, list[str]] = defaultdict(list)
+    for port_name, target in top_port_targets:
+        top_ports_by_root[_find(target)].append(port_name)
+
+    for root, members in groups.items():
+        refs = [kfnl.NetlistPort(port_name) for port_name in top_ports_by_root.get(root, [])]
         for port_str in sorted(members):
-            inst, port = port_str.split(",", 1)
-            refs.append(kfnl.PortRef(instance=inst, port=port))
+            refs.append(_port_ref(port_str))
         nl.create_net(*refs)
 
     nl.sort()

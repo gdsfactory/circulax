@@ -40,18 +40,25 @@ def _attach_testbench_kfnetlist(
         msg = f"Ports {unknown} not in device ports; available: {sorted(device_port_names)}"
         raise ValueError(msg)
 
-    # Build a map from top-level port name → the PortRef it connects to
-    port_to_ref: dict[str, kfnl.PortRef] = {}
+    # Build a map from top-level port name to its internal net members.  A
+    # selected device port without any internal PortRef cannot be driven or
+    # terminated, so report it before silently producing an open circuit.
+    port_to_refs: dict[str, list[kfnl.PortRef]] = {}
     for net in device.nets:
-        port_member = None
-        ref_member = None
+        port_members = []
+        ref_members = []
         for m in net:
             if isinstance(m, kfnl.NetlistPort):
-                port_member = m
+                port_members.append(m)
             elif isinstance(m, kfnl.PortRef):
-                ref_member = m
-        if port_member and ref_member:
-            port_to_ref[port_member.name] = ref_member
+                ref_members.append(m)
+        for port_member in port_members:
+            port_to_refs[port_member.name] = ref_members
+
+    disconnected = [p for p in used if not port_to_refs.get(p)]
+    if disconnected:
+        msg = f"Ports {disconnected} are disconnected or do not map to an internal instance port."
+        raise ValueError(msg)
 
     nl = kfnl.Netlist()
 
@@ -62,15 +69,12 @@ def _attach_testbench_kfnetlist(
     if not device.has_instance("GND"):
         nl.create_inst(name="GND", kcl="", component="ground")
 
-    # Copy existing nets (skip top-level NetlistPort members — they become internal)
-    for net in device.nets:
-        refs = [m for m in net if isinstance(m, kfnl.PortRef)]
-        if len(refs) >= 2:
-            nl.create_net(*refs)
-
     gnd_ref = kfnl.PortRef(instance="GND", port="p1")
+    ground_refs = [gnd_ref]
 
-    def _add_terminator(device_port: str, default_prefix: str, spec: dict[str, Any]) -> None:
+    source_or_load_refs: dict[str, tuple[kfnl.PortRef, kfnl.PortRef]] = {}
+
+    def _add_terminator_instance(device_port: str, default_prefix: str, spec: dict[str, Any]) -> None:
         name = spec.get("name") or f"{default_prefix}_{device_port}"
         if nl.has_instance(name):
             msg = f"Instance name '{name}' already exists in device netlist"
@@ -79,21 +83,36 @@ def _attach_testbench_kfnetlist(
         settings = {k: v for k, v in spec.items() if k not in ("name", "component")}
         settings_for_inst = spec.get("settings", settings or None)
         nl.create_inst(name=name, kcl="", component=component, settings=settings_for_inst)
-
-        # p1 → device port, p2 → GND
-        target_ref = port_to_ref.get(device_port)
-        if target_ref:
-            nl.create_net(kfnl.PortRef(instance=name, port="p1"), target_ref)
-        nl.create_net(kfnl.PortRef(instance=name, port="p2"), gnd_ref)
+        source_or_load_refs[device_port] = (
+            kfnl.PortRef(instance=name, port="p1"),
+            kfnl.PortRef(instance=name, port="p2"),
+        )
 
     for port, spec in sources.items():
-        _add_terminator(port, "src", spec)
+        _add_terminator_instance(port, "src", spec)
     for port, spec in loads.items():
-        _add_terminator(port, "load", spec)
-    for port in gnd_list:
-        target_ref = port_to_ref.get(port)
-        if target_ref:
-            nl.create_net(target_ref, gnd_ref)
+        _add_terminator_instance(port, "load", spec)
+
+    # Copy existing nets, replacing top-level NetlistPort markers with the
+    # selected source/load/GND terminations. This avoids duplicating an
+    # internal PortRef across multiple kfnetlist.Net objects.
+    for net in device.nets:
+        refs = [m for m in net if isinstance(m, kfnl.PortRef)]
+        net_refs = list(refs)
+        for member in net:
+            if not isinstance(member, kfnl.NetlistPort):
+                continue
+            if member.name in source_or_load_refs:
+                drive_ref, return_ref = source_or_load_refs[member.name]
+                net_refs.append(drive_ref)
+                ground_refs.append(return_ref)
+            elif member.name in gnd_list:
+                net_refs.append(gnd_ref)
+        if len(net_refs) >= 2:
+            nl.create_net(*net_refs)
+
+    if len(ground_refs) >= 2:
+        nl.create_net(*ground_refs)
 
     nl.sort()
     return nl
@@ -118,7 +137,10 @@ def attach_testbench(
 
     if isinstance(device, kfnl.Netlist):
         return _attach_testbench_kfnetlist(
-            device, sources=sources, loads=loads, gnd_list=gnd_list,
+            device,
+            sources=sources,
+            loads=loads,
+            gnd_list=gnd_list,
         )
 
     # --- Legacy SAX dict path ---
