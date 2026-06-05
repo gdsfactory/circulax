@@ -96,7 +96,7 @@ The workflow mirrors the DC/transient pattern:
 
 ```python
 import jax.numpy as jnp
-from circulax import compile_circuit, setup_harmonic_balance
+from circulax import compile_circuit
 from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSourceAC
 
 # 1. Define and compile the netlist
@@ -105,31 +105,22 @@ models = {"R": Resistor, "L": Inductor, "C": Capacitor, "Vs": VoltageSourceAC}
 circuit = compile_circuit(net, models, backend="dense")
 
 # 2. Find the DC operating point (used as the initial guess for HB)
-y_dc = circuit()
+y_dc = circuit.dc()
 
-# 3. Set up and run the Harmonic Balance solver
+# 3. Run Harmonic Balance
 f_drive = 1e6   # Hz — must match the frequency in VoltageSourceAC settings
-run_hb = setup_harmonic_balance(circuit.groups, circuit.sys_size, freq=f_drive, num_harmonics=5)
-y_time, y_freq = run_hb(y_dc)
+y_time, y_freq = circuit.hb(freq=f_drive, harmonics=5, y0=y_dc)
 
-# The solver is also compatible with jax.jit for repeated calls:
-# y_time, y_freq = jax.jit(run_hb)(y_dc)
+# The low-level setup_harmonic_balance() API remains available for custom loops.
 ```
 
-`setup_harmonic_balance` parameters:
+`circuit.hb` parameters:
 
 | Parameter | Default | Description |
 |---|---|---|
-| `groups` | — | Compiled component groups (from `circuit.groups`) |
-| `num_vars` | — | System size (from `circuit.sys_size`) |
 | `freq` | — | Fundamental frequency in Hz |
-| `num_harmonics` | `5` | Number of harmonics $N$; solver uses $K = 2N+1$ time points |
-
-`run_hb` call parameters:
-
-| Parameter | Default | Description |
-|---|---|---|
-| `y_dc` | — | DC operating point; used as the zero-AC initial guess |
+| `harmonics` | `5` | Number of harmonics $N$; solver uses $K = 2N+1$ time points |
+| `y0` | DC solve | Initial operating point; used as the zero-AC initial guess |
 | `max_iter` | `50` | Maximum Newton iterations |
 | `tol` | `1e-6` | Convergence tolerance (infinity norm of residual) |
 
@@ -137,7 +128,7 @@ y_time, y_freq = run_hb(y_dc)
 
 ### Interpreting the Output
 
-`run_hb(y_dc)` returns `(y_time, y_freq)`:
+`circuit.hb(...)` returns `(y_time, y_freq)`:
 
 **`y_time`** — shape $(K, n)$, dtype `float64`
 
@@ -160,8 +151,8 @@ $$\hat{V}_k = 2 \left| Y_k \right|$$
 where $Y_k$ = `y_freq[k, node]`.  The DC value is simply `y_freq[0, node].real` (no factor of 2).
 
 ```python
-node = net_map["R1,p2"]
-harmonics = jnp.arange(hb.num_harmonics + 1)
+node = circuit.port_map["R1,p2"]
+harmonics = jnp.arange(y_freq.shape[0])
 amplitudes = jnp.abs(y_freq[:, node]) * jnp.where(harmonics == 0, 1.0, 2.0)
 ```
 
@@ -171,27 +162,26 @@ amplitudes = jnp.abs(y_freq[:, node]) * jnp.where(harmonics == 0, 1.0, 2.0)
 
 `jax.vmap` compiles the entire frequency sweep into a single XLA call.
 
-The source frequency is baked into the compiled parameters, so it must be updated at each sweep point via `update_group_params`:
+The source frequency is baked into the compiled parameters, so it must be updated at each sweep point with an explicit instance parameter:
 
 ```python
 import jax
 import jax.numpy as jnp
-from circulax import compile_circuit, setup_harmonic_balance
-from circulax.utils import update_group_params
+from circulax import compile_circuit
 
 circuit = compile_circuit(net, models, backend="dense")
-y_dc = circuit()
+y_dc = circuit.dc()
 
 node_idx = circuit.port_map["RL,p1"]   # output node index
 
 def hb_solve_freq(sweep_freq):
     # Update the source's freq param so it drives at sweep_freq.
-    # The group key matches the component key used in models_map.
-    updated_groups = update_group_params(circuit.groups, "Vs", "freq", sweep_freq)
-    run_hb = setup_harmonic_balance(
-        updated_groups, circuit.sys_size, freq=sweep_freq, num_harmonics=10
+    _, y_freq = circuit.hb(
+        freq=sweep_freq,
+        harmonics=10,
+        y0=y_dc,
+        params={"Vs.freq": sweep_freq},
     )
-    _, y_freq = run_hb(y_dc)
     return 2.0 * jnp.abs(y_freq[1, node_idx])   # fundamental amplitude
 
 # Compile once, sweep 100 frequencies in one call:

@@ -4,24 +4,38 @@ Circulax separates the **linear algebra backend** from the simulation algorithm.
 The backend is selected when calling `compile_circuit`:
 
 ```python
-circuit = compile_circuit(net_dict, models_map, backend="klu_split")
+circuit = compile_circuit(net_dict, models_map, backend="default")
 ```
 
 Four backends are available. All expose the same interface — you can swap them without changing the rest of your simulation code.
 
 ---
 
-## KLU Split *(default)*
+## KLU Split Linear *(default)*
 
 ```python
-circuit = compile_circuit(net_dict, models_map, backend="klu_split")
+circuit = compile_circuit(net_dict, models_map, backend="klu_split_linear")
 ```
 
-Separates symbolic analysis (sparsity pattern, done once) from numeric factorisation (done each Newton step). Same AMD-ordered sparse LU as SPICE/Spectre/HSPICE, but avoids repeating the symbolic phase, giving a speedup when Newton needs many iterations.
+Separates symbolic analysis (sparsity pattern, done once) from numeric factorisation (done once per transient step or Newton setup) and reuses the factorisation inside the frozen-Jacobian iteration. This is predictable for linear and mildly nonlinear circuits and is the default behind `backend="default"`.
 
 **When to use:** Any circuit on CPU. The right default for almost all simulations.
 
 **Trade-offs:** CPU-only (`klujax`). GPU falls back to Dense.
+
+---
+
+## KLU Split Refactor
+
+```python
+backend="klu_split"
+```
+
+Refactor-capable split KLU. It reuses symbolic analysis but can refresh the numeric factorisation during nonlinear iterations when the installed `klujax` backend supports it. `backend="klu_split_refactor"` is an explicit alias for this policy.
+
+**When to use:** Strongly nonlinear circuits where full Newton convergence is more important than frozen-factor reuse.
+
+**Trade-offs:** CPU-only (`klujax`) and may fall back to the linear split implementation if refactor support is unavailable.
 
 ---
 
@@ -31,7 +45,7 @@ Separates symbolic analysis (sparsity pattern, done once) from numeric factorisa
 backend="klu"
 ```
 
-Non-split KLU: performs symbolic + numeric factorisation together on every Newton step. Slightly simpler code path but slower than `klu_split` for circuits requiring many Newton iterations.
+Non-split KLU: performs symbolic + numeric factorisation together on every Newton step. Slightly simpler code path but slower than split KLU for circuits requiring many Newton iterations.
 
 **When to use:** Fallback if `klu_split` causes issues. Functionally identical results.
 
@@ -55,7 +69,7 @@ Assembles the full $N \times N$ Jacobian as a dense array and solves with JAX's 
 
 **Trade-offs:**
 
-Memory scales as $O(N^2)$ and runtime as $O(N^3)$, so it becomes impractical quickly. For any real circuit, `klu_split` will outperform `dense`.
+Memory scales as $O(N^2)$ and runtime as $O(N^3)$, so it becomes impractical quickly. For any real circuit, split KLU will outperform `dense`.
 
 ---
 
@@ -77,9 +91,10 @@ Iterative BiCGStab in pure JAX. Sparsity pattern is pre-computed at setup; only 
 
 | Backend | Best for | GPU | Requires |
 |---------|----------|-----|---------|
-| `klu_split` | All circuits on CPU — **default** | No | `klujax >= 0.5.0` |
+| `klu_split_linear` | All circuits on CPU — **default** | No | `klujax >= 0.5.0` |
+| `klu_split` | Refactor-capable nonlinear solves | No | `klujax >= 0.5.0` |
 | `klu` | Fallback (non-split) | No | `klujax` |
 | `dense` | $N \lesssim 50$, GPU, HB frequency sweeps | Yes | — |
 | `sparse` | Large $N$, GPU/TPU transient | Yes | — |
 
-Start with `klu_split` (the default).
+Start with `backend="default"` or `backend="klu_split_linear"`.

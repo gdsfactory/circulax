@@ -22,10 +22,9 @@ Simulate an underdamped LCR circuit in the time domain:
 ![LCR transient animation](images/lcr_animation.gif)
 
 ```python
-import diffrax, jax, jax.numpy as jnp
+import jax, jax.numpy as jnp
 from circulax import compile_circuit
 from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
-from circulax.solvers import setup_transient
 
 jax.config.update("jax_enable_x64", True)
 
@@ -49,17 +48,29 @@ models = {
 }
 
 circuit = compile_circuit(net_dict, models)
-y_op    = circuit()
-sim     = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
+y_op    = circuit.dc()
 
-sol = sim(
+sol = circuit.transient(
     t0=0.0, t1=3e-9, dt0=3e-12, y0=y_op,
-    saveat=diffrax.SaveAt(ts=jnp.linspace(0, 3e-9, 500)),
+    saveat=jnp.linspace(0, 3e-9, 500),
     max_steps=100_000,
 )
 
-v_cap = circuit.get_port_field(sol.ys, "C1,p1")  # capacitor voltage over time
+v_cap = circuit.port(sol.ys, "C1,p1")  # capacitor voltage over time
 ```
+
+Common analyses use the same compiled object:
+
+```python
+op = circuit.dc()
+op_sweep = circuit.dc(params={"R1.R": 20.0, "wavelength_nm": 1310.0})
+S = circuit.ac(ports=["C1,p1"], freqs=jnp.logspace(6, 10, 101), y_dc=op)
+y_time, y_freq = circuit.hb(freq=1e6, harmonics=5, y0=op)
+v_out = circuit.port(op, "C1,p1")
+```
+
+Parameter keys like `"R1.R"` update one instance. Keys without a dot, such as
+`"wavelength_nm"`, are broadcast to every component that declares the parameter.
 
 ## Defining Components
 
