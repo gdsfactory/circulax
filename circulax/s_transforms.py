@@ -125,7 +125,11 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
     # every port name to be a valid Python identifier. Some SAX PDKs label
     # ports numerically ('1', '2'); coerce those to identifiers while keeping
     # the index ordering.
-    port_names = tuple(_sanitize_port(p) for p in detected_ports)
+    raw_to_sanitized = {str(p): _sanitize_port(p) for p in detected_ports}
+    sanitized_to_raw: dict[str, list[str]] = {}
+    for raw, sanitized in raw_to_sanitized.items():
+        sanitized_to_raw.setdefault(sanitized, []).append(raw)
+    port_names = tuple(raw_to_sanitized[str(p)] for p in detected_ports)
 
     def physics_wrapper(signals: Signals, s: States, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
         s_dict = fn(**kwargs)
@@ -167,7 +171,10 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
         ]
     )
 
-    return component(ports=port_names)(physics_wrapper)
+    cls = component(ports=port_names)(physics_wrapper)
+    cls._raw_to_sanitized_ports = raw_to_sanitized
+    cls._sanitized_to_raw_ports = {sanitized: tuple(raws) for sanitized, raws in sanitized_to_raw.items()}
+    return cls
 
 
 def _build_fdomain_component(

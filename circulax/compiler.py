@@ -192,11 +192,7 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
             return v
         return _normalize_model(v, name=k)
 
-    models_map = {
-        k: _maybe_normalize(k, v)
-        for k, v in models_map.items()
-        if k not in _RESERVED
-    }
+    models_map = {k: _maybe_normalize(k, v) for k, v in models_map.items() if k not in _RESERVED}
 
     # --- 1. Normalize to kfnetlist.Netlist ---
     settings_override: dict[str, dict[str, Any]] = {}
@@ -204,6 +200,25 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
         netlist, settings_override = sax_to_kfnetlist(netlist)
 
     port_to_node_map, num_nodes = build_net_map_kfnetlist(netlist)
+
+    def _port_candidates(comp_cls: type, port: str) -> tuple[str, ...]:
+        aliases = getattr(comp_cls, "_sanitized_to_raw_ports", {})
+        raw_aliases = tuple(raw for raw in aliases.get(port, ()) if raw != port)
+        return (port, *raw_aliases)
+
+    def _resolve_port_index(comp_cls: type, inst_name: str, port: str) -> int:
+        candidates = _port_candidates(comp_cls, port)
+        for candidate in candidates:
+            key = f"{inst_name},{candidate}"
+            if key in port_to_node_map:
+                idx = port_to_node_map[key]
+                port_to_node_map.setdefault(f"{inst_name},{port}", idx)
+                return idx
+        expected = f"{inst_name},{port}"
+        if len(candidates) > 1:
+            expected += f" (aliases: {', '.join(f'{inst_name},{p}' for p in candidates[1:])})"
+        msg = f"Port '{port}' on '{inst_name}' is unconnected.\nYour netlist connections must include '{expected}'"
+        raise ValueError(msg)
 
     # Buckets: Key = (comp_type_name, tree_structure), Value = list of instances
     buckets = defaultdict(list)
@@ -239,16 +254,15 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
                 if key in port_to_node_map:
                     port_indices.append(port_to_node_map[key])
                 else:
-                    msg = (
-                        f"Port '{port}' on '{name}' is unconnected.\n"
-                        f"Your netlist connections must include '{key}'"
-                    )
+                    msg = f"Port '{port}' on '{name}' is unconnected.\nYour netlist connections must include '{key}'"
                     raise ValueError(msg)
-            osdi_buckets[comp_type].append({
-                "params_dict": comp_cls.make_instance(settings),
-                "ports": port_indices,
-                "name": name,
-            })
+            osdi_buckets[comp_type].append(
+                {
+                    "params_dict": comp_cls.make_instance(settings),
+                    "ports": port_indices,
+                    "name": name,
+                }
+            )
             continue
 
         # GDSFactory netlists carry geometry settings that don't appear on
@@ -257,10 +271,7 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
         # Filter to fields the model actually declares, and drop ``None``
         # values (GDSFactory convention: ``None`` means "use the default").
         known_fields = {f.name for f in dataclasses.fields(comp_cls)}
-        settings = {
-            k: v for k, v in settings.items()
-            if v is not None and k in known_fields
-        }
+        settings = {k: v for k, v in settings.items() if v is not None and k in known_fields}
 
         # A. Create Equinox Object
         try:
@@ -272,13 +283,7 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
         # B. Get Port Indices
         port_indices = []
         for port in comp_cls.ports:
-            key = f"{name},{port}"
-
-            if key in port_to_node_map:
-                port_indices.append(port_to_node_map[key])
-            else:
-                msg = f"Port '{port}' on '{name}' is unconnected.\nYour netlist connections must include '{key}'"
-                raise ValueError(msg)
+            port_indices.append(_resolve_port_index(comp_cls, name, port))
 
         # Group by Type AND Structure (to handle static field differences)
         structure = jax.tree.structure(comp_obj)
@@ -354,8 +359,8 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
         group_name = comp_type
         n_dev = len(items)
         n_pins = descriptor.model.num_pins
-        n_nodes = descriptor.model.num_nodes          # terminals + non-collapsed internal
-        n_internal = n_nodes - n_pins                 # extra unknowns per instance
+        n_nodes = descriptor.model.num_nodes  # terminals + non-collapsed internal
+        n_internal = n_nodes - n_pins  # extra unknowns per instance
 
         params_arr = jnp.array(
             [[item["params_dict"][k] for k in descriptor.param_names] for item in items],
@@ -369,6 +374,7 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
         try:
             import numpy as _np
             from osdi_jax import osdi_setup_batch
+
             handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
         except ImportError:
             pass  # older bosdi without Tier-3; legacy model_id + params path still works
