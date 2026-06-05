@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
 import kfnetlist as kfnl
 
-from circulax.utils import apply_global_params
+from circulax.utils import apply_global_params, update_params_dict
 
 if TYPE_CHECKING:
     from circulax.solvers.linear import CircuitLinearSolver
@@ -32,7 +33,7 @@ class Circuit:
 
     """
 
-    def __init__(  # noqa: D107
+    def __init__(
         self,
         solver: CircuitLinearSolver,
         groups: dict,
@@ -53,16 +54,68 @@ class Circuit:
     def _n(self) -> int:
         return self.sys_size * (2 if self.solver.is_complex else 1)
 
-    def __call__(
+    def _coerce_param_updates(
+        self,
+        params: dict[str, Any] | None,
+        param_kwargs: dict[str, Any],
+    ) -> dict[str, Any]:
+        updates = dict(params or {})
+        updates.update(param_kwargs)
+        return updates
+
+    def _with_param_values(self, params: dict[str, Any]) -> dict:
+        updated = self.groups
+        for name, value in params.items():
+            if "." not in name:
+                updated = apply_global_params(updated, {name: value})
+                continue
+
+            instance_name, param_key = name.split(".", 1)
+            for group_name, group in updated.items():
+                index_map = getattr(group, "index_map", None)
+                if index_map is None or instance_name not in index_map:
+                    continue
+                if not hasattr(group.params, param_key):
+                    msg = f"Instance '{instance_name}' has no parameter '{param_key}'."
+                    raise ValueError(msg)
+                updated = update_params_dict(updated, group_name, instance_name, param_key, value)
+                break
+            else:
+                msg = f"Instance '{instance_name}' not found in compiled circuit."
+                raise ValueError(msg)
+        return updated
+
+    def _as_arrays(self, params: dict[str, Any]) -> dict[str, jax.Array]:
+        return {k: jnp.asarray(v) for k, v in params.items()}
+
+    def _require_scalar_params(self, params: dict[str, Any], method: str) -> dict[str, jax.Array]:
+        arrays = self._as_arrays(params)
+        batched = {k: v.shape for k, v in arrays.items() if v.ndim > 0}
+        if batched:
+            msg = f"Circuit.{method}() does not batch parameter arrays directly. Got batched params: {batched}"
+            raise ValueError(msg)
+        return arrays
+
+    def _zero_guess(self) -> jax.Array:
+        return jnp.zeros(self._n())
+
+    def _resolve_port_node(self, port: str) -> int:
+        if port not in self.port_map:
+            msg = f"Unknown circuit port '{port}'. Available ports include: {sorted(self.port_map)[:10]}"
+            raise KeyError(msg)
+        return self.port_map[port]
+
+    def dc(
         self,
         y_guess: jax.Array | None = None,
         *,
+        params: dict[str, Any] | None = None,
         rtol: float | None = None,
         atol: float | None = None,
         max_steps: int | None = None,
-        **params: Any,
+        **param_updates: Any,
     ) -> jax.Array:
-        """Solve the circuit for the given global parameters.
+        """Solve the DC operating point for the given parameters.
 
         Scalar params produce a single solve returning shape ``(n,)``.
         Array params trigger ``jax.vmap`` over the leading dimension,
@@ -77,8 +130,11 @@ class Circuit:
                 :func:`compile_circuit` (``1e-6``).
             max_steps: Max Newton iterations override. Defaults to value
                 from :func:`compile_circuit` (``100``).
-            **params: Global parameter values to forward to matching component
-                groups, e.g. ``wavelength_nm=1310.0`` or
+            params: Optional mapping of parameter updates. Keys without a dot
+                are broadcast to every component group declaring that parameter.
+                Keys like ``"R1.R"`` update one instance.
+            **param_updates: Convenience form for global parameter values, e.g.
+                ``wavelength_nm=1310.0`` or
                 ``wavelength_nm=jnp.linspace(1260, 1360, 1000)``.
 
         Returns:
@@ -92,16 +148,15 @@ class Circuit:
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
 
-        arrays = {k: jnp.asarray(v) for k, v in params.items()}
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._as_arrays(updates)
         batch_keys = [k for k, v in arrays.items() if v.ndim > 0]
 
         if y_guess is None:
-            y_guess = jnp.zeros(self._n())
+            y_guess = self._zero_guess()
 
         if not batch_keys:
-            return self.solver.solve_dc(
-                apply_global_params(self.groups, arrays), y_guess, rtol=rtol, atol=atol, max_steps=max_steps
-            )
+            return self.solver.solve_dc(self._with_param_values(arrays), y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
 
         batch_sizes = {k: arrays[k].shape[0] for k in batch_keys}
         if len(set(batch_sizes.values())) > 1:
@@ -113,11 +168,137 @@ class Circuit:
         def solve_single(*batch_vals: jax.Array) -> jax.Array:
             kw = dict(zip(batch_keys, batch_vals, strict=True))
             kw.update(scalar_params)
-            return self.solver.solve_dc(
-                apply_global_params(self.groups, kw), y_guess, rtol=rtol, atol=atol, max_steps=max_steps
-            )
+            return self.solver.solve_dc(self._with_param_values(kw), y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
 
         return jax.vmap(solve_single)(*[arrays[k] for k in batch_keys])
+
+    def __call__(
+        self,
+        y_guess: jax.Array | None = None,
+        *,
+        params: dict[str, Any] | None = None,
+        rtol: float | None = None,
+        atol: float | None = None,
+        max_steps: int | None = None,
+        **param_updates: Any,
+    ) -> jax.Array:
+        """Backward-compatible alias for :meth:`dc`."""
+        return self.dc(
+            y_guess,
+            params=params,
+            rtol=rtol,
+            atol=atol,
+            max_steps=max_steps,
+            **param_updates,
+        )
+
+    def transient(
+        self,
+        *,
+        t0: float,
+        t1: float,
+        dt0: float,
+        y0: jax.Array | None = None,
+        saveat: Any = None,
+        params: dict[str, Any] | None = None,
+        transient_solver: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Run transient analysis using the compiled circuit metadata."""
+        from diffrax import SaveAt
+
+        from circulax.solvers import setup_transient
+
+        param_updates = kwargs.pop("param_updates", {})
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._require_scalar_params(updates, "transient")
+        groups = self._with_param_values(arrays)
+        if y0 is None:
+            y0 = self.solver.solve_dc(
+                groups,
+                self._zero_guess(),
+                rtol=self.rtol,
+                atol=self.atol,
+                max_steps=self.max_steps,
+            )
+        saveat_obj = SaveAt(ts=saveat) if saveat is not None and not isinstance(saveat, SaveAt) else saveat
+        run_transient = setup_transient(groups=groups, linear_strategy=self.solver, transient_solver=transient_solver)
+        return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, **kwargs)
+
+    def ac(
+        self,
+        *,
+        ports: str | Sequence[str],
+        freqs: jax.Array,
+        z0: float = 50.0,
+        y_dc: jax.Array | None = None,
+        params: dict[str, Any] | None = None,
+        **param_updates: Any,
+    ) -> jax.Array:
+        """Run an AC small-signal S-parameter sweep."""
+        from circulax.solvers import setup_ac_sweep
+
+        if self.solver.is_complex:
+            msg = "Circuit.ac() currently supports real-valued circuits. Use the low-level AC API for custom paths."
+            raise ValueError(msg)
+
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._require_scalar_params(updates, "ac")
+        groups = self._with_param_values(arrays)
+        if y_dc is None:
+            y_dc = self.solver.solve_dc(
+                groups,
+                self._zero_guess(),
+                rtol=self.rtol,
+                atol=self.atol,
+                max_steps=self.max_steps,
+            )
+        port_list = [ports] if isinstance(ports, str) else list(ports)
+        port_nodes = [self._resolve_port_node(port) for port in port_list]
+        run_ac = setup_ac_sweep(groups, self.sys_size, port_nodes, z0=z0)
+        return run_ac(y_dc, jnp.asarray(freqs))
+
+    def hb(
+        self,
+        *,
+        freq: float,
+        harmonics: int = 5,
+        y0: jax.Array | None = None,
+        params: dict[str, Any] | None = None,
+        y_flat_init: jax.Array | None = None,
+        max_iter: int = 50,
+        tol: float = 1e-6,
+        osc_node: int | str | None = None,
+        amplitude_tries: jax.Array | None = None,
+        g_leak: float | None = None,
+        **param_updates: Any,
+    ) -> tuple[jax.Array, jax.Array]:
+        """Run harmonic balance and return ``(y_time, y_freq)``."""
+        from circulax.solvers import setup_harmonic_balance
+
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._require_scalar_params(updates, "hb")
+        groups = self._with_param_values(arrays)
+        if y0 is None:
+            y0 = self.solver.solve_dc(
+                groups,
+                self._zero_guess(),
+                rtol=self.rtol,
+                atol=self.atol,
+                max_steps=self.max_steps,
+            )
+        osc_idx = self._resolve_port_node(osc_node) if isinstance(osc_node, str) else osc_node
+        run_hb = setup_harmonic_balance(
+            groups,
+            self.sys_size,
+            freq=freq,
+            num_harmonics=harmonics,
+            is_complex=self.solver.is_complex,
+            g_leak=getattr(self.solver, "g_leak", 1e-9) if g_leak is None else g_leak,
+            osc_node=osc_idx,
+            amplitude_tries=amplitude_tries,
+        )
+        return run_hb(y0, y_flat_init=y_flat_init, max_iter=max_iter, tol=tol)
 
     def get_port_field(self, y: jax.Array, port: str) -> jax.Array:
         """Extract the (possibly complex) field at a named port.
@@ -131,10 +312,14 @@ class Circuit:
             the field from the unrolled block format.
 
         """
-        idx = self.port_map[port]
+        idx = self._resolve_port_node(port)
         if self.solver.is_complex:
             return y[..., idx] + 1j * y[..., idx + self.sys_size]
         return y[..., idx]
+
+    def port(self, y: jax.Array, port: str) -> jax.Array:
+        """Alias for :meth:`get_port_field`."""
+        return self.get_port_field(y, port)
 
     def with_groups(self, groups: dict) -> Circuit:
         """Return a new Circuit with replaced component groups.
@@ -150,8 +335,13 @@ class Circuit:
 
         """
         return Circuit(
-            self.solver, groups, self.sys_size, self.port_map,
-            rtol=self.rtol, atol=self.atol, max_steps=self.max_steps,
+            self.solver,
+            groups,
+            self.sys_size,
+            self.port_map,
+            rtol=self.rtol,
+            atol=self.atol,
+            max_steps=self.max_steps,
         )
 
 
@@ -160,7 +350,7 @@ def compile_circuit(
     models_map: dict,
     *,
     backend: str = "default",
-    is_complex: bool = False,
+    is_complex: bool | str = "auto",
     g_leak: float = 1e-9,
     rtol: float = 1e-6,
     atol: float = 1e-6,
@@ -175,6 +365,7 @@ def compile_circuit(
         models_map: Mapping from component type name strings to component classes.
         backend: Linear solver backend (``"default"``, ``"dense"``, ``"klu"`` etc.).
         is_complex: If ``True``, treat the circuit as complex-valued (photonic).
+            If ``"auto"`` (default), infer this from component outputs.
         g_leak: Leakage conductance for regularisation.
         rtol: Relative tolerance for the Newton solver.
         atol: Absolute tolerance for the Newton solver.
@@ -188,8 +379,40 @@ def compile_circuit(
     from circulax.solvers.linear import analyze_circuit
 
     groups, sys_size, port_map = compile_netlist(net_dict, models_map)
+    if is_complex == "auto":
+        is_complex = _infer_is_complex(groups)
+    elif not isinstance(is_complex, bool):
+        msg = "is_complex must be True, False, or 'auto'."
+        raise ValueError(msg)
     solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak)
     return Circuit(
-        solver=solver, groups=groups, sys_size=sys_size, port_map=port_map,
-        rtol=rtol, atol=atol, max_steps=max_steps,
+        solver=solver,
+        groups=groups,
+        sys_size=sys_size,
+        port_map=port_map,
+        rtol=rtol,
+        atol=atol,
+        max_steps=max_steps,
     )
+
+
+def _infer_is_complex(groups: dict) -> bool:
+    """Best-effort complex-mode inference from compiled component groups."""
+    for group in groups.values():
+        if _group_outputs_complex(group):
+            return True
+    return False
+
+
+def _group_outputs_complex(group: Any) -> bool:
+    try:
+        count = group.var_indices.shape[0]
+        y0 = jnp.zeros(group.var_indices.shape[1])
+        params0 = jax.tree.map(
+            lambda x: x[0] if hasattr(x, "shape") and x.shape[:1] == (count,) else x,
+            group.params,
+        )
+        f_vals, q_vals = group.physics_func(0.0, y0, params0)
+    except (AttributeError, TypeError, ValueError, IndexError, KeyError):
+        return False
+    return bool(jnp.iscomplexobj(f_vals) or jnp.iscomplexobj(q_vals))
