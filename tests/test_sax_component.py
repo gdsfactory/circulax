@@ -17,7 +17,7 @@ from sax.models import straight
 from circulax.components.base_component import CircuitComponent
 from circulax.s_transforms import s_to_y, sax_component
 
-jax.config.update("jax_enable_x64", True)  # noqa: FBT003
+jax.config.update("jax_enable_x64", True)
 
 
 @pytest.fixture(scope="module")
@@ -171,6 +171,42 @@ def test_sax_component_numeric_port_names_are_sanitized() -> None:
     # Returned current dict keys are sanitized port names.
     assert set(f_dict) == {"p1", "p2"}
     assert q_dict == {}
+
+
+def test_compile_netlist_accepts_raw_numeric_sax_port_keys() -> None:
+    """Raw SAX ports like '1'/'2' compile even though the wrapper uses p1/p2."""
+    import sax
+
+    from circulax.compiler import compile_netlist
+
+    def numeric_port_wg(*, length: float = 10.0, neff: float = 2.4) -> sax.SDict:
+        phase = jnp.exp(1j * 2 * jnp.pi * neff * length / 1.55)
+        return {
+            ("1", "1"): 0.0 + 0j,
+            ("1", "2"): phase,
+            ("2", "1"): phase,
+            ("2", "2"): 0.0 + 0j,
+        }
+
+    netlist = {
+        "instances": {
+            "wg1": {"component": "wg", "settings": {"length": 5.0}},
+            "wg2": {"component": "wg", "settings": {"length": 7.0}},
+        },
+        "connections": {
+            "wg1,2": "wg2,1",
+            "wg2,2": "wg1,1",
+        },
+    }
+
+    _groups, _sys_size, pmap = compile_netlist(netlist, {"wg": numeric_port_wg})
+
+    assert "wg1,1" in pmap
+    assert "wg1,p1" in pmap
+    assert "wg1,2" in pmap
+    assert "wg1,p2" in pmap
+    assert pmap["wg1,p1"] == pmap["wg1,1"]
+    assert pmap["wg1,p2"] == pmap["wg1,2"]
 
 
 def test_sax_component_pdk_dict_pattern() -> None:

@@ -1,10 +1,12 @@
 """Tests for circulax.testbench.attach_testbench."""
 
 import jax.numpy as jnp
+import kfnetlist as kfnl
 import pytest
 
 from circulax import attach_testbench, compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource
+from circulax.netlist import sax_to_kfnetlist
 
 _MODELS = {
     "resistor": Resistor,
@@ -54,6 +56,20 @@ def test_attach_source_and_load_solves():
     # The shared node between R and Rload should be at 2.5V (half of source)
     mid_idx = circuit.port_map["R,p2"]
     assert jnp.isclose(y[mid_idx], 2.5, atol=1e-6)
+
+
+def test_attach_testbench_on_sax_to_kfnetlist_device_solves():
+    """Converted SAX top-level ports are usable by the kfnetlist testbench path."""
+    device, _override = sax_to_kfnetlist(_device_with_connections())
+    bench = attach_testbench(
+        device,
+        sources={"a": {"name": "V1", "component": "source_voltage", "settings": {"V": 5.0}}},
+        loads={"b": {"name": "Rload", "component": "resistor", "settings": {"R": 100.0}}},
+    )
+
+    circuit = compile_circuit(bench, _MODELS)
+    y = circuit.dc()
+    assert jnp.isclose(circuit.port(y, "R,p2"), 2.5, atol=1e-6)
 
 
 def test_gnd_termination_only():
@@ -113,6 +129,15 @@ def test_unknown_port_raises():
     device = _device_with_connections()
     with pytest.raises(ValueError, match="not in device"):
         attach_testbench(device, gnd=["nonexistent"])
+
+
+def test_kfnetlist_disconnected_selected_port_raises():
+    nl = kfnl.Netlist()
+    nl.create_port("a")
+    nl.create_net(kfnl.NetlistPort("a"))
+
+    with pytest.raises(ValueError, match="disconnected"):
+        attach_testbench(nl, gnd=["a"])
 
 
 def test_name_collision_raises():
