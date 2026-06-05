@@ -179,8 +179,9 @@ def _build_ring(n_stages: int, variant: str):
         # BSIM3v3 has 5 NQS charge-partition states.  We bypass circulax's
         # stateful-OSDI guard and initialise them to zero — acceptable for a
         # DC + transient benchmark where the capmod states converge quickly.
-        from circulax.components.osdi import OsdiModelDescriptor
         from osdi_loader import load_osdi_model
+
+        from circulax.components.osdi import OsdiModelDescriptor
         _model = load_osdi_model(_OSDI)
         nmos = OsdiModelDescriptor(model=_model, ports=("D","G","S","B"),
                                    param_names=None,

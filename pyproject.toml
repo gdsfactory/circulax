@@ -31,7 +31,7 @@ dependencies = [
     "kfnetlist>=0.1.4"]
 
 [project.optional-dependencies]
-verilog-a = ["bosdi>=0.2.0"]
+verilog-a = []
 docs = [
     "ipykernel>=6.29.5",
     "nbconvert",
@@ -58,7 +58,7 @@ docs = [
     "kaleido>=1.2.0,<2",
 ]
 dev = [
-    "circulax[docs]",
+    "circulax[docs, verilog-a]",
     "black",
     "ruff",
     "mypy",

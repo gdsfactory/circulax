@@ -38,12 +38,13 @@ sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 
 def make_psp103_descriptors_schur():
     """Same defaults as fixtures.psp103_models, but with Schur reduction on."""
-    from circulax.components.osdi import osdi_component
     from fixtures.psp103_models import (
         PSP103_OSDI,
         PSP103N_DEFAULTS,
         PSP103P_DEFAULTS,
     )
+
+    from circulax.components.osdi import osdi_component
     psp103n = osdi_component(
         osdi_path=PSP103_OSDI,
         ports=("D", "G", "S", "B"),

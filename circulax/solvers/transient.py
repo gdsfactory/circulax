@@ -876,39 +876,44 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
 # α = α₀ ∈ [1, 5/3] for variable-step BDF2, α = 1/γ ≈ 2.29 for SDIRK3).
 
 
-def _compute_history_fq(component_groups, y_c, t, num_vars):
-    """Compute the (F, Q) residual pair at a given state — used by trap."""
-    is_complex = jnp.iscomplexobj(y_c)
+def _compute_history_fq(component_groups, y_flat, t, num_vars, is_complex):
+    """Compute the (F, Q) residual pair at a given flat state vector — used by trap."""
     if is_complex:
-        y_flat = jnp.concatenate([y_c.real, y_c.imag])
         total_f, total_q = assemble_residual_only_complex(y_flat, component_groups, t, 1.0)
     else:
-        total_f, total_q = assemble_residual_only_real(y_c, component_groups, t, 1.0)
+        total_f, total_q = assemble_residual_only_real(y_flat, component_groups, t, 1.0)
     return total_f, total_q
 
 
 def _trap_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex):
-    """Compute trapezoidal coefficients, history terms (F_old, Q_old), and predictor."""
-    y_nm1, h_nm1 = solver_state
+    """Compute trapezoidal coefficients, history terms (F_old, Q_old), and predictor.
+
+    ``solver_state`` is a 4-tuple ``(y_nm1, h_nm1, f_nm1, q_nm1)`` where
+    ``f_nm1`` and ``q_nm1`` are the cached F/Q values at ``y_nm1`` from the
+    previous step's converged Newton solution.  The cache avoids a redundant
+    physics evaluation at the start of each timestep.
+    """
+    y_nm1, h_nm1, f_old, q_old = solver_state
 
     alpha = 2.0
 
     rate = (y0 - y_nm1) / (h_nm1 + 1e-30)
     y_pred = y0 + rate * h_n
 
-    y_c0 = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
-    f_old, q_old = _compute_history_fq(component_groups, y_c0, t0, num_vars)
-
     def make_residual(total_f, total_q):
         return total_f + (alpha * (total_q - q_old)) / h_n + f_old
 
-    new_state = (y0, h_n)
-    return y_pred, alpha, make_residual, new_state
+    return y_pred, alpha, make_residual
 
 
-def _trap_init(component_groups, y0, t0, num_vars, is_complex):  # noqa: ARG001
-    """Build the initial 2-tuple solver state for the trap solvers."""
-    return (y0, jnp.float64(jnp.inf))
+def _trap_init(component_groups, y0, t0, num_vars, is_complex):
+    """Build the initial 4-tuple solver state for the trap solvers.
+
+    Computes f0, q0 at y0 so the first step can use the cached values
+    rather than recomputing them in ``_trap_preamble``.
+    """
+    f0, q0 = _compute_history_fq(component_groups, y0, t0, num_vars, is_complex)
+    return (y0, jnp.float64(jnp.inf), f0, q0)
 
 
 class TrapVectorizedTransientSolver(VectorizedTransientSolver):
@@ -935,7 +940,7 @@ class TrapVectorizedTransientSolver(VectorizedTransientSolver):
         h_n = t1 - t0
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        y_pred, alpha, make_residual, new_state = _trap_preamble(
+        y_pred, alpha, make_residual = _trap_preamble(
             y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
         )
 
@@ -962,6 +967,11 @@ class TrapVectorizedTransientSolver(VectorizedTransientSolver):
 
         y_next = sol.value
         y_error = y_next - y_pred
+
+        # Cache f/q at the converged solution for the next step's preamble.
+        f_new, q_new = _compute_history_fq(component_groups, y_next, t1, num_vars, is_complex)
+        new_state = (y0, h_n, f_new, q_new)
+
         result = jax.lax.cond(
             sol.result == optx.RESULTS.successful,
             lambda _: diffrax.RESULTS.successful,
@@ -991,7 +1001,7 @@ class TrapFactorizedTransientSolver(FactorizedTransientSolver):
         h_n = t1 - t0
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        y_pred, alpha, make_residual, new_state = _trap_preamble(
+        y_pred, alpha, make_residual = _trap_preamble(
             y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
         )
 
@@ -1026,6 +1036,11 @@ class TrapFactorizedTransientSolver(FactorizedTransientSolver):
 
         y_next = sol.value
         y_error = y_next - y_pred
+
+        # Cache f/q at the converged solution for the next step's preamble.
+        f_new, q_new = _compute_history_fq(component_groups, y_next, t1, num_vars, is_complex)
+        new_state = (y0, h_n, f_new, q_new)
+
         result = jax.lax.cond(
             sol.result == optx.RESULTS.successful,
             lambda _: diffrax.RESULTS.successful,
@@ -1055,7 +1070,7 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
         h_n = t1 - t0
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
-        y_pred, alpha, make_residual, new_state = _trap_preamble(
+        y_pred, alpha, make_residual = _trap_preamble(
             y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
         )
 
@@ -1094,6 +1109,11 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
 
         y_next = sol.value
         y_error = y_next - y_pred
+
+        # Cache f/q at the converged solution for the next step's preamble.
+        f_new, q_new = _compute_history_fq(component_groups, y_next, t1, num_vars, is_complex)
+        new_state = (y0, h_n, f_new, q_new)
+
         result = jax.lax.cond(
             sol.result == optx.RESULTS.successful,
             lambda _: diffrax.RESULTS.successful,

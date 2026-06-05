@@ -52,6 +52,7 @@ def run(label: str, c_load: float, integrator_name: str = "BDF2", use_schur: boo
             SmoothPulse,
             VoltageSource,
         )
+        from circulax.components.osdi import osdi_component
         nmos = osdi_component(osdi_path=PSP103_OSDI, ports=("D","G","S","B"),
                               default_params=PSP103N_DEFAULTS, use_schur_reduction=True)
         pmos = osdi_component(osdi_path=PSP103_OSDI, ports=("D","G","S","B"),

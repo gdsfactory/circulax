@@ -283,6 +283,20 @@ def assemble_system_real(
             else group.params
         )
 
+        # Direct combined bypass — calls _fast_combined ONCE per device per Newton
+        # iteration instead of routing through vmap(jvp(fast_physics, v, eye[i]))
+        # which fires the custom JVP n times.  Only active when the VA emitter
+        # produced a combined_fn (i.e. group.combined_func is not None).
+        if group.combined_func is not None:
+            f_l, q_l, df_l, dq_l = jax.vmap(
+                lambda v, p: group.combined_func(v, p, t1)
+            )(v_locs, params)
+            total_f = total_f.at[group.eq_indices].add(f_l)
+            total_q = total_q.at[group.eq_indices].add(q_l)
+            j_eff = df_l + (alpha / dt) * dq_l
+            vals_list.append(j_eff.reshape(-1))
+            continue
+
         physics_at_t1 = functools.partial(_real_physics, group=group, t1=t1)
 
         (f_l, q_l), (df_l, dq_l) = jax.vmap(functools.partial(_primal_and_jac_real, physics_at_t1))(v_locs, params)
@@ -338,6 +352,16 @@ def assemble_gc_real(
             continue
 
         v_locs = y_guess[group.var_indices]
+
+        # Direct combined bypass for VA components with combined_fn.
+        if group.combined_func is not None:
+            _, _, df_l, dq_l = jax.vmap(
+                lambda v, p: group.combined_func(v, p, 0.0)
+            )(v_locs, group.params)
+            g_vals_list.append(df_l.reshape(-1))
+            c_vals_list.append(dq_l.reshape(-1))
+            continue
+
         physics_at_dc = functools.partial(_real_physics, group=group, t1=0.0)
 
         (_, _), (df_l, dq_l) = jax.vmap(functools.partial(_primal_and_jac_real, physics_at_dc))(v_locs, group.params)

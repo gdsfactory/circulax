@@ -252,6 +252,8 @@ def _build_component(  # noqa: C901
     *,
     uses_time: bool,
     amplitude_param: str = "",
+    setup_fn: Any = None,
+    differentiable_params: "tuple[str, ...] | None" = None,
 ) -> type[CircuitComponent]:
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
@@ -378,8 +380,16 @@ def _build_component(  # noqa: C901
             )
             raise RuntimeError(msg)
         # Pass through only kwargs the setup function declares — ergonomic
-        # for setups that consume a subset of the physics params.
+        # for setups that consume a subset of the physics params.  When the
+        # setup wrapper uses **kwargs (e.g. emitted _register_setup), pass
+        # everything so the inner function receives the actual param values.
         setup_sig = inspect.signature(setup_fn)
+        has_var_kw = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in setup_sig.parameters.values()
+        )
+        if has_var_kw:
+            return setup_fn(**kw)
         accepts = {p.name for p in setup_sig.parameters.values()}
         sub_kw = {k: v for k, v in kw.items() if k in accepts}
         return setup_fn(**sub_kw)
@@ -446,15 +456,28 @@ def _build_component(  # noqa: C901
     # Equinox module but not stacked across instances or traced through
     # transformations — useful for absorbing GDSFactory-style "config"
     # settings like ``cross_section="strip"`` or ``width=None``.
-    def _is_static_default(v: Any) -> bool:
-        return v is None or isinstance(v, (str, bool))
+    #
+    # ``differentiable_params`` (from va_component) overrides the default
+    # staticness for numeric params:
+    #   - ``()``      → all numeric params are static (fastest; no jax.grad)
+    #   - ``None``    → all numeric params are dynamic JAX leaves (full grad)
+    #   - ``("W",)``  → only named params are dynamic; rest are static
+    def _is_static(p: Any) -> bool:
+        if p.default is None or isinstance(p.default, (str, bool)):
+            return True
+        if differentiable_params is None:
+            return False
+        return p.name not in differentiable_params
 
+    _static_names: set[str] = set()
     defaults: dict[str, Any] = {}
     for p in param_specs:
-        if _is_static_default(p.default):
+        if _is_static(p):
             defaults[p.name] = eqx.field(default=p.default, static=True)
+            _static_names.add(p.name)
         else:
             defaults[p.name] = p.default
+    _diff_param_names_tuple = tuple(p.name for p in param_specs if p.name not in _static_names)
 
     def _register_setup(cls_inner: type, setup_fn: Any) -> type:
         """Register an analog-init / setup function on the component class.
@@ -507,6 +530,9 @@ def _build_component(  # noqa: C901
         "_has_init_arg": has_init_arg,
         "_setup_fn_ref": None,
         "setup": classmethod(_register_setup),
+        # Expose static/diff param name splits for _install_custom_jvp.
+        "_static_param_names": tuple(sorted(_static_names)),
+        "_diff_param_names": _diff_param_names_tuple,
         **defaults,
     }
 

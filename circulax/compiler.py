@@ -69,6 +69,7 @@ class ComponentGroup(eqx.Module):
     index_map: dict[str, int] | None = eqx.field(static=True, default=None)
     is_fdomain: bool = eqx.field(static=True, default=False)
     amplitude_param: str = eqx.field(static=True, default="")
+    combined_func: Any = eqx.field(static=True, default=None)
 
 
 def get_model_width(func: callable) -> int:
@@ -340,6 +341,7 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
         # Create Index Map for parameter updates
         index_map = {item["name"]: i for i, item in enumerate(items)}
 
+        _combined_func = getattr(comp_cls, "_combined_fn", None) if getattr(comp_cls, "_has_combined_fn", False) else None
         compiled_groups[group_name] = ComponentGroup(
             name=group_name,
             var_indices=var_indices_arr,
@@ -351,6 +353,7 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
             index_map=index_map,
             is_fdomain=getattr(comp_cls, "_is_fdomain", False),
             amplitude_param=getattr(comp_cls, "amplitude_param", ""),
+            combined_func=_combined_func,
         )
 
     # --- Process OSDI buckets (requires circulax[verilog-a] / bosdi) ---
@@ -374,7 +377,6 @@ def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dic
         try:
             import numpy as _np
             from osdi_jax import osdi_setup_batch
-
             handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
         except ImportError:
             pass  # older bosdi without Tier-3; legacy model_id + params path still works

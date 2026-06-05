@@ -60,10 +60,12 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
     leaves so ``jax.grad`` works through them.  Integer switch parameters
     (TYPE, SWGEO, SWIGATE, …) are always folded as SCCP constants regardless.
     """
+    if variant == "va_static" and differentiable:
+        raise ValueError("va_static bakes all params as SCCP constants; differentiable=True is not supported")
     if variant == "osdi":
         from ring_one_case import build_netlist as _bn
         return _bn(c_load=0.0, n_stages=n_stages)
-    if variant == "va":
+    if variant in ("va", "va_static"):
         import dataclasses
         import importlib.util
         import tempfile
@@ -84,37 +86,58 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
         dump = compile_va_unopt_with_split(str(_PSP103_VA))
         defaults = parse_va_defaults_expanded(_PSP103_VA)
 
-        # Bake all integer switch parameters as SCCP constants so the lowering
-        # can eliminate dead branches (SWGIDL=0 → no GIDL block, etc.) before
-        # emitting Python.  This shrinks the XLA graph significantly compared
-        # to TYPE-only lowering.  Float process params stay as class-level
-        # static fields (always concrete inside JIT), or as JAX leaves when
-        # differentiable=True is requested.
-        int_static_n = {
-            name: int(spec.default)
-            for name, spec in defaults.items()
-            if spec.type_ == "int"
-        }
-        int_static_n["TYPE"] = 1
-        int_static_p = {**int_static_n, "TYPE": -1}
+        if variant == "va_static":
+            def _all_static(defs, card, geom):
+                out = {}
+                for name, spec in defs.items():
+                    v = spec.default
+                    if isinstance(v, str):
+                        try: v = float(v)
+                        except ValueError: continue
+                    if isinstance(v, (int, float)) and not isinstance(v, bool):
+                        out[name] = float(v)
+                for k, v in card.items():
+                    if isinstance(v, (int, float)) and not isinstance(v, bool):
+                        out[k] = float(v)
+                for k, v in geom.items():
+                    out[k] = float(v)
+                return out
 
-        diff_params = None if differentiable else ()
+            static_n = _all_static(defaults, PSP103N_DEFAULTS, geom_settings(10e-6, 1e-6))
+            static_n["TYPE"] = 1
+            static_p = _all_static(defaults, PSP103P_DEFAULTS, geom_settings(20e-6, 1e-6))
+            static_p["TYPE"] = -1
+            diff_params = ()
+            suffix = "_Static"
+        else:
+            int_static_n = {
+                name: int(spec.default)
+                for name, spec in defaults.items()
+                if spec.type_ == "int"
+            }
+            int_static_n["TYPE"] = 1
+            static_n = int_static_n
+            static_p = {**int_static_n, "TYPE": -1}
+            diff_params = None if differentiable else ()
+            suffix = ""
+
         dev_n = lower(dump.modules[0], va_defaults=defaults, collapse_nodes=True,
-                      static_params=int_static_n,
+                      static_params=static_n,
                       differentiable_params=diff_params,
-                      class_name="PSP103N")
+                      class_name=f"PSP103N{suffix}")
         dev_p = lower(dump.modules[0], va_defaults=defaults, collapse_nodes=True,
-                      static_params=int_static_p,
+                      static_params=static_p,
                       differentiable_params=diff_params,
-                      class_name="PSP103P")
+                      class_name=f"PSP103P{suffix}")
         tmp = tempfile.mkdtemp()
-        out = Path(tmp) / "psp103_va_bench.py"
+        mod_name = "psp103_va_static_bench" if variant == "va_static" else "psp103_va_bench"
+        out = Path(tmp) / f"{mod_name}.py"
         out.write_text(emit_source([dev_n, dev_p]))
-        spec = importlib.util.spec_from_file_location("psp103_va_bench", out)
+        spec = importlib.util.spec_from_file_location(mod_name, out)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        cls_n = mod.PSP103N
-        cls_p = mod.PSP103P
+        cls_n = getattr(mod, f"PSP103N{suffix}")
+        cls_p = getattr(mod, f"PSP103P{suffix}")
 
         def _fields(cls):
             return {f.name: f for f in dataclasses.fields(cls) if f._field_type.name == "_FIELD"}
@@ -245,7 +268,7 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
 
     t_dc = time.perf_counter()
     high_gmin = eqx.tree_at(lambda s: s.g_leak, solver, 1e-2)
-    if variant == "va":
+    if variant in ("va", "va_static"):
         # VA PSP103 noise states (v_NOI, i_NOII) stagnate Newton from y=0
         # (delta_max = VDD/g_leak = 120 every step; damping collapses update
         # to zero).  Initialise ring nodes at VDD/2 where the Jacobian is
@@ -335,7 +358,7 @@ if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument("--n-stages", type=int, default=9)
-    p.add_argument("--variant", choices=("osdi", "va", "jax-native"), default="osdi")
+    p.add_argument("--variant", choices=("osdi", "va", "va_static", "jax-native"), default="osdi")
     p.add_argument("--backend", default="klu_split",
                    help="Linear solver backend (klu_split, klu_split_refactor, klu, dense)")
     p.add_argument("--differentiable", action="store_true",

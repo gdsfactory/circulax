@@ -41,23 +41,42 @@ VACASK and circulax both run a fixed 50 ps step (20 000 points over
 <!-- RESULTS -->
 | N | VACASK (µs/step) | ngspice (µs/step) | circulax-OSDI (µs/step) | circulax-VA (µs/step) | Freq VACASK (MHz) | OSDI Δf | VA Δf |
 |---|------------------|-------------------|-------------------------|-----------------------|-------------------|---------|-------|
-| 3 | 18.1 | 48.1 | 101.1 | 10666.2 (JIT 223s) | 910.1 | +0.4 % | +0.3 % |
-| 9 | 53.4 | 109.5 | 188.2 | 12009.9 (JIT 247s) | 289.6 | -0.2 % | -0.3 % |
-| 15 | 101.8 | 1400.7 | 311.3 | 12145.5 (JIT 238s) | 173.7 | +0.1 % | +0.0 % |
-| 21 | dc_diverged | 1754.2 | 377.6 | 11681.7 (JIT 203s) | — | — | — |
-| 27 | dc_diverged | 2285.9 | 493.9 | 11291.4 (JIT 217s) | — | — | — |
-| 31 | dc_diverged | 2500.3 | 557.1 | 16149.0 (JIT 294s) | — | — | — |
-| 33 | dc_diverged | 3094.8 | 646.2 | 12832.0 (JIT 216s) | — | — | — |
-_2026-05-05_
+| 3 | 17.7 | 62.6 | 117.3 | 12944.4 (JIT 243s) | 910.1 | +0.4 % | +0.3 % |
+| 9 | 52.5 | 117.9 | 254.1 | 15044.1 (JIT 297s) | 289.6 | -0.2 % | -0.3 % |
+| 15 | 99.6 | 1502.8 | 285.8 | 20466.3 (JIT 473s) | 173.7 | +0.1 % | +0.0 % |
+| 21 | 121.4 | 2247.1 | 365.8 | 20822.7 (JIT 411s) | 124.1 | +0.2 % | +0.1 % |
+| 27 | 179.8 | 3126.3 | 474.3 | — | 96.5 | +0.0 % | — |
+_2026-05-18_
 <!-- /RESULTS -->
 
-## Known failures at large N
+## VACASK convergence fix for large N
 
-VACASK's DC homotopy fails on this ring starting at N = 21 (logged as
-"Homotopy failed." in stdout; surfaced as `dc_diverged` in the table).
-circulax's two-phase homotopy (source-step + Gmin-step) completes
-through N = 51 in prior runs; the sweep here stops at 33 so VACASK
-has a row to fail in.
+VACASK's DC homotopy fails for this ring starting at N = 21.  Diagnostic
+analysis (`op_debug=2 homotopy_debug=1`) shows the failure sequence:
+
+- Direct Newton diverges in 100 iterations from the zero initial condition
+- `gdev` stepping: all 6 gmin levels (1e-3 → 1e2) fail in 100 iterations each
+- `gshunt` stepping: makes it to gshunt ≈ 3e-4 after 100 steps, then stalls
+- `src` stepping: reaches srcfact ≈ 0.116 and bounces for 100 steps before giving up
+
+The root cause is that an odd-stage ring oscillator has only **one** DC
+equilibrium (the metastable VDD/2 saddle point), and standard homotopy
+continuation cannot cross the bifurcation at srcfact ≈ 0.116 from DC=0.
+
+**Fix** (confirmed by sweep across 11 option combinations for N = 21 and N = 27):
+use `icmode="uic"` on the `tran` analysis line to skip the OP solve entirely,
+with all ring nodes initialised to VDD/2 = 0.6 V.  The ring oscillates
+naturally from that initial condition once the 10 µA current-source pulse
+kicks at t = 1 ns.
+
+```
+analysis tran1 tran ... icmode="uic" ic=[ "1"; 0.6; "2"; 0.6; ... ]
+```
+
+`vacask_gen.py` applies this automatically for N ≥ 21.  The oscillation
+frequencies obtained this way (N=21: 124 MHz, N=27: 97 MHz, N=31: 84 MHz,
+N=33: 79 MHz) follow 1/N scaling consistent with the N=15 reference (174 MHz)
+to within < 0.3 %.
 
 ## KLU backend scaling
 

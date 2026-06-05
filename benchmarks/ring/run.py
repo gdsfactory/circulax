@@ -78,6 +78,13 @@ def _vacask_runme(n: int) -> Path:
     if n == 9:
         return VACASK_UPSTREAM / "runme.sim"
     from vacask_gen import emit
+    # N >= 21: DC homotopy cannot find the metastable VDD/2 equilibrium.
+    # Use icmode="uic" to skip the OP solve and start transient directly
+    # at VDD/2 = 0.6V on all ring nodes.  The ring oscillates naturally
+    # from that initial condition once the current-source pulse kicks at t=1ns.
+    if n >= 21:
+        ic = {str(i): 0.6 for i in range(1, n + 1)}
+        return emit(n, uic=True, ic=ic)
     return emit(n)
 
 
@@ -220,6 +227,19 @@ def run_circulax_va(n: int) -> dict:
     return r
 
 
+def run_circulax_va_static(n: int) -> dict:
+    """Circulax with PSP103 lowered from MIR -> pure XLA, all params static.
+
+    Same lowering path as circulax_va but with ALL numeric parameters
+    (int switches + float process + geometry) baked as SCCP constants.
+    Not differentiable.
+    """
+    import bench_circulax as cxmod
+    r = cxmod.run(n_stages=n, variant="va_static")
+    r["simulator"] = "circulax_va_static"
+    return r
+
+
 def write_results(rows: list[dict]) -> None:
     fields = ["simulator", "n_stages", "variant", "status", "wall_s",
               "sim_reported_s", "compile_s", "dc_s", "n_steps",
@@ -278,8 +298,8 @@ def render_readme_table(rows: list[dict]) -> str:
         by_n.setdefault(int(n), {})[r.get("simulator", "?")] = r
 
     header = (
-        "| N | VACASK (µs/step) | ngspice (µs/step) | circulax-OSDI (µs/step) | circulax-VA (µs/step) | Freq VACASK (MHz) | OSDI Δf | VA Δf |\n"
-        "|---|------------------|-------------------|-------------------------|-----------------------|-------------------|---------|-------|"
+        "| N | VACASK (µs/step) | ngspice (µs/step) | circulax-OSDI (µs/step) | circulax-VA (µs/step) | circulax-VA-static (µs/step) | Freq VACASK (MHz) | OSDI Δf | VA Δf | VA-static Δf |\n"
+        "|---|------------------|-------------------|-------------------------|-----------------------|------------------------------|-------------------|---------|-------|--------------|"
     )
     lines = [header]
     for n in sorted(by_n):
@@ -287,10 +307,12 @@ def render_readme_table(rows: list[dict]) -> str:
         ng = by_n[n].get("ngspice", {})
         c_osdi = by_n[n].get("circulax_osdi", {})
         c_va = by_n[n].get("circulax_va", {})
+        c_va_static = by_n[n].get("circulax_va_static", {})
         ref_f = v.get("freq_MHz") if isinstance(v.get("freq_MHz"), (int, float)) else None
         lines.append(
             f"| {n} | {_fmt_us(v)} | {_fmt_us(ng)} | {_fmt_us(c_osdi)} | {_fmt_va(c_va)} "
-            f"| {_fmt_freq(v)} | {_fmt_err(c_osdi, ref_f)} | {_fmt_err(c_va, ref_f)} |"
+            f"| {_fmt_va(c_va_static)} "
+            f"| {_fmt_freq(v)} | {_fmt_err(c_osdi, ref_f)} | {_fmt_err(c_va, ref_f)} | {_fmt_err(c_va_static, ref_f)} |"
         )
     return "\n".join(lines)
 
@@ -319,7 +341,8 @@ def main(argv: list[str] | None = None) -> None:
         for label, fn in (("vacask", run_vacask),
                           ("ngspice", run_ngspice),
                           ("circulax_osdi", run_circulax_osdi),
-                          ("circulax_va", run_circulax_va)):
+                          ("circulax_va", run_circulax_va),
+                          ("circulax_va_static", run_circulax_va_static)):
             print(f"[N={n}] {label}…", flush=True)
             try:
                 r = fn(n)

@@ -16,7 +16,30 @@ from pathlib import Path
 VACASK_DIR = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask")
 
 
-def emit(n_stages: int) -> Path:
+def emit(
+    n_stages: int,
+    extra_options: dict[str, str] | None = None,
+    suffix: str = "",
+    nodesets: dict[str, float] | None = None,
+    uic: bool = False,
+    ic: dict[str, float] | None = None,
+) -> Path:
+    """Emit a VACASK ring-oscillator netlist.
+
+    Parameters
+    ----------
+    n_stages:      Number of inverter stages (odd, ≥ 3).
+    extra_options: ``key=value`` pairs written as additional ``options`` lines.
+    suffix:        Appended to the output filename before ``.sim``.
+    nodesets:      Node-name → voltage hint for the internal OP solve.
+                   Passed as ``nodeset=[...]`` on the ``tran`` analysis line.
+    uic:           If True, use ``icmode="uic"`` to skip the OP solve.
+                   Useful when DC convergence fails; transient starts directly
+                   from the ``ic`` values.
+    ic:            Node-name → voltage initial condition for ``icmode="uic"``.
+                   Ignored unless ``uic=True``.
+
+    """
     if n_stages < 3 or n_stages % 2 == 0:
         raise ValueError(f"n_stages must be odd and ≥ 3; got {n_stages}")
 
@@ -41,18 +64,39 @@ def emit(n_stages: int) -> Path:
         lines.append(
             f"u{stage} ({stage} {stage % n_stages + 1} vdd 0)  inverter w=10u l=1u"
         )
+
+    option_lines = ['  options tran_method="trap"']
+    if extra_options:
+        for k, v in extra_options.items():
+            option_lines.append(f"  options {k}={v}")
+
+    # Build the tran analysis line with optional nodeset / ic / icmode
+    tran_extras = []
+    if uic:
+        tran_extras.append('icmode="uic"')
+        if ic:
+            ic_items = "; ".join(f'"{n}"; {v}' for n, v in ic.items())
+            tran_extras.append(f"ic=[ {ic_items} ]")
+    elif nodesets:
+        ns_items = "; ".join(f'"{n}"; {v}' for n, v in nodesets.items())
+        tran_extras.append(f"nodeset=[ {ns_items} ]")
+
+    tran_suffix = (" " + " ".join(tran_extras)) if tran_extras else ""
+    tran_line = f"  analysis tran1 tran step=0.05n stop=1u maxstep=0.05n{tran_suffix}"
+
     lines += [
         "",
         "vdd (vdd 0) vsource dc=1.2",
         "",
         "control",
-        '  options tran_method="trap"',
-        "  analysis tran1 tran step=0.05n stop=1u maxstep=0.05n",
+        *option_lines,
+        tran_line,
         "  print stats",
         "endc",
         "",
     ]
-    out = VACASK_DIR / f"runme_{n_stages}.sim"
+    fname = f"runme_{n_stages}{suffix}.sim"
+    out = VACASK_DIR / fname
     out.write_text("\n".join(lines))
     return out
 
