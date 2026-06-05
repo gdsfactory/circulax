@@ -138,7 +138,11 @@ The state vector sampled at $K$ equally-spaced time points over one period.  Tim
 t_points = jnp.linspace(0, 1.0 / freq, K, endpoint=False)
 ```
 
-Plot any node's waveform as `plt.plot(t_points, y_time[:, node_idx])`.
+Plot a named port waveform as:
+
+```python
+plt.plot(t_points, circuit.port(y_time, "out"))
+```
 
 **`y_freq`** — shape $(N+1, n)$, dtype `complex128`
 
@@ -151,9 +155,9 @@ $$\hat{V}_k = 2 \left| Y_k \right|$$
 where $Y_k$ = `y_freq[k, node]`.  The DC value is simply `y_freq[0, node].real` (no factor of 2).
 
 ```python
-node = circuit.port_map["R1,p2"]
 harmonics = jnp.arange(y_freq.shape[0])
-amplitudes = jnp.abs(y_freq[:, node]) * jnp.where(harmonics == 0, 1.0, 2.0)
+out_coeffs = circuit.port(y_freq, "out")
+amplitudes = jnp.abs(out_coeffs) * jnp.where(harmonics == 0, 1.0, 2.0)
 ```
 
 ---
@@ -172,8 +176,6 @@ from circulax import compile_circuit
 circuit = compile_circuit(net, models, backend="dense")
 y_dc = circuit.dc()
 
-node_idx = circuit.port_map["RL,p1"]   # output node index
-
 def hb_solve_freq(sweep_freq):
     # Update the source's freq param so it drives at sweep_freq.
     _, y_freq = circuit.hb(
@@ -182,12 +184,16 @@ def hb_solve_freq(sweep_freq):
         y0=y_dc,
         params={"Vs.freq": sweep_freq},
     )
-    return 2.0 * jnp.abs(y_freq[1, node_idx])   # fundamental amplitude
+    return 2.0 * jnp.abs(circuit.port(y_freq, "out")[1])
 
 # Compile once, sweep 100 frequencies in one call:
 sweep_freqs = jnp.logspace(2, 5, 100)   # 100 Hz – 100 kHz
 amps = jax.jit(jax.vmap(hb_solve_freq))(sweep_freqs)
 ```
+
+Direct `y_freq[:, node_idx]` indexing remains useful for advanced spectrum
+inspection of internal states, but named ports are the preferred workflow for
+circuit-level inputs and outputs.
 
 ---
 

@@ -164,7 +164,7 @@ def SkinEffectResistor(f: float, R0: float = 1.0, a: float = 1e-4):
 |--------|-----------|
 | **DC** | Evaluated at `f = 0`. Skin-effect reduces to `R₀`; a capacitor (`Y = j2πfC`) becomes an open circuit. Make sure `Y(0)` is finite — add a small series resistance for components that would otherwise diverge (e.g. pure inductors). |
 | **Harmonic Balance** | Evaluated at each harmonic `k·f₀`. The contribution `Y(k·f₀) @ V_k` is added directly to the frequency-domain residual `R_k` before the inverse FFT. |
-| **Transient** | **Not supported.** A frequency-dependent admittance requires convolving `h(t) = IFFT{Y(f)}` with the voltage waveform, which is incompatible with the per-time-step Newton loop. Calling `setup_transient()` with an f-domain component raises `RuntimeError`. |
+| **Transient** | **Not supported.** A frequency-dependent admittance requires convolving `h(t) = IFFT{Y(f)}` with the voltage waveform, which is incompatible with the per-time-step Newton loop. Calling `circuit.transient()` or low-level `setup_transient()` with an f-domain component raises `RuntimeError`. |
 
 ### Equivalence with time-domain reactive components
 

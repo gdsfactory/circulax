@@ -15,7 +15,7 @@ Since $R < R_c$, the system is underdamped. When the voltage source is activated
 
 
 
-```python
+```
 import diffrax
 import jax
 import jax.numpy as jnp
@@ -23,15 +23,11 @@ import matplotlib.pyplot as plt
 
 from circulax import compile_circuit
 from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
-from circulax.solvers import setup_transient
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:32:56,782:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-
-
-```python
+```
 net_dict = {
     "instances": {
         "GND": {"component": "ground"},
@@ -46,32 +42,22 @@ net_dict = {
         "R1,p2": "L1,p1",
         "L1,p2": "C1,p1",
     },
+    "ports": {"source": "V1,p1", "cap": "C1,p1"},
 }
+
 ```
-
-
-
-![svg](lcr_transient_files/lcr_transient_3_0.svg)
-
-
 
 ## Visualize the nodes
 
 
-```python
+```
 from circulax.netlist import draw_circuit_graph
 
 draw_circuit_graph(netlist=net_dict);
 ```
 
 
-
-![png](lcr_transient_files/lcr_transient_5_0.png)
-
-
-
-
-```python
+```
 jax.config.update("jax_enable_x64", True)
 
 
@@ -86,9 +72,8 @@ models_map = {
 print("Compiling...")
 circuit = compile_circuit(net_dict, models_map)
 
-print(circuit.port_map)
-
 print(f"Total System Size: {circuit.sys_size}")
+print("Internal component groups, useful for advanced state inspection:")
 for g_name, g in circuit.groups.items():
     print(f"Group: {g_name}")
     print(f"  Count: {g.var_indices.shape[0]}")
@@ -97,14 +82,12 @@ for g_name, g in circuit.groups.items():
     print(f"  Jacobian Rows Length: {len(g.jac_rows)}")
 
 print("2. Solving DC Operating Point...")
-y_op = circuit()
-
-transient_sim = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
+y_op = circuit.dc()
 
 t_max = 3e-9
 saveat = diffrax.SaveAt(ts=jnp.linspace(0, t_max, 500))
 print("3. Running Simulation...")
-sol = transient_sim(
+sol = circuit.transient(
     t0=0.0,
     t1=t_max,
     dt0=1e-3 * t_max,
@@ -115,8 +98,9 @@ sol = transient_sim(
 )
 
 ts = sol.ts
-v_src = circuit.get_port_field(sol.ys, "V1,p1")
-v_cap = circuit.get_port_field(sol.ys, "C1,p1")
+v_src = circuit.port(sol.ys, "source")
+v_cap = circuit.port(sol.ys, "cap")
+# Advanced inspection: inductor current is an internal state, not a top-level port.
 i_ind = sol.ys[:, 5]
 
 plt.rcParams.update({
@@ -154,44 +138,7 @@ plt.show()
 
 ```
 
-    Compiling...
 
-
-    {'L1,p2': 1, 'C1,p1': 1, 'GND,p1': 0, 'V1,p2': 0, 'C1,p2': 0, 'L1,p1': 2, 'R1,p2': 2, 'V1,p1': 3, 'R1,p1': 3, 'V1,i_src': 4, 'L1,i_L': 5}
-    Total System Size: 6
-    Group: source_voltage
-      Count: 1
-      Var Indices Shape: (1, 3)
-      Sample Var Indices:[[3 0 4]]
-      Jacobian Rows Length: 1
-    Group: resistor
-      Count: 1
-      Var Indices Shape: (1, 2)
-      Sample Var Indices:[[3 2]]
-      Jacobian Rows Length: 1
-    Group: capacitor
-      Count: 1
-      Var Indices Shape: (1, 2)
-      Sample Var Indices:[[1 0]]
-      Jacobian Rows Length: 1
-    Group: inductor
-      Count: 1
-      Var Indices Shape: (1, 3)
-      Sample Var Indices:[[2 1 5]]
-      Jacobian Rows Length: 1
-    2. Solving DC Operating Point...
-
-
-    3. Running Simulation...
-
-
-
-
-![png](lcr_transient_files/lcr_transient_6_3.png)
-
-
-
-
-```python
+```
 
 ```

@@ -18,7 +18,7 @@ Characteristic Impedance ($Z_0$): $\sqrt{L/C} = 50\Omega$
 Termination: If $R_{load} = Z_0$, reflections should be minimized. If $R_{load} \neq Z_0$, we expect distinct reflection patterns.
 
 
-```python
+```
 import time
 
 import diffrax
@@ -26,24 +26,20 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from circulax.compiler import compile_netlist
+from circulax import compile_circuit
 from circulax.components.electronic import (
     Capacitor,
     Inductor,
     Resistor,
     SmoothPulse,
 )
-from circulax.solvers import analyze_circuit, setup_transient
 
 jax.config.update("jax_enable_x64", True)
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:32:50,834:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-
-
-```python
+```
 N_SECTIONS = 500
 T_MAX = 5 * N_SECTIONS * 0.5e-9
 FREQ = 5.0 / T_MAX
@@ -52,7 +48,7 @@ R_LOAD = 50.0
 ```
 
 
-```python
+```
 def create_lc_ladder(n_sections):
     """
     Generates a netlist for an L-C transmission line.
@@ -106,18 +102,13 @@ def create_lc_ladder(n_sections):
 
     # 3. Termination
     net["connections"]["Rl,p1"] = previous_node
+    net["ports"] = {"in": "Rs,p2", "out": "Rl,p1"}
 
     return net
 ```
 
 
-
-![svg](lc_ladder_files/lc_ladder_4_0.svg)
-
-
-
-
-```python
+```
 models_map = {
     "resistor": Resistor,
     "capacitor": Capacitor,
@@ -131,20 +122,14 @@ print(f"Generating {N_SECTIONS}-stage LC Ladder...")
 net_dict = create_lc_ladder(N_SECTIONS)
 
 t0_compile = time.time()
-groups, sys_size, port_map = compile_netlist(net_dict, models_map)
+circuit = compile_circuit(net_dict, models_map)
 print(f"Compilation finished in {time.time() - t0_compile:.4f}s")
-print(f"System Matrix Size: {sys_size}x{sys_size} ({sys_size**2} elements)")
-
-linear_strat = analyze_circuit(groups, sys_size, is_complex=False)
+print(f"System Matrix Size: {circuit.sys_size}x{circuit.sys_size} ({circuit.sys_size**2} elements)")
 
 print("Solving DC Operating Point...")
-y0 = linear_strat.solve_dc(groups, jnp.zeros(sys_size))
-
-transient_sim = setup_transient(groups=groups, linear_strategy=linear_strat)
+y0 = circuit.dc()
 
 print("Running Transient Simulation...")
-
-term = diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y))
 
 step_controller = diffrax.PIDController(
     rtol=1e-3,
@@ -159,7 +144,7 @@ step_controller = diffrax.PIDController(
 )
 
 t0_sim = time.time()
-sol = transient_sim(
+sol = circuit.transient(
     t0=0.0,
     t1=T_MAX,
     dt0=1e-11,
@@ -177,15 +162,12 @@ if sol.result == diffrax.RESULTS.successful:
     print(f"Simulation completed in {t_end_sim - t0_sim:.4f}s")
     print(f"Total Steps: {sol.stats['num_steps']}")
 
-    node_out_idx = port_map["Rl,p1"]
-    node_in_idx = port_map["Rs,p2"]
-
     ts = sol.ts * 1e9
-    v_in = sol.ys[:, node_in_idx]
-    v_out = sol.ys[:, node_out_idx]
+    v_in = circuit.port(sol.ys, "in")
+    v_out = circuit.port(sol.ys, "out")
 
     plt.figure(figsize=(10, 6))
-    plt.plot(ts, v_in, "r--", alpha=0.6, linewidth=3.0, label="Line Input (Rs,p2)")
+    plt.plot(ts, v_in, "r--", alpha=0.6, linewidth=3.0, label="Line Input")
     plt.plot(ts, v_out, "b-", linewidth=3.0, label=f"Output (Stage {N_SECTIONS})")
 
     plt.title(f"LC Ladder Propagation Delay ({N_SECTIONS} Sections)")
@@ -202,31 +184,10 @@ if sol.result == diffrax.RESULTS.successful:
 else:
     print("   ❌ Simulation Failed")
     print(f"   Result Code: {sol.result}")
+
 ```
 
-    Generating 500-stage LC Ladder...
 
-
-    Compilation finished in 0.5545s
-    System Matrix Size: 1004x1004 (1008016 elements)
-    Solving DC Operating Point...
-
-
-    Running Transient Simulation...
-
-
-       ✅ Simulation Successful
-    Simulation completed in 1.8144s
-    Total Steps: 3172
-
-
-
-
-![png](lc_ladder_files/lc_ladder_5_4.png)
-
-
-
-
-```python
+```
 
 ```

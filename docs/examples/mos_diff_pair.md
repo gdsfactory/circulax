@@ -13,27 +13,22 @@ Simulating a sweep in JAX requires a different mindset than standard Python loop
 * **Compilation**: The entire sweep loop is compiled into a single XLA kernel, executing thousands of voltage steps in milliseconds.
 
 
-```python
+```
 import time
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from circulax import compile_circuit, update_params_dict
+from circulax import compile_circuit
 from circulax.components.electronic import NMOS, CurrentSource, Resistor, VoltageSource
 
 jax.config.update("jax_enable_x64", True)
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
 
-
-    WARNING:2026-04-17 17:32:40,600:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
-
-```python
+```
 net_dict = {
     "instances": {
         "GND": {"component": "ground"},
@@ -56,17 +51,13 @@ net_dict = {
         "Vin1,p1": "M1,g",
         "Vin2,p1": "M2,g",
     },
+    "ports": {"out1": "RD1,p2", "out2": "RD2,p2"},
 }
+
 ```
 
 
-
-![svg](mos_diff_pair_files/mos_diff_pair_3_0.svg)
-
-
-
-
-```python
+```
 models_map = {
     "nmos": NMOS,
     "resistor": Resistor,
@@ -81,8 +72,7 @@ circuit = compile_circuit(net_dict, models_map)
 
 @jax.jit
 def scan_step(y_prev, v_in_val):
-    new_groups = update_params_dict(circuit.groups, "source_dc", "Vin1", "V", v_in_val)
-    y_sol = circuit.solver.solve_dc(new_groups, y_prev)
+    y_sol = circuit.dc(params={"Vin1.V": v_in_val}, y_guess=y_prev)
     return y_sol, y_sol
 
 
@@ -99,8 +89,8 @@ final_y, solutions = jax.lax.scan(scan_step, y_current, sweep_voltages)
 total = time.time() - start_time
 print(f"Simulation Time: {total:.3f}s")
 
-v_out1 = circuit.get_port_field(solutions, "RD1,p2")
-v_out2 = circuit.get_port_field(solutions, "RD2,p2")
+v_out1 = circuit.port(solutions, "out1")
+v_out2 = circuit.port(solutions, "out2")
 
 plt.figure(figsize=(10, 6))
 plt.plot(sweep_voltages, v_out1, "r-", linewidth=2, label="V_out1 (Inv)")
@@ -116,25 +106,10 @@ plt.ylabel("Output Voltage (V)")
 plt.legend()
 plt.grid(True)
 plt.show()
+
 ```
 
-    1. Compiling...
 
-
-    2. Running Sweep (1000 points)...
-    Sweeping DC Operating Point (with Continuation)...
-
-
-    Simulation Time: 0.518s
-
-
-
-
-![png](mos_diff_pair_files/mos_diff_pair_4_3.png)
-
-
-
-
-```python
+```
 
 ```

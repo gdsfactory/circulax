@@ -1,6 +1,6 @@
 ## AC Small-Signal Analysis (S-parameters)
 
-This notebook demonstrates `setup_ac_sweep` on two circuits:
+This notebook demonstrates `circuit.ac(...)` on three circuits:
 
 1. **Parallel RC — single port** — a minimal benchmark.  We compare $S_{11}(f)$ against the analytical admittance formula.
 2. **Series-R shunt-C lowpass — two ports** — a classic LC prototype filter.  We recover all four S-parameters and verify passivity.
@@ -8,12 +8,13 @@ This notebook demonstrates `setup_ac_sweep` on two circuits:
 
 AC analysis linearises the circuit DAE at the DC operating point and sweeps a range of frequencies:
 
-$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial y\big|_{y_\text{dc}}, \quad C = \partial Q/\partial y\big|_{y_\text{dc}}$$
+$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial yig|_{y_	ext{dc}}, \quad C = \partial Q/\partial yig|_{y_	ext{dc}}$$
 
-With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N\times N$ S-matrix at once.
+With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N	imes N$ S-matrix at once.
 
 
-```python
+
+```
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -21,15 +22,12 @@ import numpy as np
 import schemdraw
 import schemdraw.elements as elm
 
-from circulax import compile_circuit, fdomain_component, setup_ac_sweep
+from circulax import compile_circuit, fdomain_component
 from circulax.components.electronic import Capacitor, Resistor
 
 jax.config.update("jax_enable_x64", True)
+
 ```
-
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:33:02,607:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
 
 ---
 ## Part 1: Parallel RC — Single Port
@@ -43,7 +41,7 @@ S_{11} = \frac{2/Z_0}{Y_\text{total}} - 1$$
 At DC ($\omega\to 0$) the capacitor is an open circuit.  For $R = Z_0 = 50\,\Omega$ we get the classic matched-load result $S_{11}(0) = 0$.  At high frequencies $C$ short-circuits $R$ so $S_{11} \to -1$.
 
 
-```python
+```
 R = 50.0  # Ω  (shunt resistor = Z0 → matched at DC)
 C = 1e-9  # F  (1 nF shunt capacitor)
 Z0 = 50.0  # Ω  (reference impedance)
@@ -64,17 +62,8 @@ with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "whit
     d.add(elm.Ground())
 ```
 
-    RC corner frequency: 3.183 MHz
 
-
-
-
-![svg](ac_sweep_files/ac_sweep_3_1.svg)
-
-
-
-
-```python
+```
 models = {"resistor": Resistor, "capacitor": Capacitor, "ground": lambda: 0}
 
 net_rc = {
@@ -88,25 +77,21 @@ net_rc = {
         "R1,p2": "GND,p1",
         "C1,p2": "GND,p1",
     },
+    "ports": {"in": "R1,p1"},
 }
 
 circuit = compile_circuit(net_rc, models)
-y_dc = circuit()
-
-port_nodes = [circuit.port_map["R1,p1"]]
-run_ac = setup_ac_sweep(circuit.groups, circuit.sys_size, port_nodes, z0=Z0)
+y_dc = circuit.dc()
 
 freqs = jnp.logspace(6, 10, 300)  # 1 MHz → 10 GHz
-S = jax.jit(run_ac)(y_dc, freqs)
+S = jax.jit(lambda f: circuit.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc))(freqs)
 S11 = S[:, 0, 0]
 print(f"S shape: {S.shape}  (N_freqs, N_ports, N_ports)")
+
 ```
 
-    S shape: (300, 1, 1)  (N_freqs, N_ports, N_ports)
 
-
-
-```python
+```
 # Analytical reference
 omega = 2 * jnp.pi * freqs
 Y_total = 1.0 / Z0 + 1.0 / R + 1j * omega * C
@@ -134,15 +119,6 @@ plt.tight_layout()
 plt.show()
 ```
 
-    Max |ΔS11| = 4.00e-11
-
-
-
-
-![png](ac_sweep_files/ac_sweep_5_1.png)
-
-
-
 ---
 ## Part 2: RC Lowpass Filter — Two Ports
 
@@ -156,7 +132,7 @@ At low frequencies energy passes through ($|S_{21}| \approx 0\,\text{dB}$); at h
 Passivity requires $|S_{11}|^2 + |S_{21}|^2 \leq 1$ at all frequencies (for a lossless 2-port with a single incident wave).
 
 
-```python
+```
 R_s = 50.0  # Ω  series
 C_s = 1e-9  # F  shunt
 
@@ -174,17 +150,8 @@ with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "whit
     d.add(elm.Ground())
 ```
 
-    Approximate 3 dB frequency: 3.183 MHz
 
-
-
-
-![svg](ac_sweep_files/ac_sweep_7_1.svg)
-
-
-
-
-```python
+```
 # Port 1 is R1,p1 — a large shunt resistor (1 TΩ) registers it as a circuit node
 # with negligible effect on the result (contributes 1e-12 S vs 1/Z0 = 0.02 S).
 net_lp = {
@@ -200,23 +167,19 @@ net_lp = {
         "R1,p2": "C1,p1",  # junction = port 2 node
         "C1,p2": "GND,p1",
     },
+    "ports": {"in": "R1,p1", "out": "R1,p2"},
 }
 
 circuit_lp = compile_circuit(net_lp, models)
-y_dc_lp = circuit_lp()
+y_dc_lp = circuit_lp.dc()
 
-port_nodes_lp = [circuit_lp.port_map["R1,p1"], circuit_lp.port_map["R1,p2"]]
-run_ac_lp = setup_ac_sweep(circuit_lp.groups, circuit_lp.sys_size, port_nodes_lp, z0=Z0)
-
-S_lp = jax.jit(run_ac_lp)(y_dc_lp, freqs)
+S_lp = jax.jit(lambda f: circuit_lp.ac(ports=["in", "out"], freqs=f, z0=Z0, y_dc=y_dc_lp))(freqs)
 print(f"S shape: {S_lp.shape}  (N_freqs, 2, 2)")
+
 ```
 
-    S shape: (300, 2, 2)  (N_freqs, 2, 2)
 
-
-
-```python
+```
 # Analytical 2×2 reference: solve the nodal system at each frequency
 def _s_analytical_lp(f, R=R_s, C=C_s, Z0=Z0):
     omega = 2 * jnp.pi * f
@@ -268,21 +231,6 @@ plt.tight_layout()
 plt.show()
 ```
 
-    S-parameter max errors vs analytical:
-      S11: 9.99e-12
-      S12: 2.00e-11
-      S21: 2.00e-11
-      S22: 4.00e-11
-
-    Max |S11|² + |S21|² = 0.532210  (must be ≤ 1)
-
-
-
-
-![png](ac_sweep_files/ac_sweep_9_1.png)
-
-
-
 ---
 ## Part 3: Skin-Effect Resistor (`@fdomain_component`)
 
@@ -296,7 +244,7 @@ This impedance has no finite-order rational approximation, so it **cannot be exp
 Using `@fdomain_component`, we define the admittance matrix $Y(f)$ directly.  The AC sweep evaluates it at each frequency point inside the `jax.vmap` loop.
 
 
-```python
+```
 @fdomain_component(ports=("p1", "p2"))
 def SkinResistor(f: float, R0: float = 25.0, a: float = 1e-5):
     """Skin-effect resistor: Z(f) = R0 + a·√f  →  Y(f) = 1/Z(f)."""
@@ -320,13 +268,13 @@ net_skin = {
         "SR1,p2": "GND,p1",
         "Rbig,p2": "GND,p1",
     },
+    "ports": {"in": "SR1,p1"},
 }
 
 circuit_sk = compile_circuit(net_skin, models_skin)
-y_dc_sk = circuit_sk()
+y_dc_sk = circuit_sk.dc()
 
-run_ac_sk = setup_ac_sweep(circuit_sk.groups, circuit_sk.sys_size, [circuit_sk.port_map["SR1,p1"]], z0=Z0)
-S_sk = jax.jit(run_ac_sk)(y_dc_sk, freqs)
+S_sk = jax.jit(lambda f: circuit_sk.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc_sk))(freqs)
 S11_sk = S_sk[:, 0, 0]
 
 # Analytical: Z(f) is real so |Γ| = |Z - Z0| / |Z + Z0|
@@ -343,8 +291,8 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 ax1.semilogx(freqs / 1e6, np.array(Z_skin), "C0", lw=2)
 ax1.set_xlabel("Frequency (MHz)")
 ax1.set_ylabel("Impedance (Ω)")
-ax1.set_title(f"Skin-effect impedance: $Z(f) = {R0}\\,\\Omega + {a:.0e}\\sqrt{{f}}$")
-ax1.axhline(Z0, color="gray", ls="--", lw=1, label=f"$Z_0 = {Z0:.0f}\\,\\Omega$")
+ax1.set_title(f"Skin-effect impedance: $Z(f) = {R0}\,\Omega + {a:.0e}\sqrt{{f}}$")
+ax1.axhline(Z0, color="gray", ls="--", lw=1, label=f"$Z_0 = {Z0:.0f}\,\Omega$")
 ax1.legend()
 
 ax2.semilogx(freqs / 1e6, 20 * np.log10(np.abs(S11_sk)), "C0", lw=2, label="circulax")
@@ -361,17 +309,8 @@ print(
     f"\nS11 at DC   ({float(freqs[0]) / 1e6:.1f} MHz): {float(jnp.abs(S11_sk[0])):.4f}  (expected {float(jnp.abs(S11_sk_ref[0])):.4f})"
 )
 print(f"S11 at 10 GHz: {float(jnp.abs(S11_sk[-1])):.4f}  (expected {float(jnp.abs(S11_sk_ref[-1])):.4f})")
+
 ```
 
-    Max |ΔS11| (skin effect) = 1.78e-11
-
-
-
-
-![png](ac_sweep_files/ac_sweep_11_1.png)
-
-
-
-
-    S11 at DC   (1.0 MHz): 0.3332  (expected 0.3332)
-    S11 at 10 GHz: 0.3158  (expected 0.3158)
+!!! note "Advanced port-node workflows"
+    `circuit.ac(...)` is the normal API for named S-parameter ports. The lower-level `setup_ac_sweep()` helper remains available when you need to build custom port-node lists or transform-control loops around compiled groups.

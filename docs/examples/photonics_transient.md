@@ -11,7 +11,7 @@ Complex Envelopes: Optical signals oscillate at hundreds of terahertz ($193\text
 What to Expect: A high-power Gaussian pulse will be launched into the waveguide. In the linear regeime, the output is just a scaled, delayed version of the input, however with tpa_coeff > 0, pulse reshaping is observed. The peak of the Gaussian (high intensity) will be flattened or "squashed" due to the non-linear loss, while the tails (low intensity) pass through with standard linear attenuation.
 
 
-```python
+```
 import diffrax
 import jax
 import jax.numpy as jnp
@@ -21,15 +21,11 @@ from circulax import compile_circuit
 from circulax.components.base_component import PhysicsReturn, Signals, States, component
 from circulax.components.electronic import Resistor
 from circulax.components.photonic import OpticalSourcePulse
-from circulax.solvers import setup_transient
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:32:40,679:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-
-
-```python
+```
 print("--- DEMO: Photonic Transient (Flat Vector Fix) ---")
 
 jax.config.update("jax_enable_x64", True)
@@ -52,28 +48,26 @@ net_dict = {
         "R1": {"component": "resistor", "settings": {"R": 1.0}},
     },
     "connections": {"GND,p1": ("I1,p2", "R1,p2"), "I1,p1": "WG1,p1", "WG1,p2": "R1,p1"},
+    "ports": {"in": "I1,p1", "out": "R1,p1"},
 }
 
 print("1. Compiling...")
 circuit = compile_circuit(net_dict, models_map, is_complex=True)
 
 print("2. Solving DC Operating Point...")
-y_op_flat = circuit()
+y_op_flat = circuit.dc()
 
 print(f"   DC Converged. Norm: {jnp.linalg.norm(y_op_flat):.2e}")
-
-transient_sim = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
 
 t_max = 1.0e-9
 saveat = diffrax.SaveAt(ts=jnp.linspace(0, t_max, 500))
 
 print("3. Running Transient Simulation...")
-sol = transient_sim(
+sol = circuit.transient(
     t0=0.0,
     t1=t_max,
     dt0=1e-13,
     y0=y_op_flat,
-    args=(circuit.groups, circuit.sys_size),
     saveat=saveat,
     max_steps=100000,
     throw=False,
@@ -85,8 +79,8 @@ if sol.result == diffrax.RESULTS.successful:
 
     ts = sol.ts * 1e9
 
-    v_in = circuit.get_port_field(sol.ys, "I1,p1")
-    v_out = circuit.get_port_field(sol.ys, "R1,p1")
+    v_in = circuit.port(sol.ys, "in")
+    v_out = circuit.port(sol.ys, "out")
 
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 6))
     axes = axes.ravel()
@@ -112,22 +106,5 @@ if sol.result == diffrax.RESULTS.successful:
     axes[1].grid(True, alpha=0.3)
 else:
     print(f"❌ Simulation Failed: {sol.result}")
+
 ```
-
-    --- DEMO: Photonic Transient (Flat Vector Fix) ---
-    1. Compiling...
-
-
-    2. Solving DC Operating Point...
-
-
-       DC Converged. Norm: 1.92e+00
-    3. Running Transient Simulation...
-
-
-       ✅ Simulation Successful
-
-
-
-
-![png](photonics_transient_files/photonics_transient_4_4.png)

@@ -12,7 +12,7 @@ The Analytical Benchmark: Due to the recursive nature of the equivalent resistan
 * Node 3: $1.0V$
 
 
-```python
+```
 import time
 
 import jax
@@ -23,12 +23,8 @@ from circulax import compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:32:59,543:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-
-
-```python
+```
 net_dict = {
     "instances": {
         "GND": {"component": "ground"},
@@ -48,17 +44,18 @@ net_dict = {
         "R_S2,p2": ("R_P2,p1", "R_S3,p1"),
         "R_S3,p2": ("R_P3,p1", "R_TERM,p1"),
     },
+    "ports": {
+        "node1": "R_S1,p2",
+        "node2": "R_S2,p2",
+        "node3": "R_S3,p2",
+        "gnd": "R_TERM,p2",
+    },
 }
+
 ```
 
 
-
-![svg](resistor_ladder_files/resistor_ladder_4_0.svg)
-
-
-
-
-```python
+```
 jax.config.update("jax_enable_x64", True)
 
 models_map = {
@@ -74,26 +71,26 @@ print(f"   System Size: {circuit.sys_size} variables")
 print("\n2. Solving DC Operating Point...")
 
 start = time.time()
-y_dc = circuit()
+y_dc = circuit.dc()
 print(f"Time take = {time.time() - start:.4f}s")
 
 print("\n3. Verification:")
 
 
 def get_v(name):
-    return float(circuit.get_port_field(y_dc, name))
+    return float(circuit.port(y_dc, name))
 
 
-v_n1 = get_v("R_S1,p2")
-v_n2 = get_v("R_S2,p2")
-v_n3 = get_v("R_S3,p2")
+v_n1 = get_v("node1")
+v_n2 = get_v("node2")
+v_n3 = get_v("node3")
 
 print("   V_REF:    8.0 V")
 print(f"   Node 1:   {v_n1:.4f} V  (Expected: 4.0000 V)")
 print(f"   Node 2:   {v_n2:.4f} V  (Expected: 2.0000 V)")
 print(f"   Node 3:   {v_n3:.4f} V  (Expected: 1.0000 V)")
 
-v_gnd = get_v("R_TERM,p2")
+v_gnd = get_v("gnd")
 print(f"   Ground:   {v_gnd:.1e} V  (Expected: 0.0)")
 
 nodes = ["Node 1", "Node 2", "Node 3"]
@@ -129,37 +126,10 @@ if max_err < 1e-6:
     print("\n✅ DC Solver PASSED")
 else:
     print("\n❌ DC Solver FAILED")
+
 ```
 
-    1. Compiling Circuit...
 
-
-       System Size: 6 variables
-
-    2. Solving DC Operating Point...
-
-
-    Time take = 0.2672s
-
-    3. Verification:
-       V_REF:    8.0 V
-       Node 1:   4.0000 V  (Expected: 4.0000 V)
-       Node 2:   2.0000 V  (Expected: 2.0000 V)
-       Node 3:   1.0000 V  (Expected: 1.0000 V)
-       Ground:   -4.4e-25 V  (Expected: 0.0)
-
-
-
-
-![png](resistor_ladder_files/resistor_ladder_5_3.png)
-
-
-
-
-    ✅ DC Solver PASSED
-
-
-
-```python
+```
 
 ```
