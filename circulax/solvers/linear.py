@@ -779,9 +779,9 @@ backends: dict[str, type[CircuitLinearSolver]] = {
     "klu_split_factor": KLUSplitLinear,
     "klu_split_refactor": KLUSplitQuadratic if split_refactor_available else KLUSplitLinear,
 }
-# Default uses klu_split (split symbolic/numeric): wins for linear and mildly nonlinear
-# circuits; use klu_split_refactor explicitly for strongly nonlinear.
-backends["default"] = backends["klu_split_factor"]
+# Default uses the frozen-factor split KLU path. Use ``klu_split`` or
+# ``klu_split_refactor`` explicitly for refactor-capable nonlinear solves.
+backends["default"] = backends["klu_split_linear"]
 
 
 def analyze_circuit(
@@ -797,8 +797,9 @@ def analyze_circuit(
             structure and properties.
         num_vars (int): The total number of variables in the linear system.
         backend (str, optional): The name of the solver backend to use.
-            Supported backends are 'klu', 'klu_split', 'dense', and 'sparse'.
-            Defaults to 'default', which uses 'klu_split'.
+            Supported backends are 'klu', 'klu_split_linear', 'klu_split',
+            'dense', and 'sparse'. Defaults to 'default', which uses
+            'klu_split_linear'.
         is_complex (bool, optional): A flag indicating whether the circuit
             analysis involves complex numbers. Defaults to False.
 
