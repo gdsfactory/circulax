@@ -58,8 +58,8 @@ def build_net_map_kfnetlist(nl: kfnl.Netlist) -> tuple[dict[str, int], int]:
     """Map every port in a kfnetlist.Netlist to a node index.
 
     Each ``Net`` in the netlist becomes one electrical node.  Nets
-    containing a ``PortRef`` whose instance is ``"GND"`` or whose instance
-    component is ``"ground"`` are assigned node index 0.
+    containing a ground instance port, or a synthetic net label containing
+    ``"GND"``, are assigned node index 0.
 
     Returns:
         port_to_idx: ``{"Instance,port": node_id, ...}``
@@ -71,8 +71,11 @@ def build_net_map_kfnetlist(nl: kfnl.Netlist) -> tuple[dict[str, int], int]:
 
     for net in nl.nets:
         is_ground = any(
-            isinstance(m, kfnl.PortRef)
-            and (m.instance == "GND" or (m.instance in nl.instances and nl.instances[m.instance].component == "ground"))
+            (
+                isinstance(m, kfnl.PortRef)
+                and (m.instance == "GND" or (m.instance in nl.instances and nl.instances[m.instance].component == "ground"))
+            )
+            or (isinstance(m, kfnl.NetlistPort) and "GND" in m.name)
             for m in net
         )
         net_id = 0 if is_ground else current_idx
@@ -136,9 +139,11 @@ def sax_to_kfnetlist(
             settings_override[name] = raw_settings
 
     # --- ports ---
+    declared_ports: set[str] = set()
     top_port_targets: list[tuple[str, str]] = []
     for port_name, target in sax_dict.get("ports", {}).items():
         nl.create_port(port_name)
+        declared_ports.add(port_name)
         top_port_targets.append((port_name, target))
 
     # --- connectivity: union-find over SAX connections + GDSFactory nets ---
@@ -157,12 +162,19 @@ def sax_to_kfnetlist(
         if ra != rb:
             parent[ra] = rb
 
-    def _port_ref(port_str: str) -> kfnl.PortRef:
+    known_instances = set(sax_dict.get("instances", {}))
+
+    def _net_member_ref(port_str: str) -> kfnl.PortRef | kfnl.NetlistPort:
         if "," not in port_str:
             msg = f"Expected SAX port reference 'instance,port', got {port_str!r}"
             raise ValueError(msg)
-        inst, port = port_str.split(",", 1)
-        return kfnl.PortRef(instance=inst, port=port)
+        inst, _port = port_str.split(",", 1)
+        if inst not in known_instances:
+            if port_str not in declared_ports:
+                nl.create_port(port_str)
+                declared_ports.add(port_str)
+            return kfnl.NetlistPort(port_str)
+        return kfnl.PortRef(instance=inst, port=_port)
 
     for src, targets in sax_dict.get("connections", {}).items():
         if isinstance(targets, str):
@@ -193,7 +205,7 @@ def sax_to_kfnetlist(
     for root, members in groups.items():
         refs = [kfnl.NetlistPort(port_name) for port_name in top_ports_by_root.get(root, [])]
         for port_str in sorted(members):
-            refs.append(_port_ref(port_str))
+            refs.append(_net_member_ref(port_str))
         nl.create_net(*refs)
 
     nl.sort()

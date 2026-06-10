@@ -78,6 +78,49 @@ def test_sax_to_kfnetlist_preserves_top_level_ports_as_nets():
     assert any(any(isinstance(m, kfnl.PortRef) and m.instance == "R" and m.port == "p1" for m in net) for net in nl.nets)
 
 
+def test_sax_to_kfnetlist_preserves_synthetic_instance_port_aliases():
+    device = {
+        "instances": {
+            "V1": {"component": "source_voltage", "settings": {"V": 1.2}},
+            "R1": {"component": "resistor", "settings": {"R": 100.0}},
+            "GND": {"component": "ground"},
+        },
+        "connections": {
+            "V1,p1": "vdd,p1",
+            "V1,p2": "GND,p1",
+            "R1,p1": "vdd,p1",
+            "R1,p2": "GND,p1",
+        },
+        "ports": {"out": "vdd,p1"},
+    }
+
+    nl, _override = sax_to_kfnetlist(device)
+    pmap, _ = build_net_map_kfnetlist(nl)
+
+    assert "vdd" not in nl.instances
+    assert pmap["vdd,p1"] == pmap["V1,p1"]
+    assert pmap["vdd,p1"] == pmap["R1,p1"]
+    assert pmap["out"] == pmap["vdd,p1"]
+    assert any(any(isinstance(m, kfnl.NetlistPort) and m.name == "vdd,p1" for m in net) for net in nl.nets)
+
+
+def test_sax_to_kfnetlist_synthetic_ground_alias_maps_to_zero():
+    device = {
+        "instances": {"R1": {"component": "resistor", "settings": {"R": 100.0}}},
+        "connections": {"R1,p2": "local_GND,p1"},
+        "ports": {"in": "R1,p1"},
+    }
+
+    nl, _override = sax_to_kfnetlist(device)
+    pmap, num_nets = build_net_map_kfnetlist(nl)
+
+    assert "local_GND" not in nl.instances
+    assert pmap["local_GND,p1"] == 0
+    assert pmap["R1,p2"] == 0
+    assert pmap["R1,p1"] > 0
+    assert num_nets == 2
+
+
 def test_sax_to_kfnetlist_round_trip(simple_lrc_netlist):
     """SAX dict and converted kfnetlist produce identical compilation output."""
     sax_dict, models_map = simple_lrc_netlist
