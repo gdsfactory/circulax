@@ -28,7 +28,6 @@ import numpy as np
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "tests"))
 sys.path.insert(0, str(_REPO / "scripts"))
-sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 
 from benchmarks.ring.circulax.ring_one_case import build_netlist
 

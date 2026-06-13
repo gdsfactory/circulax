@@ -10,8 +10,6 @@ Models:
   - ``osdi``       — PSP103 via the bosdi FFI path to the compiled .osdi binary.
   - ``va``         — PSP103 compiled from Verilog-A via MIR→XLA lowering.
                      First-call JIT is ~320 s per function (DC + transient).
-                     Requires PYTHONPATH with local klujax/klujax_rs builds
-                     (see /home/cdaunt/code/circulax/circulax/.env).
   - ``jax-native`` — simplified square-law MOSFET (no OSDI / no VA), ~20% off PSP103.
 """
 

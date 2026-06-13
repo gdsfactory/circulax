@@ -16,8 +16,7 @@ Testbench:
   Vsrc(V_g) → g, GND → bi, GND → b. DC sweep V_g over [-2, 2] V step 0.5.
 
 Usage:
-    PYTHONPATH=$(grep PYTHONPATH .env | cut -d= -f2- | tr -d '"') \\
-      pixi run python benchmarks/mosvar/bench_circulax.py --variant osdi
+    pixi run python benchmarks/mosvar/bench_circulax.py --variant osdi
 """
 from __future__ import annotations
 

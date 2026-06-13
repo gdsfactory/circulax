@@ -14,7 +14,5 @@ from circulax.utils import apply_global_params, update_group_params, update_para
 # Install via: pip install circulax[verilog-a]
 try:
     from bosdi.circulax import osdi_component  # noqa: F401
-
-    from circulax.components.va_component import va_component  # noqa: F401
 except ImportError:
     pass

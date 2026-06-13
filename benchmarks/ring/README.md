@@ -6,7 +6,7 @@ time points.  Canonical N = 9 mirrors
 `/home/cdaunt/code/vacask/VACASK/benchmark/ring/`; other N values
 are generated alongside via `vacask_gen.py` / `ngspice_gen.py`.
 
-Four simulators are compared, all running the same PSP103 physics:
+Three simulators are compared, all running the same PSP103 physics:
 
 - **VACASK** — reference C++ simulator (`vacask --skip-embed
   --skip-postprocess`).  Loads `psp103v4.osdi` (compiled from
@@ -16,17 +16,7 @@ Four simulators are compared, all running the same PSP103 physics:
   OSDI 0.4 binaries; the harness compiles `psp103v4.osdi` into the
   ngspice working directory on demand.
 - **circulax-OSDI** — JAX-based, calls the same `psp103v4.osdi` binary
-  via the bosdi FFI shim.  Fast but **not** differentiable through the
-  device physics — the .osdi boundary breaks the JAX trace.
-- **circulax-VA** — fully differentiable: `psp103.va` is lowered via
-  `bosdi.va.compile_va_unopt_with_split` (openvaf-r
-  `--dump-unopt-mir-with-split`, ADCE + `simplify_cfg_no_phi_merge`)
-  + `bosdi.va.lower` into a JAX-traceable component, then run through
-  the same circulax DC + transient path.  JIT-compiled, so the first
-  call carries a one-time cost; subsequent calls reuse the compiled
-  XLA program (persistent cache at `~/.cache/jax/circulax_ring`).
-  Use this variant when you need `jax.grad(loss, params)` through the
-  device.
+  via the bosdi FFI shim.
 
 VACASK and circulax both run a fixed 50 ps step (20 000 points over
 1 µs); ngspice picks its own internal step.
@@ -39,13 +29,13 @@ VACASK and circulax both run a fixed 50 ps step (20 000 points over
 ## Latest results
 
 <!-- RESULTS -->
-| N | VACASK (µs/step) | ngspice (µs/step) | circulax-OSDI (µs/step) | circulax-VA (µs/step) | Freq VACASK (MHz) | OSDI Δf | VA Δf |
-|---|------------------|-------------------|-------------------------|-----------------------|-------------------|---------|-------|
-| 3 | 17.7 | 62.6 | 117.3 | 12944.4 (JIT 243s) | 910.1 | +0.4 % | +0.3 % |
-| 9 | 52.5 | 117.9 | 254.1 | 15044.1 (JIT 297s) | 289.6 | -0.2 % | -0.3 % |
-| 15 | 99.6 | 1502.8 | 285.8 | 20466.3 (JIT 473s) | 173.7 | +0.1 % | +0.0 % |
-| 21 | 121.4 | 2247.1 | 365.8 | 20822.7 (JIT 411s) | 124.1 | +0.2 % | +0.1 % |
-| 27 | 179.8 | 3126.3 | 474.3 | — | 96.5 | +0.0 % | — |
+| N | VACASK (µs/step) | ngspice (µs/step) | circulax-OSDI (µs/step) | Freq VACASK (MHz) | OSDI Δf |
+|---|------------------|-------------------|-------------------------|-------------------|---------|
+| 3 | 17.7 | 62.6 | 117.3 | 910.1 | +0.4 % |
+| 9 | 52.5 | 117.9 | 254.1 | 289.6 | -0.2 % |
+| 15 | 99.6 | 1502.8 | 285.8 | 173.7 | +0.1 % |
+| 21 | 121.4 | 2247.1 | 365.8 | 124.1 | +0.2 % |
+| 27 | 179.8 | 3126.3 | 474.3 | 96.5 | +0.0 % |
 _2026-05-18_
 <!-- /RESULTS -->
 

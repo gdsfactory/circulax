@@ -44,7 +44,6 @@ jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 
 _REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO / "tests"))
-sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 
 # Simulation parameters
 T1 = 200e-12      # 200 ps (short enough for fast bench, enough for oscillation)

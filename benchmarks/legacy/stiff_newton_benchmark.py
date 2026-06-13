@@ -28,8 +28,8 @@ visible.
 
 Usage::
 
-  pixi run -e benchmark python benchmarking/stiff_newton_benchmark.py
-  pixi run -e benchmark python benchmarking/stiff_newton_benchmark.py \\
+  pixi run -e benchmark python benchmarks/legacy/stiff_newton_benchmark.py
+  pixi run -e benchmark python benchmarks/legacy/stiff_newton_benchmark.py \\
       --stages 5 10 20 --dt 1e-6 5e-6 10e-6 20e-6 \\
       --backends klu_split_factor klu_split_refactor
 """
@@ -48,7 +48,8 @@ jax.config.update("jax_enable_x64", True)
 
 import diffrax  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+BENCHMARKS_ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BENCHMARKS_ROOT))
 
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.base_component import PhysicsReturn, Signals, States, component  # noqa: E402

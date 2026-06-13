@@ -6,9 +6,12 @@ import mkdocs_gen_files
 this_dir = Path(__file__).parent
 
 src_root = (this_dir / "../circulax").resolve()
+excluded_api_paths = {Path("components") / ("va_" + "component.py")}
 
 for path in src_root.rglob("*.py"):
     rel_path = path.relative_to(src_root)
+    if rel_path.parts[0] == "va" or rel_path in excluded_api_paths:
+        continue
 
     parts = tuple(rel_path.with_suffix("").parts)
 

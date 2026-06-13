@@ -18,8 +18,7 @@ Testbench:
   DC sweep V_AK over [-1.0, -0.5, 0.0, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9] V
 
 Usage:
-    PYTHONPATH=$(grep PYTHONPATH .env | cut -d= -f2- | tr -d '"') \\
-      pixi run python benchmarks/juncap200/bench_circulax.py --variant osdi
+    pixi run python benchmarks/juncap200/bench_circulax.py --variant osdi
 """
 from __future__ import annotations
 

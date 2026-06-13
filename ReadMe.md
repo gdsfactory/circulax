@@ -117,6 +117,7 @@ Straight = sax_component(sax.models.straight)   # that's it — ready to simulat
 - **DC operating point** — Newton-Raphson root-finding via [Optimistix](https://github.com/patrick-kidger/optimistix).
 - **Harmonic Balance** — periodic steady state directly in the frequency domain.
 - **AC sweep** — linearise at DC op-point, sweep frequency, return S-parameters.
+- **OSDI compact models** — load OpenVAF-compiled Verilog-A models through bosdi.
 - **Automatic differentiation** — differentiate through the solver for gradient-based inverse design.
 - **Hardware-agnostic** — CPU, GPU, or TPU with no code changes.
 - **Mixed-domain** — electronic and photonic circuits in a single netlist.

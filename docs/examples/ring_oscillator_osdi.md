@@ -57,7 +57,7 @@ Canonical parameter names are read directly from the OSDI binary, so
 `default_params` keys are resolved case-insensitively.
 
 We load a pre-extracted model card (`psp103_defaults.json`) that merges
-the VA-source defaults with VACASK ring-oscillator overrides. The NMOS
+the Verilog-A source defaults with VACASK ring-oscillator overrides. The NMOS
 and PMOS cards are identical except for `TYPE` (+1 vs −1).
 
 
@@ -74,7 +74,7 @@ for candidate in [DATA_DIR, Path.cwd().parents[1] / DATA_DIR]:
 
 PSP103_OSDI = DATA_DIR / "psp103.osdi"
 
-# Load the full 783-parameter model card (VA defaults + VACASK overrides).
+# Load the full 783-parameter model card (Verilog-A defaults + VACASK overrides).
 # NMOS (TYPE=1) and PMOS (TYPE=-1) share all other parameters.
 with open(DATA_DIR / "psp103_defaults.json") as f:
     nmos_defaults = json.load(f)

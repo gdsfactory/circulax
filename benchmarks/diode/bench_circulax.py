@@ -20,8 +20,7 @@ Circuit:
   benchmark's dt so per-step numbers are directly comparable.
 
 Usage:
-    PYTHONPATH="/home/cdaunt/code/gdsfactory/klujax/:/home/cdaunt/code/klujax_rs-static:/home/cdaunt/code/bosdi/src" \
-      pixi run python benchmarks/diode/bench_circulax.py --variant va
+    pixi run python benchmarks/diode/bench_circulax.py --variant va
 """
 from __future__ import annotations
 

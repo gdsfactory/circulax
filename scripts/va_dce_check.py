@@ -36,7 +36,6 @@ jax.config.update("jax_enable_x64", True)
 # Make sure circulax and bosdi are importable
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO))
-sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 
 from bosdi.circulax.va_component import va_component
 

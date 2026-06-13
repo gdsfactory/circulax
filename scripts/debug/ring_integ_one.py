@@ -28,7 +28,6 @@ jax.config.update("jax_enable_x64", True)
 
 _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "tests"))
-sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 sys.path.insert(0, str(_REPO / "scripts"))
 
 CSV_PATH = _REPO / "reports" / "ring_integ.csv"

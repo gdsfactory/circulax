@@ -6,7 +6,7 @@
 </picture>
 
 **A differentiable circuit simulator built on JAX.**
-Define netlists, run transient / DC / AC / harmonic-balance analysis, and differentiate through the solver for gradient-based optimization and inverse design. Circulax aims to be flexible multi-diciplined circuit simulator and offering a similar interface to the linear simulator [SAX](https://github.com/flaport/sax).
+Define netlists, run transient / DC / AC / harmonic-balance analysis, and differentiate through the solver for gradient-based optimization and inverse design. Circulax aims to be flexible multi-diciplined circuit simulator offering a similar interface to the linear s-parameter solver [SAX](https://github.com/flaport/sax).
 
 **[Read the Documentation here](https://gdsfactory.github.io/circulax/)**
 
@@ -117,6 +117,7 @@ Straight = sax_component(sax.models.straight)   # that's it — ready to simulat
 - **DC operating point** — Newton-Raphson root-finding via [Optimistix](https://github.com/patrick-kidger/optimistix).
 - **Harmonic Balance** — periodic steady state directly in the frequency domain.
 - **AC sweep** — linearise at DC op-point, sweep frequency, return S-parameters.
+- **OSDI compact models** — load OpenVAF-compiled Verilog-A models through bosdi.
 - **Automatic differentiation** — differentiate through the solver for gradient-based inverse design.
 - **Hardware-agnostic** — CPU, GPU, or TPU with no code changes.
 - **Mixed-domain** — electronic and photonic circuits in a single netlist.

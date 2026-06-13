@@ -179,6 +179,90 @@ def RingModulator(
     return f, q
 ```
 
+### Pattern: separating round-trip physics from CMT evaluation with `.setup`
+
+For components whose CMT parameters are derived from physical device parameters
+(coupling coefficient κ, effective index n_eff, loss α, length L), the
+`@<Component>.setup` decorator cleanly separates the **round-trip model** from
+the CMT evaluation loop. The setup runs inside the JAX trace so gradients flow
+through it correctly — e.g. `jax.grad(loss, kappa)` traverses the `sqrt(1 - κ²)`
+inside `.setup`.
+
+```python
+@component(ports=("in_", "thru"))
+def RingMod(signals, s, init, kappa=0.3, neff=2.4, alpha=1e-3, L=..., V_pi=2.0, V=0.0):
+    # init["a"], init["t"], init["phi"] were computed by the round-trip model below
+    phi = init["phi"] * (1.0 + V / V_pi)
+    H = (init["t"] - init["a"] * jnp.exp(1j * phi)) / (1 - init["t"] * init["a"] * jnp.exp(1j * phi))
+    ...
+
+@RingMod.setup
+def _round_trip(kappa=0.3, neff=2.4, alpha=1e-3, L=...):
+    """Derives a, t, phi₀ from physical device params."""
+    return {
+        "a":   jnp.exp(-alpha * L / 2.0),   # round-trip amplitude
+        "t":   jnp.sqrt(1.0 - kappa**2),    # through-coupling
+        "phi": 2.0 * jnp.pi * neff * L,     # round-trip phase at resonance
+    }
+```
+
+The full runnable example and gradient tests are in `tests/test_setup_decorator.py`.
+
+
+```
+# ── Round-trip → CMT RingMod: demonstrating @Component.setup ──────────────────
+# This cell is illustrative. Parts 1–5 below use RingModulator/RingModulatorEO
+# which fold the round-trip computation inline for conciseness.
+
+
+@component(ports=("in_", "thru"))
+def RingModSetup(
+    signals: Signals,
+    s: States,
+    init,
+    kappa: float = 0.3,
+    neff: float = 2.4,
+    alpha: float = 1e-3,
+    L: float = float(2 * jnp.pi * 5e-6),
+    V_pi: float = 2.0,
+    V: float = 0.0,
+) -> PhysicsReturn:
+    """All-pass ring response via CMT, using init coefficients from .setup."""
+    phi = init["phi"] * (1.0 + V / V_pi)
+    ejphi = jnp.exp(1j * phi)
+    H = (init["t"] - init["a"] * ejphi) / (1.0 - init["t"] * init["a"] * ejphi)
+    absorbed = (1.0 - jnp.abs(H) ** 2) * signals.in_
+    return {"in_": absorbed, "thru": signals.thru - H * signals.in_}, {}
+
+
+@RingModSetup.setup
+def _round_trip(
+    kappa: float = 0.3,
+    neff: float = 2.4,
+    alpha: float = 1e-3,
+    L: float = float(2 * jnp.pi * 5e-6),
+) -> dict:
+    """Round-trip model: derive CMT coefficients from physical device parameters."""
+    return {
+        "a": jnp.exp(-alpha * L / 2.0),   # round-trip amplitude (loss)
+        "t": jnp.sqrt(1.0 - kappa**2),    # through-coupling amplitude
+        "phi": 2.0 * jnp.pi * neff * L,   # round-trip phase at reference wavelength
+    }
+
+
+# Functional check: evaluate the component (a lossless all-pass ring has |H|=1 for any phi)
+rm_demo = RingModSetup(kappa=0.3, neff=2.4, alpha=1e-3)
+f_demo, _ = rm_demo(in_=1.0 + 0j, thru=0.0 + 0j)
+print(f"E_thru = {complex(f_demo['thru']):.4f}   |H| = {float(jnp.abs(f_demo['thru'])):.6f}")
+
+# Gradient of the through-field phase w.r.t. kappa flows through the .setup body:
+# kappa → t = sqrt(1-kappa^2) → H  (analytic dφ/dκ = -κ/t)
+grad_kappa = jax.grad(
+    lambda k: jnp.angle(RingModSetup(kappa=k)(in_=1.0 + 0j, thru=0.0 + 0j)[0]["thru"])
+)(0.3)
+print(f"d∠(E_thru)/dκ at κ=0.3 = {float(grad_kappa):.6f} rad  (non-zero gradient through .setup)")
+```
+
 ## Simulation parameters
 
 Parameters are taken from the reference silicon photonics ring modulator

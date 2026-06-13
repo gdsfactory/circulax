@@ -28,10 +28,10 @@ Controls tightened vs the ngspice comparison testbench:
 
 Usage
 -----
-  pixi run -e benchmark python benchmarking/diode_cascade_solver_benchmark.py
-  pixi run -e benchmark python benchmarking/diode_cascade_solver_benchmark.py \\
+  pixi run -e benchmark python benchmarks/legacy/diode_cascade_solver_benchmark.py
+  pixi run -e benchmark python benchmarks/legacy/diode_cascade_solver_benchmark.py \\
       --circuit ladder --stages 10 50 200
-  pixi run -e benchmark python benchmarking/diode_cascade_solver_benchmark.py \\
+  pixi run -e benchmark python benchmarks/legacy/diode_cascade_solver_benchmark.py \\
       --backends klu_split_factor klu_split_refactor klu_split
 """
 
@@ -54,7 +54,8 @@ jax.config.update("jax_enable_x64", True)
 
 import diffrax  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+BENCHMARKS_ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BENCHMARKS_ROOT))
 
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.base_component import PhysicsReturn, Signals, States, component  # noqa: E402

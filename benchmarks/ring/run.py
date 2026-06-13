@@ -1,4 +1,4 @@
-"""Ring-oscillator scaling sweep across circulax + VACASK + ngspice.
+"""Ring-oscillator scaling sweep across circulax OSDI + VACASK + ngspice.
 
 Invocations:
     pixi run python benchmarks/ring/run.py              # default N sweep
@@ -200,46 +200,6 @@ def run_circulax_osdi(n: int) -> dict:
     return r
 
 
-def run_circulax_xla(n: int) -> dict:
-    """Circulax with the simplified pure-JAX MOSFET (no OSDI, no FFI).
-
-    Isolates how much of the circulax wall time is attributable to
-    the OSDI FFI boundary.  The device model here is ~20 % off PSP103
-    quantitatively, so the oscillation frequency will differ too —
-    that's fine, we're measuring per-step cost, not physical fidelity.
-    """
-    import bench_circulax as cxmod
-    r = cxmod.run(n_stages=n, variant="jax-native")
-    r["simulator"] = "circulax_xla"
-    return r
-
-
-def run_circulax_va(n: int) -> dict:
-    """Circulax with PSP103 lowered from MIR → pure XLA (no FFI boundary).
-
-    First-call JIT dominates (~320 s DC + ~320 s transient per N value);
-    wall_s reports the post-JIT timed run; compile_s carries the JIT cost.
-    DC uses a VDD/2 warm start — see bench_circulax.py variant="va".
-    """
-    import bench_circulax as cxmod
-    r = cxmod.run(n_stages=n, variant="va")
-    r["simulator"] = "circulax_va"
-    return r
-
-
-def run_circulax_va_static(n: int) -> dict:
-    """Circulax with PSP103 lowered from MIR -> pure XLA, all params static.
-
-    Same lowering path as circulax_va but with ALL numeric parameters
-    (int switches + float process + geometry) baked as SCCP constants.
-    Not differentiable.
-    """
-    import bench_circulax as cxmod
-    r = cxmod.run(n_stages=n, variant="va_static")
-    r["simulator"] = "circulax_va_static"
-    return r
-
-
 def write_results(rows: list[dict]) -> None:
     fields = ["simulator", "n_stages", "variant", "status", "wall_s",
               "sim_reported_s", "compile_s", "dc_s", "n_steps",
@@ -255,7 +215,7 @@ def render_readme_table(rows: list[dict]) -> str:
     """Pivot by N: one row per stage count, columns per simulator.
 
     All timing columns are µs/step (= wall_s / n_steps × 1e6 for circulax;
-    sim_reported_s / n_steps × 1e6 for VACASK).  VA also shows JIT cost.
+    sim_reported_s / n_steps × 1e6 for VACASK).
     """
 
     def _fmt_us(r: dict) -> str:
@@ -269,16 +229,6 @@ def render_readme_table(rows: list[dict]) -> str:
         if isinstance(w, (int, float)) and isinstance(n, (int, float)) and n > 0:
             return f"{w / n * 1e6:.1f}"
         return "—"
-
-    def _fmt_va(r: dict) -> str:
-        """µs/step; append JIT cost in parens when available."""
-        base = _fmt_us(r)
-        if base in ("—",) or r.get("status") != "ok":
-            return base
-        c = r.get("compile_s")
-        if isinstance(c, (int, float)):
-            return f"{base} (JIT {c:.0f}s)"
-        return base
 
     def _fmt_freq(r: dict) -> str:
         return (f"{r['freq_MHz']:.1f}"
@@ -298,21 +248,18 @@ def render_readme_table(rows: list[dict]) -> str:
         by_n.setdefault(int(n), {})[r.get("simulator", "?")] = r
 
     header = (
-        "| N | VACASK (µs/step) | ngspice (µs/step) | circulax-OSDI (µs/step) | circulax-VA (µs/step) | circulax-VA-static (µs/step) | Freq VACASK (MHz) | OSDI Δf | VA Δf | VA-static Δf |\n"
-        "|---|------------------|-------------------|-------------------------|-----------------------|------------------------------|-------------------|---------|-------|--------------|"
+        "| N | VACASK (µs/step) | ngspice (µs/step) | circulax-OSDI (µs/step) | Freq VACASK (MHz) | OSDI Δf |\n"
+        "|---|------------------|-------------------|-------------------------|-------------------|---------|"
     )
     lines = [header]
     for n in sorted(by_n):
         v = by_n[n].get("vacask", {})
         ng = by_n[n].get("ngspice", {})
         c_osdi = by_n[n].get("circulax_osdi", {})
-        c_va = by_n[n].get("circulax_va", {})
-        c_va_static = by_n[n].get("circulax_va_static", {})
         ref_f = v.get("freq_MHz") if isinstance(v.get("freq_MHz"), (int, float)) else None
         lines.append(
-            f"| {n} | {_fmt_us(v)} | {_fmt_us(ng)} | {_fmt_us(c_osdi)} | {_fmt_va(c_va)} "
-            f"| {_fmt_va(c_va_static)} "
-            f"| {_fmt_freq(v)} | {_fmt_err(c_osdi, ref_f)} | {_fmt_err(c_va, ref_f)} | {_fmt_err(c_va_static, ref_f)} |"
+            f"| {n} | {_fmt_us(v)} | {_fmt_us(ng)} | {_fmt_us(c_osdi)} | "
+            f"{_fmt_freq(v)} | {_fmt_err(c_osdi, ref_f)} |"
         )
     return "\n".join(lines)
 
@@ -340,9 +287,7 @@ def main(argv: list[str] | None = None) -> None:
     for n in n_list:
         for label, fn in (("vacask", run_vacask),
                           ("ngspice", run_ngspice),
-                          ("circulax_osdi", run_circulax_osdi),
-                          ("circulax_va", run_circulax_va),
-                          ("circulax_va_static", run_circulax_va_static)):
+                          ("circulax_osdi", run_circulax_osdi)):
             print(f"[N={n}] {label}…", flush=True)
             try:
                 r = fn(n)
@@ -354,7 +299,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"    → {r.get('status', '?')}  "
                   f"wall={w if w is None else f'{w:.2f}s'}")
             # Persist incrementally so a late-stage crash doesn't lose the
-            # earlier (expensive) VA dicts.
+            # earlier benchmark rows.
             write_results(rows)
             update_readme(rows)
 

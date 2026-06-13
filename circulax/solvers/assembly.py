@@ -47,7 +47,7 @@ def _assemble_osdi_group(
     except ImportError as _bosdi_err:
         raise ImportError(
             "OSDI support requires the 'bosdi' package, which could not be imported. "
-            "Ensure bosdi is installed or its src/ directory is on PYTHONPATH. "
+            "Install circulax with the 'verilog-a' extra, or install bosdi directly. "
             "Note: bosdi is not available on all platforms (e.g. Windows)."
         ) from _bosdi_err
 

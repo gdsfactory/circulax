@@ -1,13 +1,10 @@
-"""3-way driver for the juncap200 DC sweep — VACASK / circulax-OSDI / circulax-VA.
+"""Driver for the juncap200 DC sweep — VACASK / circulax-OSDI.
 
 VACASK is the source of truth (industry-standard simulator on the IHP source
-file). circulax-OSDI exercises the compiled-binary path (no differentiability,
-acts as a sanity rail). circulax-VA is the differentiable path that we want
-to make match — every divergence here is a VA-lowering bug to squash.
+file). circulax-OSDI exercises the compiled-binary path through bosdi.
 
 Usage:
-    PYTHONPATH=$(grep PYTHONPATH .env | cut -d= -f2- | tr -d '"') \\
-      pixi run python benchmarks/juncap200/run.py
+    pixi run python benchmarks/juncap200/run.py
 
 Outputs:
     benchmarks/juncap200/results.csv   — wide-format (V_AK rows, simulator cols)
@@ -87,26 +84,21 @@ def run_circulax(variant: str) -> dict[float, float]:
         if isinstance(i, float):
             # bench_circulax returns y[VS,i_src], current INTO V+ of VS.
             # Negate so I_A is anode current, matching the VACASK column.
-            out[float(v)] = -float(i) if variant == "osdi" else float(i)
-            # VA static-eval already returns flow at port A directly (sign-correct);
-            # OSDI path returns Vsrc-current which we flip.
+            out[float(v)] = -float(i)
     return out
 
 
 def render_table(by_v: dict[float, dict[str, float]]) -> str:
     """Print a comparison table with deltas vs VACASK."""
-    sims = ("vacask", "osdi", "va")
     head = (
         f"{'V_AK [V]':>9} | "
-        f"{'VACASK [A]':>14} | {'OSDI [A]':>14} | {'VA [A]':>14} | "
-        f"{'OSDI/VACASK':>11} | {'VA/VACASK':>11}"
+        f"{'VACASK [A]':>14} | {'OSDI [A]':>14} | {'OSDI/VACASK':>11}"
     )
     lines = [head, "-" * len(head)]
     for v in sorted(by_v):
         row = by_v[v]
         vac = row.get("vacask")
         osdi = row.get("osdi")
-        va = row.get("va")
 
         def _fmt(x):
             return f"{x:>14.4e}" if isinstance(x, float) else f"{x!s:>14}"
@@ -119,8 +111,7 @@ def render_table(by_v: dict[float, dict[str, float]]) -> str:
             return f"{num / den:>11.4f}"
 
         lines.append(
-            f"{v:>9.3f} | {_fmt(vac)} | {_fmt(osdi)} | {_fmt(va)} | "
-            f"{_ratio(osdi, vac)} | {_ratio(va, vac)}"
+            f"{v:>9.3f} | {_fmt(vac)} | {_fmt(osdi)} | {_ratio(osdi, vac)}"
         )
     return "\n".join(lines)
 
@@ -129,14 +120,13 @@ def write_csv(by_v: dict[float, dict[str, float]]) -> None:
     """Wide-format CSV: V_AK column + one column per simulator."""
     with CSV_PATH.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["V_AK", "vacask_I_A", "osdi_I_A", "va_I_A"])
+        w.writerow(["V_AK", "vacask_I_A", "osdi_I_A"])
         for v in sorted(by_v):
             row = by_v[v]
             w.writerow([
                 v,
                 row.get("vacask", ""),
                 row.get("osdi", ""),
-                row.get("va", ""),
             ])
 
 
@@ -150,21 +140,17 @@ def main() -> None:
     print("[circulax-osdi] running…", flush=True)
     osdi = run_circulax("osdi")
 
-    print("[circulax-va]   running…", flush=True)
-    va = run_circulax("va")
-
     # Merge by V_AK key; VACASK floats may be 0.30000004 etc., so round to
     # mV grid before deduping.
     def _bucket(d):
         return {round(k, 3): v for k, v in d.items()}
 
-    vac_b, osdi_b, va_b = _bucket(vac), _bucket(osdi), _bucket(va)
-    all_v = sorted(set(vac_b) | set(osdi_b) | set(va_b))
+    vac_b, osdi_b = _bucket(vac), _bucket(osdi)
+    all_v = sorted(set(vac_b) | set(osdi_b))
     by_v: dict[float, dict[str, float]] = {
         v: {
             "vacask": vac_b.get(v),
             "osdi":   osdi_b.get(v),
-            "va":     va_b.get(v),
         }
         for v in all_v
     }

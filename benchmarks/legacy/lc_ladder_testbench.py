@@ -19,9 +19,9 @@ vs system size.  SaveAt uses only [t0, T_MAX] with a 2-node projection
 
 Usage
 -----
-  pixi run -e benchmark python benchmarking/lc_ladder_testbench.py
-  pixi run -e benchmark python benchmarking/lc_ladder_testbench.py --sections 100 1000
-  pixi run -e benchmark python benchmarking/lc_ladder_testbench.py \
+  pixi run -e benchmark python benchmarks/legacy/lc_ladder_testbench.py
+  pixi run -e benchmark python benchmarks/legacy/lc_ladder_testbench.py --sections 100 1000
+  pixi run -e benchmark python benchmarks/legacy/lc_ladder_testbench.py \
       --sections 100 --backends klu_split_refactor klu_split_factor
 """
 
@@ -43,7 +43,8 @@ jax.config.update("jax_enable_x64", True)
 
 import diffrax  # noqa: E402
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+BENCHMARKS_ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BENCHMARKS_ROOT))
 
 from circulax.compiler import compile_netlist  # noqa: E402
 from circulax.components.electronic import (  # noqa: E402

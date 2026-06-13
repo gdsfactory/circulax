@@ -1,4 +1,4 @@
-"""3-way driver for the mosvar DC sweep — VACASK / circulax-OSDI / circulax-VA.
+"""Driver for the mosvar DC sweep — VACASK / circulax-OSDI.
 
 Tier 1. mosvar is a 3-port MOS varactor; sweep V_g with bulk tied to GND.
 """
@@ -76,13 +76,12 @@ def run_circulax(variant: str) -> dict[float, float]:
 
 def render_table(by_v: dict[float, dict[str, float]]) -> str:
     head = (
-        f"{'V_g [V]':>9} | {'VACASK [A]':>14} | {'OSDI [A]':>14} | {'VA [A]':>14} | "
-        f"{'OSDI/VAC':>9} | {'VA/VAC':>9}"
+        f"{'V_g [V]':>9} | {'VACASK [A]':>14} | {'OSDI [A]':>14} | {'OSDI/VAC':>9}"
     )
     lines = [head, "-" * len(head)]
     for v in sorted(by_v):
         row = by_v[v]
-        vac, osdi, va = row.get("vacask"), row.get("osdi"), row.get("va")
+        vac, osdi = row.get("vacask"), row.get("osdi")
         def _fmt(x):
             return f"{x:>14.4e}" if isinstance(x, float) else f"{x!s:>14}"
         def _ratio(num, den):
@@ -92,8 +91,7 @@ def render_table(by_v: dict[float, dict[str, float]]) -> str:
                 return ("VAC=0" if abs(num) < 1e-30 else "den=0").rjust(9)
             return f"{num/den:>9.4f}"
         lines.append(
-            f"{v:>9.3f} | {_fmt(vac)} | {_fmt(osdi)} | {_fmt(va)} | "
-            f"{_ratio(osdi, vac)} | {_ratio(va, vac)}"
+            f"{v:>9.3f} | {_fmt(vac)} | {_fmt(osdi)} | {_ratio(osdi, vac)}"
         )
     return "\n".join(lines)
 
@@ -101,10 +99,10 @@ def render_table(by_v: dict[float, dict[str, float]]) -> str:
 def write_csv(by_v: dict[float, dict[str, float]]) -> None:
     with CSV_PATH.open("w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["V_g", "vacask_I_g", "osdi_I_g", "va_I_g"])
+        w.writerow(["V_g", "vacask_I_g", "osdi_I_g"])
         for v in sorted(by_v):
             row = by_v[v]
-            w.writerow([v, row.get("vacask", ""), row.get("osdi", ""), row.get("va", "")])
+            w.writerow([v, row.get("vacask", ""), row.get("osdi", "")])
 
 
 def main() -> None:
@@ -117,16 +115,13 @@ def main() -> None:
     print("[circulax-osdi] running…", flush=True)
     osdi = run_circulax("osdi")
 
-    print("[circulax-va]   running…", flush=True)
-    va = run_circulax("va")
-
     def _bucket(d):
         return {round(k, 3): v for k, v in d.items()}
 
-    vac_b, osdi_b, va_b = _bucket(vac), _bucket(osdi), _bucket(va)
-    all_v = sorted(set(vac_b) | set(osdi_b) | set(va_b))
+    vac_b, osdi_b = _bucket(vac), _bucket(osdi)
+    all_v = sorted(set(vac_b) | set(osdi_b))
     by_v = {
-        v: {"vacask": vac_b.get(v), "osdi": osdi_b.get(v), "va": va_b.get(v)}
+        v: {"vacask": vac_b.get(v), "osdi": osdi_b.get(v)}
         for v in all_v
     }
 

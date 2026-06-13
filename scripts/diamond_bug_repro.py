@@ -1,6 +1,5 @@
 import sys
 
-sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 
 from bosdi.va import compile_va_unopt_with_split, lower
 from bosdi.va.emitter import emit_source

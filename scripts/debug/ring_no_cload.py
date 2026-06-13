@@ -28,7 +28,6 @@ jax.config.update("jax_enable_x64", True)
 
 _TESTS = Path(__file__).resolve().parents[1] / "tests"
 sys.path.insert(0, str(_TESTS))
-sys.path.insert(0, "/home/cdaunt/code/bosdi/src")
 
 from fixtures.psp103_models import geom_settings, make_psp103_descriptors
 
