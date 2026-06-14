@@ -235,7 +235,7 @@ def test_circuit_high_level_hb():
     }
     circuit = compile_circuit(net_dict, models_map, backend="dense")
     y0 = circuit.dc()
-    y_time, y_freq = circuit.hb(freq=1e6, harmonics=1, y0=y0, max_iter=5)
+    y_time, y_freq = circuit.hb(freq=1e6, harmonics=1, y0=y0, max_steps=5)
 
     assert y_time.shape == (3, circuit.sys_size)
     assert y_freq.shape == (2, circuit.sys_size)

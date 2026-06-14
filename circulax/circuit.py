@@ -204,7 +204,25 @@ class Circuit:
         transient_solver: Any = None,
         **kwargs: Any,
     ) -> Any:
-        """Run transient analysis using the compiled circuit metadata."""
+        """Run transient (time-domain) analysis.
+
+        Args:
+            t0: Start time.
+            t1: End time.
+            dt0: Initial time step.
+            y0: Initial state vector. If ``None``, a DC solve is run first.
+            saveat: Times at which to save the solution. Accepts an array of
+                timestamps or a ``diffrax.SaveAt`` object.
+            params: Parameter updates (same format as :meth:`dc`).
+                Array-valued params are **not** supported — raises ``ValueError``.
+            transient_solver: Override the Diffrax solver (default BDF2).
+            **kwargs: Forwarded to ``setup_transient`` / Diffrax (e.g.
+                ``max_steps``).
+
+        Returns:
+            A ``diffrax.Solution`` with ``.ts`` and ``.ys`` attributes.
+
+        """
         from diffrax import SaveAt
 
         from circulax.solvers import setup_transient
@@ -235,7 +253,28 @@ class Circuit:
         params: dict[str, Any] | None = None,
         **param_updates: Any,
     ) -> jax.Array:
-        """Run an AC small-signal S-parameter sweep."""
+        """Run an AC small-signal S-parameter sweep.
+
+        Linearises at the DC operating point and sweeps over ``freqs``,
+        returning S-parameters for the given ports.
+
+        Args:
+            ports: Port name(s) to probe (e.g. ``"out"`` or ``["in", "out"]``).
+            freqs: Frequency array in Hz.
+            z0: Reference impedance (default 50 Ohm).
+            y_dc: DC operating point. If ``None``, a DC solve is run first.
+            params: Parameter updates (same format as :meth:`dc`).
+                Array-valued params are **not** supported.
+            **param_updates: Global parameter overrides.
+
+        Returns:
+            Complex S-parameter array of shape ``(len(freqs), n_ports, n_ports)``.
+
+        Raises:
+            ValueError: If the circuit is complex-valued (photonic). Use the
+                low-level ``setup_ac_sweep`` API for complex circuits.
+
+        """
         from circulax.solvers import setup_ac_sweep
 
         if self.solver.is_complex:
@@ -266,14 +305,37 @@ class Circuit:
         y0: jax.Array | None = None,
         params: dict[str, Any] | None = None,
         y_flat_init: jax.Array | None = None,
-        max_iter: int = 50,
-        tol: float = 1e-6,
+        rtol: float | None = None,
+        atol: float | None = None,
+        max_steps: int | None = None,
         osc_node: int | str | None = None,
         amplitude_tries: jax.Array | None = None,
         g_leak: float | None = None,
         **param_updates: Any,
     ) -> tuple[jax.Array, jax.Array]:
-        """Run harmonic balance and return ``(y_time, y_freq)``."""
+        """Run harmonic balance to find the periodic steady state.
+
+        Args:
+            freq: Fundamental frequency in Hz.
+            harmonics: Number of harmonics (K = 2*harmonics + 1 time samples).
+            y0: DC operating point. If ``None``, a DC solve is run first.
+            params: Parameter updates (same format as :meth:`dc`).
+                Array-valued params are **not** supported.
+            y_flat_init: Flat initial waveform, shape ``(K * sys_size,)``.
+                Overrides the automatic multi-start when ``osc_node`` is set.
+            rtol: Relative tolerance override.
+            atol: Absolute tolerance override.
+            max_steps: Max Newton iterations override.
+            osc_node: Port name or state index for oscillator multi-start.
+            amplitude_tries: Amplitudes to try when ``osc_node`` is set.
+            g_leak: Override the solver's regularisation conductance.
+            **param_updates: Global parameter overrides.
+
+        Returns:
+            ``(y_time, y_freq)`` — time samples ``(K, n)`` and normalised
+            Fourier coefficients ``(harmonics+1, n)`` complex.
+
+        """
         from circulax.solvers import setup_harmonic_balance
 
         updates = self._coerce_param_updates(params, param_updates)
@@ -298,7 +360,10 @@ class Circuit:
             osc_node=osc_idx,
             amplitude_tries=amplitude_tries,
         )
-        return run_hb(y0, y_flat_init=y_flat_init, max_iter=max_iter, tol=tol)
+        rtol = self.rtol if rtol is None else rtol
+        atol = self.atol if atol is None else atol
+        max_steps = self.max_steps if max_steps is None else max_steps
+        return run_hb(y0, y_flat_init=y_flat_init, max_steps=max_steps, rtol=rtol, atol=atol)
 
     def get_port_field(self, y: jax.Array, port: str) -> jax.Array:
         """Extract the (possibly complex) field at a named port.

@@ -156,7 +156,7 @@ def setup_harmonic_balance(
             Defaults to ``[0.3, 0.7, 1.5, 3.0, 7.0, 20.0]``.
 
     Returns:
-        ``run_hb(y_dc, *, y_flat_init=None, max_iter=50, tol=1e-6) -> (y_time, y_freq)``,
+        ``run_hb(y_dc, *, y_flat_init=None, max_steps=50, rtol=1e-6, atol=1e-6) -> (y_time, y_freq)``,
         compatible with ``jax.jit``.
 
     """
@@ -178,8 +178,9 @@ def setup_harmonic_balance(
         y_dc: Array,
         *,
         y_flat_init: Array | None = None,
-        max_iter: int = 50,
-        tol: float = 1e-6,
+        max_steps: int = 50,
+        rtol: float = 1e-6,
+        atol: float = 1e-6,
     ) -> tuple[Array, Array]:
         """Find the periodic steady state via Newton–Raphson on the HB residual.
 
@@ -190,8 +191,9 @@ def setup_harmonic_balance(
             y_flat_init: Optional flat initial waveform, shape ``(K * sys_size,)``.
                 Overrides the automatic multi-start strategy even when
                 ``osc_node`` was set at setup time.
-            max_iter: Maximum number of Newton iterations.
-            tol: Convergence tolerance on the infinity norm of the residual.
+            max_steps: Maximum number of Newton iterations.
+            rtol: Relative convergence tolerance.
+            atol: Absolute convergence tolerance.
 
         Returns:
             A two-tuple ``(y_time, y_freq)`` where:
@@ -226,10 +228,10 @@ def setup_harmonic_balance(
         def _solve(y_flat: Array) -> tuple[Array, Array]:
             # groups MUST be passed via args= — ImplicitAdjoint differentiates
             # only through explicit args; closure-captured variables give zero gradients.
-            hb_solver = optx.FixedPointIteration(rtol=tol, atol=tol)
+            hb_solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
             sol = optx.fixed_point(
                 newton_step, hb_solver, y_flat, args=groups,
-                max_steps=max_iter, throw=False,
+                max_steps=max_steps, throw=False,
             )
             y_flat_sol = sol.value
             y_time_sol = y_flat_sol.reshape(K, sys_size)

@@ -12,6 +12,7 @@ Components are pure Python functions with a decorator. They are automatically co
 | `@source` | Time-varying sources (AC, pulse, modulated optical) | ✓ | ✓ | ✓ |
 | `@fdomain_component` | Electrically frequency-dependent impedance (skin effect, wideband interconnect) | ✓ | ✗ | ✓ |
 | `sax_component` | Photonic models already written for the SAX library | ✓ | ✓ | ✓ |
+| `osdi_component` | Verilog-A compact models compiled with OpenVAF | ✓ | ✓ | ✗ |
 
 ---
 
@@ -132,6 +133,29 @@ def VoltageSourceAC(
 
 ---
 
+## `@Component.setup` — Deferred Initialisation
+
+When a component has expensive derived quantities that depend only on a subset of its parameters (e.g. round-trip coefficients in a ring resonator), use `@Component.setup` to compute them separately. The setup function runs inside the JAX trace, so gradients flow through it.
+
+Declare `init` as the third positional argument in the physics function, then register a setup function:
+
+```python
+@component(ports=("in_", "thru", "drop"))
+def RingMod(signals, s, init, kappa=0.3, neff=2.4, L=62.8, V_pi=2.0, V=0.0):
+    phi = init["phi"] * (1.0 + V / V_pi)
+    # ... use init["a"], init["t"], phi in CMT equations
+
+@RingMod.setup
+def _(kappa=0.3, neff=2.4, L=62.8):
+    a = jnp.exp(-1e-3 * L / 2.0)
+    t = jnp.sqrt(1.0 - kappa**2)
+    return {"a": a, "t": t, "phi": 2.0 * jnp.pi * neff * L}
+```
+
+The setup function only needs to declare the parameters it uses — extra physics params are silently dropped. See the [Ring Modulator example](examples/ring_modulator.md) for a full worked example with gradient verification.
+
+---
+
 ## `@fdomain_component` — Frequency-Domain Components
 
 For components whose admittance depends on the electrical signal frequency and cannot be expressed as an instantaneous time-domain relation.
@@ -239,6 +263,28 @@ Coupler = sax_component(sax_coupler)
 ```
 
 Use `sax_component` only for reusing existing SAX models. For new components, prefer the explicit `@component` pattern.
+
+---
+
+## `osdi_component` — Verilog-A Compact Models
+
+Load industry-standard Verilog-A models (PSP, BSIM, JUNCAP, etc.) compiled to `.osdi` binaries by [OpenVAF](https://openvaf.semimod.de/). Requires the optional `bosdi` package:
+
+```sh
+pip install circulax[verilog-a]
+```
+
+```python
+from circulax import osdi_component
+
+PSP103 = osdi_component(
+    osdi_path="psp103.osdi",
+    ports=("D", "G", "S", "B"),
+    default_params={"LEVEL": 103, "TNOM": 27.0, ...},
+)
+```
+
+OSDI models bypass the standard `@component` decorator — they are evaluated via FFI and use finite-difference sensitivities rather than AD. See the [OSDI Ring Oscillator](examples/ring_oscillator_osdi.md) and [PSP103 Parameter Fitting](examples/05_psp103_ring_param_fitting.md) examples.
 
 ---
 
