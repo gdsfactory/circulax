@@ -12,7 +12,7 @@ The Analytical Benchmark: Due to the recursive nature of the equivalent resistan
 * Node 3: $1.0V$
 
 
-```
+```python
 import time
 
 import jax
@@ -23,8 +23,11 @@ from circulax import compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource
 ```
 
+    WARNING:2026-06-23 01:06:55,108:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-```
+
+
+```python
 net_dict = {
     "instances": {
         "GND": {"component": "ground"},
@@ -55,7 +58,13 @@ net_dict = {
 ```
 
 
-```
+
+![svg](resistor_ladder_files/resistor_ladder_4_0.svg)
+
+
+
+
+```python
 jax.config.update("jax_enable_x64", True)
 
 models_map = {
@@ -129,7 +138,33 @@ else:
 
 ```
 
+    1. Compiling Circuit...
 
-```
+
+       System Size: 6 variables
+
+    2. Solving DC Operating Point...
+    Time take = 0.1522s
+
+    3. Verification:
+       V_REF:    8.0 V
+       Node 1:   4.0000 V  (Expected: 4.0000 V)
+       Node 2:   2.0000 V  (Expected: 2.0000 V)
+       Node 3:   1.0000 V  (Expected: 1.0000 V)
+       Ground:   -3.5e-25 V  (Expected: 0.0)
+
+
+
+
+![png](resistor_ladder_files/resistor_ladder_5_2.png)
+
+
+
+
+    ✅ DC Solver PASSED
+
+
+
+```python
 
 ```

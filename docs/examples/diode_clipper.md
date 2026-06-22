@@ -7,7 +7,7 @@ In this example, we will simulate a classic **Diode Clipper (Limiter)** circuit.
 From a simulation perspective, the Diode Clipper serves as a critical benchmark for testing non-linear solvers. As the input voltage crosses the diode's forward-bias threshold, the component's impedance changes rapidly—spanning orders of magnitude from "off" to "on." This behavior creates a stiff system of differential equations, requiring a robust, adaptive step-size controller to maintain numerical stability.
 
 
-```
+```python
 import time
 
 import diffrax
@@ -22,10 +22,13 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
+    WARNING:2026-06-23 01:05:56,474:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
 ## Defining the Netlist
 
 
-```
+```python
 vpp = 2.0
 net_dict = {
     "instances": {
@@ -63,8 +66,14 @@ net_dict = {
 
 
 
+![svg](diode_clipper_files/diode_clipper_4_0.svg)
 
-```
+
+
+
+
+
+```python
 models_map = {
     "resistor": Resistor,
     "diode": Diode,
@@ -130,9 +139,30 @@ else:
 
 ```
 
+    1. Compiling Circuit...
+
+
+       System Size: 4 variables
+    2. Solving DC Operating Point...
+
+
+       DC Solution (First 5): [0. 0. 0. 0.]
+    3. Running Transient Simulation...
+
+
+       ✅ Simulation Successful
+    Performed 591 steps performed in 0.75 seconds
 
 
 
-```
+
+![png](diode_clipper_files/diode_clipper_6_4.png)
+
+
+
+
+
+
+```python
 
 ```

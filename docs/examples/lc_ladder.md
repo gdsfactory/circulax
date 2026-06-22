@@ -18,7 +18,7 @@ Characteristic Impedance ($Z_0$): $\sqrt{L/C} = 50\Omega$
 Termination: If $R_{load} = Z_0$, reflections should be minimized. If $R_{load} \neq Z_0$, we expect distinct reflection patterns.
 
 
-```
+```python
 import time
 
 import diffrax
@@ -38,8 +38,11 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
+    WARNING:2026-06-23 01:06:10,363:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-```
+
+
+```python
 N_SECTIONS = 500
 T_MAX = 5 * N_SECTIONS * 0.5e-9
 FREQ = 5.0 / T_MAX
@@ -48,7 +51,7 @@ R_LOAD = 50.0
 ```
 
 
-```
+```python
 def create_lc_ladder(n_sections):
     """
     Generates a netlist for an L-C transmission line.
@@ -108,7 +111,13 @@ def create_lc_ladder(n_sections):
 ```
 
 
-```
+
+![svg](lc_ladder_files/lc_ladder_4_0.svg)
+
+
+
+
+```python
 models_map = {
     "resistor": Resistor,
     "capacitor": Capacitor,
@@ -187,7 +196,29 @@ else:
 
 ```
 
+    Generating 500-stage LC Ladder...
 
-```
+
+    Compilation finished in 1.3276s
+    System Matrix Size: 1004x1004 (1008016 elements)
+    Solving DC Operating Point...
+
+
+    Running Transient Simulation...
+
+
+       ✅ Simulation Successful
+    Simulation completed in 3.4256s
+    Total Steps: 19662
+
+
+
+
+![png](lc_ladder_files/lc_ladder_5_4.png)
+
+
+
+
+```python
 
 ```

@@ -13,7 +13,7 @@ Simulating a sweep in JAX requires a different mindset than standard Python loop
 * **Compilation**: The entire sweep loop is compiled into a single XLA kernel, executing thousands of voltage steps in milliseconds.
 
 
-```
+```python
 import time
 
 import jax
@@ -27,8 +27,11 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
+    WARNING:2026-06-23 01:06:19,793:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-```
+
+
+```python
 net_dict = {
     "instances": {
         "GND": {"component": "ground"},
@@ -57,7 +60,13 @@ net_dict = {
 ```
 
 
-```
+
+![svg](mos_diff_pair_files/mos_diff_pair_3_0.svg)
+
+
+
+
+```python
 models_map = {
     "nmos": NMOS,
     "resistor": Resistor,
@@ -109,7 +118,23 @@ plt.show()
 
 ```
 
+    1. Compiling...
 
-```
+
+    2. Running Sweep (1000 points)...
+    Sweeping DC Operating Point (with Continuation)...
+
+
+    Simulation Time: 0.232s
+
+
+
+
+![png](mos_diff_pair_files/mos_diff_pair_4_3.png)
+
+
+
+
+```python
 
 ```

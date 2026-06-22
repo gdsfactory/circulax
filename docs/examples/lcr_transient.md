@@ -15,7 +15,7 @@ Since $R < R_c$, the system is underdamped. When the voltage source is activated
 
 
 
-```
+```python
 import diffrax
 import jax
 import jax.numpy as jnp
@@ -26,8 +26,11 @@ from circulax.components.electronic import Capacitor, Inductor, Resistor, Voltag
 
 ```
 
+    WARNING:2026-06-23 01:06:49,782:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-```
+
+
+```python
 net_dict = {
     "instances": {
         "GND": {"component": "ground"},
@@ -47,17 +50,29 @@ net_dict = {
 
 ```
 
+
+
+![svg](lcr_transient_files/lcr_transient_3_0.svg)
+
+
+
 ## Visualize the nodes
 
 
-```
+```python
 from circulax.netlist import draw_circuit_graph
 
 draw_circuit_graph(netlist=net_dict);
 ```
 
 
-```
+
+![png](lcr_transient_files/lcr_transient_5_0.png)
+
+
+
+
+```python
 jax.config.update("jax_enable_x64", True)
 
 
@@ -138,7 +153,44 @@ plt.show()
 
 ```
 
+    Compiling...
 
-```
+
+    Total System Size: 6
+    Internal component groups, useful for advanced state inspection:
+    Group: capacitor
+      Count: 1
+      Var Indices Shape: (1, 2)
+      Sample Var Indices:[[1 0]]
+      Jacobian Rows Length: 1
+    Group: inductor
+      Count: 1
+      Var Indices Shape: (1, 3)
+      Sample Var Indices:[[3 1 4]]
+      Jacobian Rows Length: 1
+    Group: resistor
+      Count: 1
+      Var Indices Shape: (1, 2)
+      Sample Var Indices:[[2 3]]
+      Jacobian Rows Length: 1
+    Group: source_voltage
+      Count: 1
+      Var Indices Shape: (1, 3)
+      Sample Var Indices:[[2 0 5]]
+      Jacobian Rows Length: 1
+    2. Solving DC Operating Point...
+
+
+    3. Running Simulation...
+
+
+
+
+![png](lcr_transient_files/lcr_transient_6_3.png)
+
+
+
+
+```python
 
 ```

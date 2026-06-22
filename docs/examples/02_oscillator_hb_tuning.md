@@ -44,7 +44,7 @@ small amplitudes (negative conductance dominates) and absorbs energy at large am
 (cubic term dominates), creating a stable limit cycle.
 
 
-```
+```python
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -67,6 +67,9 @@ pio.renderers.default = "png"
 
 ```
 
+    WARNING:2026-06-23 01:07:07,606:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
 ## Defining the Van der Pol component
 
 Custom components are plain Python functions decorated with `@component`. The decorator
@@ -74,7 +77,7 @@ generates an Equinox module whose parameters (`mu`, `G0`) are JAX-traceable leav
 making the component compatible with `jax.vmap`, `jax.jacfwd`, and `jax.grad`.
 
 
-```
+```python
 @component(ports=("p1", "p2"))
 def VanDerPolElement(signals: Signals, s: States, mu: float = 2.0, G0: float = 0.01) -> PhysicsReturn:
     """Nonlinear two-terminal element with cubic I-V characteristic.
@@ -108,6 +111,10 @@ print(f"Expected limit-cycle amplitude: 2*sqrt(mu) = {2*np.sqrt(2.0):.3f} V  (at
 
 ```
 
+    VDP I at V=0.1 V : -0.001997 A  (expected -0.001997 A)
+    Expected limit-cycle amplitude: 2*sqrt(mu) = 2.828 V  (at mu=2, G0=0.01)
+
+
 ## Building and compiling the circuit
 
 All four elements connect between the same `top_node` and GND — they are in parallel.
@@ -119,7 +126,7 @@ The tuple syntax for connections (`"GND,p1": ("VDP,p2", "C1,p2", ...)`) joins mu
 ports to the same node in a single line — equivalent to writing each pair separately.
 
 
-```
+```python
 # ── Circuit parameters ────────────────────────────────────────────────────────
 L_val  = 1e-6    # H  (1 µH)
 C_val  = 1e-9    # F  (1 nF)
@@ -171,13 +178,27 @@ print(f"Named ports : {list(vdp_net['ports'])}")
 # Advanced initialization detail: the custom HB warm starts below need the flat
 # state-vector index of the oscillator port.
 osc_idx = circuit.port_map["osc"]
-print(f"Oscillator port: 'osc'")
+print("Oscillator port: 'osc'")
 
 # DC operating point: V=0 is the only fixed point (the VDP element has I(0)=0)
 y_dc = circuit.dc()
 print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (trivially zero)")
 
 ```
+
+    Tank resonant frequency : 5.0329 MHz
+    Tank Q-factor (Rdamp)   : 316.2
+    VDP negative conductance: -0.0200 S  (at mu=2, G0=0.01)
+    Tank loss conductance   : 0.000100 S  (1/Rdamp)
+    Net gain margin         : 200×  >> 1, oscillation guaranteed
+
+
+
+    System size : 3 unknowns
+    Named ports : ['osc']
+    Oscillator port: 'osc'
+    DC operating point: max|y_dc| = 0.00e+00 V  (trivially zero)
+
 
 ## Part 1 — Harmonic Balance finds the limit cycle
 
@@ -189,7 +210,7 @@ steady state **directly** by solving for the Fourier coefficients of the wavefor
 
 
 
-```
+```python
 N_harm = 7   # 7 harmonics → K = 15 time points per period
 K      = 2 * N_harm + 1
 
@@ -219,8 +240,20 @@ print(f"\nExpected amplitude (VdP limit cycle): ~2*sqrt(mu) = {2*np.sqrt(2.0):.3
 
 ```
 
+    y_time shape : (15, 3)  (K=15 time samples × 3 nodes)
+    y_freq shape : (8, 3)  (8 harmonics × 3 nodes)
 
-```
+    Oscillator port 'osc' harmonic amplitudes:
+      DC (0f0)       : 0.0000 V
+      Fundamental f0 : 2.9139 V
+      2nd harmonic   : 0.0000 V  (0.0% of fundamental)
+      3rd harmonic   : 0.2501 V  (8.6% of fundamental)
+
+    Expected amplitude (VdP limit cycle): ~2*sqrt(mu) = 2.828 V
+
+
+
+```python
 # ── Plot: time-domain waveform and harmonic spectrum ─────────────────────────
 T     = 1.0 / f0
 t_ns  = np.linspace(0.0, T * 1e9, K, endpoint=False)
@@ -265,6 +298,16 @@ print("Even harmonics (2f0, 4f0) are near-zero because I(-V) = -I(V) — the VDP
 
 ```
 
+
+
+![png](02_oscillator_hb_tuning_files/02_oscillator_hb_tuning_8_0.png)
+
+
+
+    The odd-harmonic dominance (f0, 3f0, 5f0) is a hallmark of the symmetric cubic nonlinearity.
+    Even harmonics (2f0, 4f0) are near-zero because I(-V) = -I(V) — the VDP element is odd.
+
+
 ## Part 2 — Gradient-based amplitude tuning
 
 Goal: find the value of μ such that the fundamental amplitude equals a target $A_{\text{target}}$.
@@ -277,7 +320,7 @@ rather than unrolling the Newton iterations.
 
 
 
-```
+```python
 A_target = 1.5  # V  (requires mu* = (A_target/2)^2 = 0.5625)
 
 # Fixed warm start for the loss function: sinusoidal at 3.5 V at osc_idx, all
@@ -336,8 +379,32 @@ print(f"\nOptimised mu = {mu_opt:.4f}  (analytical: {(A_target/2)**2:.4f})")
 
 ```
 
+    At mu=2.0:  loss = 1.9992 V²,  grad = 3.4345 V²/[mu]
+      Current amplitude ≈ 2.914 V,  target = 1.5 V
+      Positive gradient → decreasing mu reduces amplitude toward target
 
-```
+    Gradient descent (lr=0.05, starting from mu=3.0):
+
+
+      Step   0: mu = 2.5087,  loss = 4.018053,  A_fund = 3.2403 V
+
+
+      Step  20: mu = 0.5763,  loss = 0.013698,  A_fund = 1.5301 V
+
+
+      Step  40: mu = 0.5077,  loss = 0.000000,  A_fund = 1.5002 V
+
+
+      Step  60: mu = 0.5075,  loss = 0.000000,  A_fund = 1.4999 V
+
+
+      Step  79: mu = 0.5075,  loss = 0.000000,  A_fund = 1.4999 V
+
+    Optimised mu = 0.5075  (analytical: 0.5625)
+
+
+
+```python
 # ── Compute waveforms before and after optimisation ───────────────────────────
 _, yf_before = circuit.hb(freq=f0, harmonics=N_harm, y0=y_dc, params={"VDP.mu": jnp.array(2.0)}, osc_node="osc")
 yt_after, yf_after = circuit.hb(freq=f0, harmonics=N_harm, y0=y_dc, params={"VDP.mu": jnp.array(mu_opt)}, osc_node="osc")
@@ -387,6 +454,15 @@ print(f"Amplitude error after optimisation: {abs(A_after - A_target)*1000:.2f} m
 
 ```
 
+
+
+![png](02_oscillator_hb_tuning_files/02_oscillator_hb_tuning_11_0.png)
+
+
+
+    Amplitude error after optimisation: 0.11 mV
+
+
 ## Part 3 — Joint tuning: frequency and amplitude
 
 Now we solve the harder problem: simultaneously tune L, C, and μ so the oscillator
@@ -405,7 +481,7 @@ oscillation frequency, which is essential for convergence when L and C are chang
 
 
 
-```
+```python
 f_target = 8e6    # Hz — 8 MHz target (up from ~5 MHz)
 A_target_j = 1.0  # V  — 1 V fundamental amplitude
 
@@ -480,6 +556,62 @@ print(f"\nFinal: f={f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz),  L={L_o
 
 
 ```
+
+    Target frequency    : 8.0 MHz
+    Required L*C product: 3.958e-16 H·F
+    Starting L=1.00 µH, C=1.00 nF  → f0=5.033 MHz
+
+
+
+    Initial joint loss: 3.8006  (freq error + amplitude error)
+
+    Adam optimisation (200 steps, lr=0.05):
+
+
+      Step   0: loss=3.80062,  f=5.033 MHz,  L=0.951 µH,  C=1.051 nF,  mu=1.902
+
+
+      Step  50: loss=0.08338,  f=8.245 MHz,  L=0.235 µH,  C=1.588 nF,  mu=0.413
+
+
+      Step 100: loss=0.02942,  f=8.013 MHz,  L=0.223 µH,  C=1.769 nF,  mu=0.305
+
+
+      Step 150: loss=0.00059,  f=8.001 MHz,  L=0.221 µH,  C=1.787 nF,  mu=0.268
+
+
+      Step 199: loss=0.00005,  f=8.000 MHz,  L=0.221 µH,  C=1.791 nF,  mu=0.260
+
+    Final: f=7.9999 MHz  (target 8.0 MHz),  L=0.2209 µH,  C=1.7914 nF,  mu=0.2605
+
+
+    Pre-computing 51 HB solutions (stride=4)...
+
+
+      [  1/51] step   0 — f=5.03 MHz, A=2.914 V, mu=2.000
+
+
+      [ 11/51] step  40 — f=7.66 MHz, A=1.483 V, mu=0.496
+
+
+      [ 21/51] step  80 — f=7.92 MHz, A=1.221 V, mu=0.331
+
+
+      [ 31/51] step 120 — f=8.00 MHz, A=1.165 V, mu=0.287
+
+
+      [ 41/51] step 160 — f=8.00 MHz, A=1.129 V, mu=0.266
+
+
+      [ 51/51] step 200 — f=8.00 MHz, A=1.119 V, mu=0.260
+    Done.
+
+
+
+    Saved → examples/inverse_design/oscillator_optimisation.gif
+    Frames: 51   Duration: 4.2s at 12 fps
+    Tip: drag-and-drop directly into PowerPoint (Insert → Pictures).
+
 
 ![oscillator_optimisation.gif](oscillator_optimisation.gif)
 

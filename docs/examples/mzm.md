@@ -15,7 +15,7 @@ In this example, the vmap capabilities of the solver will be demonstrated to per
 In this netlist, they are terminated by "Loads" (Resistors), representing the matched impedance of a photodetector or optical power meter.
 
 
-```
+```python
 import time
 
 import jax
@@ -27,8 +27,11 @@ from circulax.components.electronic import Resistor
 from circulax.components.photonic import Grating, OpticalSource, OpticalWaveguide, Splitter
 ```
 
+    WARNING:2026-06-23 01:10:45,671:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-```
+
+
+```python
 net_dict = {
     "instances": {
         "GND": {"component": "ground"},
@@ -79,7 +82,13 @@ net_dict = {
 ```
 
 
-```
+
+![svg](mzm_files/mzm_3_0.svg)
+
+
+
+
+```python
 models_map = {
     "grating": Grating,
     "waveguide": OpticalWaveguide,
@@ -114,3 +123,16 @@ plt.grid(True)
 plt.show()
 
 ```
+
+    --- DEMO: Photonic Splitter & Grating Link (Wavelength Sweep) ---
+
+
+    Sweeping Wavelength...
+
+
+    Sweep time: 0.914s
+
+
+
+
+![png](mzm_files/mzm_4_3.png)

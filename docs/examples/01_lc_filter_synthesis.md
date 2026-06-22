@@ -38,7 +38,7 @@ Port1 ─── [L1] ─── junction ─── [L2] ─── Port2
 We start the optimiser from **deliberately wrong** values — roughly 3× off — and watch gradient descent converge to the Butterworth solution.
 
 
-```
+```python
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -72,6 +72,9 @@ plt.rcParams.update({
 
 ```
 
+    WARNING:2026-06-23 01:06:59,451:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
 ## 1. Butterworth analytical targets
 
 For a 3rd-order Butterworth prototype with normalised g-values [g₁, g₂, g₃] = [1, 2, 1], the T-section element values scale as:
@@ -85,7 +88,7 @@ $$|S_{21}(f)|^2 = \frac{1}{1 + (f/f_c)^{2N}} \quad (N = 3)$$
 which is maximally flat at DC and has a −3 dB point exactly at f_c.
 
 
-```
+```python
 # ── Butterworth prototype parameters ──────────────────────────────────────────
 Z0   = 50.0    # reference impedance (Ω)
 f_c  = 1e8     # cutoff frequency (Hz) = 100 MHz
@@ -112,8 +115,18 @@ print(f"  C1 = {C1_init*1e12:.1f} pF  ({C1_init/C_target:.1f}× target)")
 print(f"  L2 = {L2_init*1e9:.1f} nH   ({L2_init/L_target:.1f}× target)")
 ```
 
+    Butterworth targets (N=3, Z0=50 Ω, fc=100 MHz):
+      L1 = L2 = 79.5775 nH
+      C1      = 63.6620 pF
 
-```
+    Starting values:
+      L1 = 25.0 nH   (0.3× target)
+      C1 = 200.0 pF  (3.1× target)
+      L2 = 25.0 nH   (0.3× target)
+
+
+
+```python
 # ── Netlist: 3rd-order T-section LC lowpass ───────────────────────────────────
 #
 #  Rp1,p1 ── L1 ── junction ── L2 ── Rp2,p1
@@ -162,6 +175,12 @@ print(f"\nComponent groups: {list(circuit.groups.keys())}")
 
 ```
 
+    System size: 6 unknowns
+    Named AC ports: ['in', 'out']
+
+    Component groups: ['capacitor', 'inductor', 'resistor']
+
+
 ## 2. Optimisation strategy
 
 ### Why log-space?
@@ -183,7 +202,7 @@ $$\mathcal{L} = \frac{1}{N_f} \sum_{k=1}^{N_f} \left(|S_{21}(f_k)| - |S_{21}^{\t
 
 
 
-```
+```python
 # ── Frequency sweep ───────────────────────────────────────────────────────────
 freqs = jnp.logspace(7, 9, 400)   # 10 MHz → 1 GHz (log-spaced)
 
@@ -220,8 +239,11 @@ print(f"Initial loss: {float(loss_init):.6f}")
 
 ```
 
+    Initial loss: 0.057315
 
-```
+
+
+```python
 # ── Adam optimisation loop ────────────────────────────────────────────────────
 #
 # We JIT-compile value_and_grad once; subsequent calls reuse the compiled
@@ -262,8 +284,19 @@ for step in range(N_STEPS):
 L1_opt, C1_opt, L2_opt = np.exp(np.array(log_params))
 ```
 
+    Step   1: loss=0.057315  L1=26.28 nH  C1=190.25 pF  L2=26.28 nH
+    Step  50: loss=0.000136  L1=90.66 nH  C1=57.51 pF  L2=90.66 nH
+    Step 100: loss=0.000002  L1=80.49 nH  C1=63.10 pF  L2=80.49 nH
+    Step 150: loss=0.000000  L1=79.50 nH  C1=63.71 pF  L2=79.50 nH
+    Step 200: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
+    Step 250: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
 
-```
+
+    Step 300: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
+
+
+
+```python
 # ── Plot 1: S21 before / after optimisation vs Butterworth target ─────────────
 
 def compute_s21(L1, C1, L2):
@@ -307,7 +340,13 @@ plt.show()
 ```
 
 
-```
+
+![png](01_lc_filter_synthesis_files/01_lc_filter_synthesis_8_0.png)
+
+
+
+
+```python
 # ── Plot 2: Optimisation convergence ─────────────────────────────────────────
 
 param_history = np.array(param_history)   # shape: (N_STEPS, 3)
@@ -335,7 +374,13 @@ plt.show()
 ```
 
 
-```
+
+![png](01_lc_filter_synthesis_files/01_lc_filter_synthesis_9_0.png)
+
+
+
+
+```python
 # ── Recovered vs analytical values ────────────────────────────────────────────
 
 print("Recovered vs Analytical:")
@@ -358,6 +403,14 @@ power_sum = jnp.abs(S_opt[:, 0, 0])**2 + jnp.abs(S_opt[:, 1, 0])**2
 print(f"\nPassivity check: max(|S11|² + |S21|²) = {float(jnp.max(power_sum)):.6f}  (must be ≤ 1.0)")
 
 ```
+
+    Recovered vs Analytical:
+      L1: 79.58 nH  vs  79.58 nH  (0.0% error)
+      C1: 63.66 pF  vs  63.66 pF  (0.0% error)
+      L2: 79.58 nH  vs  79.58 nH  (0.0% error)
+
+    Passivity check: max(|S11|² + |S21|²) = 1.000000  (must be ≤ 1.0)
+
 
 ## Summary
 

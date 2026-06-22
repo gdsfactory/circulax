@@ -11,7 +11,7 @@ Complex Envelopes: Optical signals oscillate at hundreds of terahertz ($193\text
 What to Expect: A high-power Gaussian pulse will be launched into the waveguide. In the linear regeime, the output is just a scaled, delayed version of the input, however with tpa_coeff > 0, pulse reshaping is observed. The peak of the Gaussian (high intensity) will be flattened or "squashed" due to the non-linear loss, while the tails (low intensity) pass through with standard linear attenuation.
 
 
-```
+```python
 import diffrax
 import jax
 import jax.numpy as jnp
@@ -24,8 +24,11 @@ from circulax.components.photonic import OpticalSourcePulse
 
 ```
 
+    WARNING:2026-06-23 01:10:51,264:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
-```
+
+
+```python
 print("--- DEMO: Photonic Transient (Flat Vector Fix) ---")
 
 jax.config.update("jax_enable_x64", True)
@@ -108,3 +111,19 @@ else:
     print(f"❌ Simulation Failed: {sol.result}")
 
 ```
+
+    --- DEMO: Photonic Transient (Flat Vector Fix) ---
+    1. Compiling...
+    2. Solving DC Operating Point...
+
+
+       DC Converged. Norm: 1.92e+00
+    3. Running Transient Simulation...
+
+
+       ✅ Simulation Successful
+
+
+
+
+![png](photonics_transient_files/photonics_transient_4_3.png)

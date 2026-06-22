@@ -50,7 +50,7 @@ port voltages: $a = -j\,(E_i - E_o)/\sqrt{2/\tau_e}$.
 [Choi et al., OE 2015](https://opg.optica.org/DirectPDFAccess/D179E5F2-51D2-4CA2-AB8938DF5E6472DF_314277/oe-23-7-8762.pdf)*
 
 
-```
+```python
 import diffrax
 import jax
 import jax.numpy as jnp
@@ -64,10 +64,13 @@ from circulax.components.electronic import Resistor
 jax.config.update("jax_enable_x64", True)
 ```
 
+    WARNING:2026-06-23 01:10:57,184:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
 ## Component definitions
 
 
-```
+```python
 @source(ports=("p1", "p2"), states=("i_src",))
 def OpticalSourcePulseOnOff(
     signals: Signals,
@@ -209,7 +212,7 @@ def _round_trip(kappa=0.3, neff=2.4, alpha=1e-3, L=...):
 The full runnable example and gradient tests are in `tests/test_setup_decorator.py`.
 
 
-```
+```python
 # ── Round-trip → CMT RingMod: demonstrating @Component.setup ──────────────────
 # This cell is illustrative. Parts 1–5 below use RingModulator/RingModulatorEO
 # which fold the round-trip computation inline for conciseness.
@@ -263,13 +266,19 @@ grad_kappa = jax.grad(
 print(f"d∠(E_thru)/dκ at κ=0.3 = {float(grad_kappa):.6f} rad  (non-zero gradient through .setup)")
 ```
 
+    E_thru = 0.9998+0.0201j   |H| = 0.999999
+
+
+    d∠(E_thru)/dκ at κ=0.3 = -0.140432 rad  (non-zero gradient through .setup)
+
+
 ## Simulation parameters
 
 Parameters are taken from the reference silicon photonics ring modulator
 in [Choi et al., OE 2015](https://opg.optica.org/DirectPDFAccess/D179E5F2-51D2-4CA2-AB8938DF5E6472DF_314277/oe-23-7-8762.pdf).
 
 
-```
+```python
 c = 2.998e8  # m/s
 
 # Ring geometry and coupling
@@ -313,10 +322,19 @@ print(f"Ringing period     : T_osc = {T_osc * 1e12:.1f} ps  (~{3 * tau / T_osc:.
 print(f"Steady-state |T|   : {T_ss:.3f}  ({20 * np.log10(T_ss):.1f} dB)")
 ```
 
+    Ring circumference : L = 31.42 μm  (R = 5.0 μm)
+    Coupling lifetime  : τ_e = 16.8 ps
+    Loss lifetime      : τ_l = 13.0 ps
+    Photon lifetime    : τ   = 7.34 ps
+    Laser detuning     : Δf  = 52.4 GHz  (0.3 nm)  →  Δω·τ = 2.42
+    Ringing period     : T_osc = 19.1 ps  (~1.2 cycles during rise)
+    Steady-state |T|   : 0.925  (-0.7 dB)
+
+
 ## Netlist and compilation
 
 
-```
+```python
 rise_time = 1e-12  # 1 ps rise/fall — sharp enough to excite ring ringing clearly
 
 models_map = {
@@ -364,12 +382,18 @@ circuit = compile_circuit(net_dict, models_map, is_complex=True)
 print(f"System size: {circuit.sys_size} real nodes")
 ```
 
+    Compiling netlist...
+
+
+    System size: 6 real nodes
+
+
 ## DC operating point
 
 At $t = 0$ the source is off, so the DC operating point is trivially zero.
 
 
-```
+```python
 linear_strat = circuit.solver
 y0 = circuit.dc()
 
@@ -394,7 +418,7 @@ single step from spanning the source transition. This keeps the predictor
 accurate and Newton convergence fast.
 
 
-```
+```python
 t_end = 250e-12  # 250 ps
 num_points = 2500
 
@@ -423,13 +447,19 @@ else:
 
 ```
 
+    Running transient simulation...
+
+
+    Simulation successful
+
+
 ## Results
 
 The input and output fields are read through named top-level ports. The ring energy `Ring,a` is an internal state, so it is inspected by its component-state name.
 
 
 
-```
+```python
 ts_ps = sol.ts * 1e12
 
 E_in = circuit.port(sol.ys, "in")
@@ -492,6 +522,16 @@ print(f"Simulated steady-state |T|: {float(jnp.abs(E_out[mid]) / (jnp.abs(E_in[m
 print(f"Analytic  steady-state |T|: {T_ss:.3f}")
 ```
 
+
+
+![png](ring_modulator_files/ring_modulator_15_0.png)
+
+
+
+    Simulated steady-state |T|: 0.925
+    Analytic  steady-state |T|: 0.925
+
+
 ## Small-signal electro-optic bandwidth
 
 > **Note — time-domain is overkill here.**
@@ -524,8 +564,9 @@ is extracted from the last half of the simulation and normalised to the
 low-frequency value.
 
 
-```
+```python
 from circulax.components.electronic import Capacitor
+
 
 @source(ports=("p1", "p2"), states=("i_src",))
 def OpticalSourceStep(
@@ -614,7 +655,7 @@ def RingModulatorEO(
 ```
 
 
-```
+```python
 # ── Electrical RC parameters ──────────────────────────────────────────────
 V_bias = -2.0  # V   — DC reverse bias (negative = reverse-biased PN junction)
 V_ac = 0.2  # V   — small-signal swing (<<1, so response is linear)
@@ -706,8 +747,22 @@ print(f"DC |T| analytic    : {T_dc_analytic:.4f}")
 print(f"DC Δω·τ            : {x_dc:.3f}")
 ```
 
+    Electrical RC bandwidth : f_RC  = 15.9 GHz
+    Optical photon-lifetime : f_opt = 21.7 GHz
+    EO coefficient          : dω/dV = 2.0 × 2π GHz/V
 
-```
+    Compiling small-signal netlist...
+
+
+
+    DC node_ve voltage : -2.000 V  (expected -2.0 V)
+    DC |T| simulated   : 0.9142
+    DC |T| analytic    : 0.9142
+    DC Δω·τ            : 2.234
+
+
+
+```python
 freqs_GHz = np.linspace(1.0, 80, 10)
 N_periods = 10.0  # simulate this many AC periods per run
 n_save = 500  # save this many points in the readout window
@@ -749,8 +804,27 @@ print("Sweep complete.")
 
 ```
 
+    Running 10-point frequency sweep …
 
-```
+
+      2/10 done
+
+
+      4/10 done
+
+
+      6/10 done
+
+
+      8/10 done
+
+
+      10/10 done
+    Sweep complete.
+
+
+
+```python
 omega_m = 2.0 * np.pi * freqs_GHz * 1e9  # rad/s
 
 delta_omega_dc = 2.0 * np.pi * (float(f_operating) - float(f_resonance)) + v_to_wr * V_bias
@@ -829,6 +903,18 @@ fig.tight_layout()
 plt.show()
 ```
 
+    DC-biased detuning  Δf      : 48.4 GHz  (Δω·τ = 2.23)
+    Optical pole magnitude      : 53.1 GHz
+    Optical peak (no RC)        : 9.3 dB  at 53.7 GHz
+    Combined peak (RC + optical): 0.0 dB  at 1.0 GHz
+
+
+
+
+![png](ring_modulator_files/ring_modulator_20_1.png)
+
+
+
 ---
 ## Part 3: EO Bandwidth via Harmonic Balance
 
@@ -861,7 +947,7 @@ amps_hb = jax.jit(jax.vmap(hb_sweep_point))(sweep_freqs)
 
 
 
-```
+```python
 @source(ports=("p1", "p2"), states=("i_src",))
 def BiasedSinSource(
     signals: Signals,
@@ -937,8 +1023,15 @@ T_dc_hb = float(jnp.abs(E_out_dc_hb) / (jnp.abs(E_in_dc_hb) + 1e-20))
 print(f"\nDC |T| (HB netlist) : {T_dc_hb:.4f}  (transient: {T_dc_sim:.4f})")
 ```
 
+    Compiling HB netlist...
 
-```
+
+
+    DC |T| (HB netlist) : 0.9142  (transient: 0.9142)
+
+
+
+```python
 N_harm_hb = 5  # 5 harmonics → K = 11 time samples per period
 K_hb = 2 * N_harm_hb + 1
 f_demo = 1e9  # 1 GHz single-point demo
@@ -975,8 +1068,20 @@ print(f"P_out oscillation amplitude: {amp_demo:.4e} W  (peak-to-peak power modul
 
 ```
 
+    HB converged at 1 GHz.  y_time shape: (11, 18)
 
-```
+
+
+
+![png](ring_modulator_files/ring_modulator_23_1.png)
+
+
+
+    P_out oscillation amplitude: 4.4694e-03 W  (peak-to-peak power modulation)
+
+
+
+```python
 def hb_sweep_point(freq):
     """HB solve at one modulation frequency — vmappable over freq."""
     y_time, _ = circuit_hb.hb(
@@ -1054,6 +1159,25 @@ for f, a_tr, a_hb, a_an in zip(freqs_GHz[::5], amps_dB[::5], amps_hb_dB[::5], H_
 
 ```
 
+    Running vmapped HB sweep over 10 frequencies (1–50 GHz)...
+
+
+    Done.
+
+
+
+
+![png](ring_modulator_files/ring_modulator_24_2.png)
+
+
+
+
+    Freq (GHz)  | Transient (dB) | HB vmap (dB) | Analytic (dB)
+    ------------------------------------------------------------
+        1.0       |    +0.00        |   +0.00       |  +0.00
+       44.9       |    -0.56        |   -0.35       |  -0.56
+
+
 ---
 ## Part 4: Large-Signal NRZ Eye Diagram
 
@@ -1086,7 +1210,7 @@ JAX-compatible (jittable and vmappable) — driven by a 128-bit PRBS-like
 pattern.
 
 
-```
+```python
 @source(ports=("p1", "p2"), states=("i_src",))
 def NRZSource(
     signals: Signals,
@@ -1236,8 +1360,21 @@ T_dc_eye = float(
 print(f"DC: V_ve = {V_ve0:.3f} V  (expected {V_low_nrz:.1f} V),  |T| = {T_dc_eye:.4f}")
 ```
 
+    56 GBaud NRZ: T_bit = 17.86 ps,  τ = 7.34 ps  (T_bit/τ = 2.4)
+    Optical bandwidth: f_opt = 21.7 GHz  |  f_RC = 72 GHz  (optically limited)
+    Bias detuning: Δω·τ = 1.00 at V_bias = -2.0 V  (f_res_eye = f_op − 51.7 GHz)
+    Simulation: 128 bits, t_end = 2304 ps
+      V_low=-2.5V: α_v=0.9515, τ_l=8.4 ps, Δω·τ=0.65, |T|=0.557
+      V_high=-1.5V: α_v=0.9585, τ_l=9.8 ps, Δω·τ=1.35, |T|=0.806
 
-```
+    Compiling NRZ netlist...
+
+
+    DC: V_ve = -2.500 V  (expected -2.5 V),  |T| = 0.5367
+
+
+
+```python
 controller_nrz = diffrax.PIDController(
     rtol=1e-6,
     atol=1e-8,
@@ -1265,8 +1402,14 @@ ts_ps_nrz = sol_nrz.ts * 1e12
 
 ```
 
+    Running NRZ transient simulation (128 bits at 56 GBaud, t_end = 2304 ps)…
 
-```
+
+    Simulation successful
+
+
+
+```python
 def fold_eye(P_out, ts, t_start, T_bit, N_skip=8):
     """Fold optical power into a 3-period eye diagram, auto-centred on the crossing."""
     t_eye_start = t_start + N_skip * T_bit
@@ -1349,6 +1492,18 @@ fig.tight_layout()
 plt.show()
 ```
 
+
+
+![png](ring_modulator_files/ring_modulator_28_0.png)
+
+
+
+
+
+![png](ring_modulator_files/ring_modulator_28_1.png)
+
+
+
 ---
 ## Part 5: Advanced V_bias Sweep via `jax.vmap`
 
@@ -1364,7 +1519,7 @@ The four panels below show how the eye diagram changes as $V_\text{bias}$ shifts
 
 
 
-```
+```python
 # Pre-compute DC initial conditions for each V_bias (one Newton solve per point). This is cheap
 V_bias_sweep = jnp.array([-1.75, -2.0, -2.25, -2.5])
 
@@ -1414,8 +1569,14 @@ print(f"Done.  Output shape: {P_out_sweep.shape}  ({P_out_sweep.shape[0]} sweeps
 
 ```
 
+    Running jax.vmap over 4 V_bias values: [-1.75, -2.0, -2.25, -2.5] V
 
-```
+
+    Done.  Output shape: (4, 4000)  (4 sweeps × 4000 time points)
+
+
+
+```python
 fig, axes = plt.subplots(2, 2, figsize=(14, 8), sharey=True)
 axes_flat = axes.flatten()
 
@@ -1441,3 +1602,7 @@ fig.suptitle(
 fig.tight_layout()
 plt.show()
 ```
+
+
+
+![png](ring_modulator_files/ring_modulator_31_0.png)

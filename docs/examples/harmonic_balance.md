@@ -8,7 +8,7 @@ This notebook demonstrates the Harmonic Balance (HB) solver on two circuits:
 Unlike transient simulation, HB finds the **periodic steady state directly** in ~10–20 Newton steps.
 
 
-```
+```python
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -23,6 +23,9 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
+    WARNING:2026-06-23 01:06:02,141:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
 ---
 ## Part 1: Series LCR Resonator
 
@@ -34,7 +37,7 @@ The resonant frequency is $f_0 = 1 / (2\pi\sqrt{LC})$ and the $Q$-factor is $Q =
 At resonance the capacitor voltage is amplified by $Q$ relative to the drive.
 
 
-```
+```python
 # Circuit parameters
 R_val = 10.0  # Ω
 L_val = 1e-6  # H  (1 µH)
@@ -50,8 +53,13 @@ print(f"Q-factor           : {Q:.3f}")
 print(f"|H(jω₀)|           : {Q:.3f}  (capacitor voltage gain at resonance)")
 ```
 
+    Resonant frequency : 5.033 MHz
+    Q-factor           : 3.162
+    |H(jω₀)|           : 3.162  (capacitor voltage gain at resonance)
 
-```
+
+
+```python
 with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "white"}]), schemdraw.Drawing() as d:
     d.config(fontsize=13)
     Vs = d.add(elm.SourceSin().up().label("$V_s$\n1 V", loc="left"))
@@ -68,7 +76,13 @@ with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "whit
 ```
 
 
-```
+
+![svg](harmonic_balance_files/harmonic_balance_4_0.svg)
+
+
+
+
+```python
 # Netlist: Vs -> R -> L -> C -> GND
 lcr_net = {
     "instances": {
@@ -103,8 +117,12 @@ print(f"Named ports: {list(lcr_net['ports'])}")
 
 ```
 
+    System size: 6 variables
+    Named ports: ['in', 'out']
 
-```
+
+
+```python
 # DC operating point (zero for a purely AC circuit)
 y_dc = circuit.dc()
 
@@ -117,8 +135,12 @@ print(f"y_freq shape : {y_freq.shape}  ({N_harmonics + 1} harmonics × {num_vars
 
 ```
 
+    y_time shape : (11, 6)  (K=11 time points × 6 variables)
+    y_freq shape : (6, 6)  (6 harmonics × 6 variables)
 
-```
+
+
+```python
 K = 2 * N_harmonics + 1
 T = 1.0 / f_drive
 t_ns = np.linspace(0, T * 1e9, K, endpoint=False)  # nanoseconds
@@ -149,12 +171,22 @@ print(f"|V_out @ f_drive| = {vout_amp[1]:.4f} V  (expected Q={Q:.4f} V at resona
 
 ```
 
+
+
+![png](harmonic_balance_files/harmonic_balance_7_0.png)
+
+
+
+    |V_in  @ f_drive| = 1.0000 V  (expected 1.0000 V)
+    |V_out @ f_drive| = 3.1623 V  (expected Q=3.1623 V at resonance)
+
+
 ### Validation against the analytical transfer function
 
 We sweep frequency and compare $|H(j\omega)|$ from the analytical formula with the HB result (a single point at $f_\text{drive}$).
 
 
-```
+```python
 freqs = np.logspace(5, 8, 500)  # 100 kHz → 100 MHz
 w = 2 * np.pi * freqs
 H = 1.0 / (1 - w**2 * L_val * C_val + 1j * w * R_val * C_val)
@@ -171,6 +203,12 @@ ax.grid(True, which="both", alpha=0.3)
 plt.tight_layout()
 plt.show()
 ```
+
+
+
+![png](harmonic_balance_files/harmonic_balance_9_0.png)
+
+
 
 ### Frequency Sweep with `jax.vmap`
 
@@ -195,7 +233,7 @@ y_freq_sweep = jax.jit(jax.vmap(hb_solve_freq))(sweep_freqs)
 
 
 
-```
+```python
 # A thin wrapper that exposes freq as a JAX argument, making the function vmappable.
 def hb_solve_freq(freq):
     _, y_freq = circuit.hb(
@@ -249,6 +287,29 @@ for f, Hv in zip(sweep_freqs, H_hb_sweep):
 
 ```
 
+    Sweep frequencies: ['1.762 MHz', '2.367 MHz', '3.181 MHz', '4.274 MHz', '5.744 MHz', '7.718 MHz', '10.371 MHz', '13.936 MHz', '18.727 MHz', '25.165 MHz']
+
+
+
+
+![png](harmonic_balance_files/harmonic_balance_11_1.png)
+
+
+
+
+    |H(jω)| at sweep points:
+      1.762 MHz:  HB = 1.1306,  analytical = 1.1306
+      2.367 MHz:  HB = 1.2612,  analytical = 1.2612
+      3.181 MHz:  HB = 1.5799,  analytical = 1.5799
+      4.274 MHz:  HB = 2.5834,  analytical = 2.5834
+      5.744 MHz:  HB = 2.1242,  analytical = 2.1242
+      7.718 MHz:  HB = 0.6964,  analytical = 0.6964
+      10.371 MHz:  HB = 0.3020,  analytical = 0.3020
+      13.936 MHz:  HB = 0.1487,  analytical = 0.1487
+      18.727 MHz:  HB = 0.0775,  analytical = 0.0775
+      25.165 MHz:  HB = 0.0416,  analytical = 0.0416
+
+
 ---
 ## Part 2: F-domain equivalents of Capacitor and Inductor
 
@@ -268,7 +329,7 @@ $$Y_C(k f_0)(V_{1,k}-V_{2,k}) = jk\omega_0 C\,(V_{1,k}-V_{2,k})$$
 directly — these are identical. The same identity holds for the inductor.
 
 
-```
+```python
 from circulax import fdomain_component
 
 
@@ -309,8 +370,16 @@ print(f"  Y_C = {Y_C:.4e} S  (Im > 0 → capacitive)")
 print(f"  Y_L = {Y_L:.4e} S  (Im < 0 → inductive)")
 ```
 
+    CapacitorFD._is_fdomain = True
+    InductorFD._is_fdomain  = True
 
-```
+    At f_res = 5.033 MHz:
+      Y_C = 0.0000e+00+3.1623e-02j S  (Im > 0 → capacitive)
+      Y_L = 0.0000e+00-3.1623e-02j S  (Im < 0 → inductive)
+
+
+
+```python
 # Identical topology to the time-domain LCR — only the C and L models change.
 lcr_fd_net = {
     "instances": {
@@ -355,8 +424,23 @@ print(f"y_time_fd shape: {y_time_fd.shape}")
 
 ```
 
+    Time-domain LCR  →  system size = 6 variables  (nodes + i_L + i_src)
+    F-domain LCR     →  system size = 5 variables  (nodes + i_src, no i_L state)
 
-```
+
+
+    /home/cdaunt/code/circulax/circulax/circulax/circuit.py:468: UserWarning: Complex-mode auto-detection failed for group (TypeError('_build_fdomain_component.<locals>.solver_call() takes 3 positional arguments but 4 were given')); defaulting to real. Pass is_complex=True to compile_circuit() if this is a photonic/complex-valued circuit.
+      if _group_outputs_complex(group):
+
+
+    DC operating point (f-domain): max|y_dc| = 0.00e+00 V
+
+
+    y_time_fd shape: (11, 5)
+
+
+
+```python
 vin_td = np.array(circuit.port(y_time, "in"))
 vout_td = np.array(circuit.port(y_time, "out"))
 vin_fd = np.array(circuit_fd.port(y_time_fd, "in"))
@@ -399,6 +483,16 @@ plt.show()
 
 ```
 
+    Max |ΔV_in|  (time-domain vs f-domain) = 5.38e-18 V
+    Max |ΔV_out| (time-domain vs f-domain) = 3.16e-10 V
+
+
+
+
+![png](harmonic_balance_files/harmonic_balance_15_1.png)
+
+
+
 ---
 ## Part 3: Diode Half-Wave Clipper
 
@@ -410,7 +504,7 @@ A pure transient simulation would need to run for many cycles before the diode's
 settles; HB finds the periodic state directly.
 
 
-```
+```python
 with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "white"}]), schemdraw.Drawing() as d:
     d.config(fontsize=13)
     Vs2 = d.add(elm.SourceSin().up().label("$V_s$\n2 V", loc="left"))
@@ -425,7 +519,13 @@ with plt.style.context(["default", {"axes.grid": True, "figure.facecolor": "whit
 ```
 
 
-```
+
+![svg](harmonic_balance_files/harmonic_balance_17_0.svg)
+
+
+
+
+```python
 f_clip = 1e3  # 1 kHz — low enough that diode junction sees quasi-static operation
 V_clip = 2.0  # V (peak) — enough to forward-bias the diode
 R_clip = 1e3  # Ω series resistor
@@ -461,8 +561,11 @@ print(f"Converged. y_time shape: {yt_clip.shape}")
 
 ```
 
+    Converged. y_time shape: (21, 5)
 
-```
+
+
+```python
 K_clip = 2 * N_clip + 1
 T_clip = 1.0 / f_clip
 t_ms = np.linspace(0, T_clip * 1e3, K_clip, endpoint=False)
@@ -512,3 +615,22 @@ for k in range(N_clip + 1):
     print(f"  {label:4s}: {vout_spec[k]:.4f} V")
 
 ```
+
+
+
+![png](harmonic_balance_files/harmonic_balance_19_0.png)
+
+
+
+    Output harmonic amplitudes:
+      DC  : 0.3823 V
+      1f0 : 0.6375 V
+      2f0 : 0.3454 V
+      3f0 : 0.0752 V
+      4f0 : 0.0471 V
+      5f0 : 0.0368 V
+      6f0 : 0.0089 V
+      7f0 : 0.0203 V
+      8f0 : 0.0029 V
+      9f0 : 0.0118 V
+      10f0: 0.0070 V

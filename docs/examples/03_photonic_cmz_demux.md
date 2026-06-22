@@ -16,6 +16,12 @@ A single-stage MZI has a sinusoidal transfer function — its passband rolls off
 
 
 
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_1_0.png)
+
+
+
+
+
 
 ### Design equations (Horst et al. 2013)
 
@@ -47,7 +53,7 @@ Paper-derived initial values use coupling `(0.5, 0.29, 0.08)` for the root — d
 With 11 tunable parameters, finite-difference gradient estimation costs **12 circuit solves** per gradient step. `jax.grad` computes the exact gradient for all 11 parameters in **~2 solves** (forward + backward). For a photonic integrated circuit with 100+ elements, backprop is the only practical route to optimisation.
 
 
-```
+```python
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -174,6 +180,14 @@ TARGET_WLS = jnp.array([1285.0, 1300.0, 1315.0, 1330.0])   # nm
 Y_GUESS    = jnp.ones(circuit.sys_size * 2)   # flat initial guess for Newton-Raphson
 ```
 
+    WARNING:2026-06-23 01:08:01,408:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
+    System size: 25 real nodes  (50 complex DOFs)
+    Component groups: ['dc', 'resistor', 'source', 'waveguide']
+    Detector ports: ['det1', 'det2', 'det3', 'det4']
+
+
 ## Trainable parameters
 
 There are **11 trainable parameters** in total:
@@ -208,7 +222,7 @@ All short arms are fixed at 250.0 µm and are not trained — only the long arm 
 Coupling coefficients live in [0, 1] while arm lengths are in the range 250–280 µm. Adam's adaptive per-parameter learning rate normalises these automatically: it divides each gradient by a running estimate of its second moment, so coupling and length updates are implicitly rescaled without any manual tuning.
 
 
-```
+```python
 def _parameter_updates(params, wavelength_nm=None):
     """Map the optimizer vector to high-level Circuit parameter updates."""
     k_r1, k_r2, k_r3, k_a1, k_a2, k_b1, k_b2, L_r1a, L_r2a, L_a1, L_b1 = params
@@ -319,6 +333,31 @@ print(f"\nPaper-design mean contrast: {diag_init.mean()*100:.1f}%  (random = 25%
 
 ```
 
+    Generated 8 starting points (start 0 = paper design, rest random):
+      idx     k_r1      k_r2      k_r3      k_a1      k_a2      k_b1      k_b2     L_r1a     L_r2a      L_a1      L_b1
+       0     0.500     0.290     0.080     0.500     0.500     0.500     0.500   264.246   278.492   257.123   257.532  ← paper
+       1     0.227     0.758     0.849     0.785     0.670     0.871     0.242   265.958   281.069   252.767   261.685
+       2     0.485     0.153     0.728     0.245     0.429     0.441     0.834   268.223   278.211   259.405   253.268
+       3     0.823     0.207     0.578     0.776     0.560     0.541     0.167   264.990   277.252   253.563   257.337
+       4     0.560     0.238     0.319     0.796     0.710     0.517     0.201   268.614   276.201   257.250   260.512
+       5     0.492     0.296     0.187     0.775     0.593     0.252     0.779   264.098   275.081   252.488   260.583
+       6     0.609     0.523     0.691     0.289     0.457     0.164     0.111   262.926   277.407   254.651   253.153
+       7     0.470     0.394     0.424     0.754     0.496     0.742     0.394   264.991   279.241   252.433   254.306
+
+    Computing initial power matrix for start 0 (paper design)...
+
+
+
+    Paper-design initial power routing matrix:
+                  Det_1     Det_2     Det_3     Det_4
+      1285 nm     0.113     0.431     0.001     0.455
+      1300 nm     0.333     0.001     0.506     0.160
+      1315 nm     0.002     0.522     0.159     0.318
+      1330 nm     0.518     0.113     0.367     0.003
+
+    Paper-design mean contrast: 6.9%  (random = 25%, perfect = 100%)
+
+
 ## Why the 2-stage root gives a flatter passband
 
 A **single-stage MZI** has the transfer function:
@@ -339,7 +378,7 @@ In practice, the CMZ topology enables closer channel spacing (smaller δλ) with
 Note that the initial contrast of ~7% is **lower** than the simple MZI starting point — the paper-derived couplings are designed for the final optimised device, not for the pre-optimisation state. The gradient optimiser quickly finds the correct arm lengths to make these couplings work together.
 
 
-```
+```python
 def plot_power_matrix(power_matrix, title, ax=None):
     """Plot a 4×4 power routing matrix as an annotated heatmap."""
     if ax is None:
@@ -380,7 +419,18 @@ print("starting point. Backpropagation will find the arm lengths that make them 
 ```
 
 
-```
+
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_7_0.png)
+
+
+
+    The initial state routes power almost randomly — the paper-designed
+    coupling coefficients are optimised for the final geometry, not this
+    starting point. Backpropagation will find the arm lengths that make them work.
+
+
+
+```python
 # ── Multi-wavelength loss ──────────────────────────────────────────────────
 # Sample 5 wavelengths per channel across a ±6 nm in-band window. This makes
 # passband FLATNESS an explicit objective: the optimiser is rewarded only if
@@ -433,8 +483,30 @@ print()
 print("Non-zero gradients confirm the full circuit is differentiable end-to-end.")
 ```
 
+    Computing loss and gradients at paper-design start...
 
-```
+
+      Initial loss:          0.7213  (uniform routing ≈ 0.56, perfect = 0.0)
+      Mean in-band contrast: 17.2%
+
+      Per-parameter gradient norms:
+        d(loss)/d(k_r1    ) = +0.130879
+        d(loss)/d(k_r2    ) = +0.047594
+        d(loss)/d(k_r3    ) = -0.598358
+        d(loss)/d(k_a1    ) = +0.000000
+        d(loss)/d(k_a2    ) = +0.000000
+        d(loss)/d(k_b1    ) = -0.000000
+        d(loss)/d(k_b2    ) = -0.000000
+        d(loss)/d(L_r1a   ) = +0.499313
+        d(loss)/d(L_r2a   ) = -0.447510
+        d(loss)/d(L_a1    ) = -0.274215
+        d(loss)/d(L_b1    ) = +0.493607
+
+    Non-zero gradients confirm the full circuit is differentiable end-to-end.
+
+
+
+```python
 # ── Multi-start vmap training ──────────────────────────────────────────────
 # All N_STARTS Adam trajectories run in parallel under a single jax.lax.scan,
 # jit-compiled end-to-end. vmap batches the per-trajectory state (params,
@@ -517,8 +589,40 @@ for name, p0, pf in zip(param_names, params_init, params):
     print(f"{name:8s}  {float(p0):10.4f}  {float(pf):10.4f}  {float(pf - p0):+10.4f}")
 ```
 
+    Training 8 parallel starts × 2000 Adam steps (lr=0.02)...
 
-```
+
+      Finished in 57.4 s
+
+
+
+    Final mean in-band contrast per start (winner: start 0):
+      start 0 (paper):  84.76%   (MSE loss 0.0360)  ← WINNER
+      start 1:  63.15%   (MSE loss 0.1925)
+      start 2:  60.74%   (MSE loss 0.1783)
+      start 3:  78.28%   (MSE loss 0.0607)
+      start 4:  56.43%   (MSE loss 0.2548)
+      start 5:  67.20%   (MSE loss 0.1330)
+      start 6:  63.43%   (MSE loss 0.1802)
+      start 7:  71.66%   (MSE loss 0.1002)
+
+    Winner (start 0) parameters — initial → final:
+    Name         Initial       Final       Delta
+    k_r1          0.5000      0.5090     +0.0090
+    k_r2          0.2900      0.5040     +0.2140
+    k_r3          0.0800      0.1230     +0.0430
+    k_a1          0.5000      0.5000     +0.0000
+    k_a2          0.5000      0.5000     -0.0000
+    k_b1          0.5000      0.5000     -0.0000
+    k_b2          0.5000      0.5000     -0.0000
+    L_r1a       264.2460    264.0061     -0.2399
+    L_r2a       278.4920    278.8279     +0.3359
+    L_a1        257.1230    257.1387     +0.0157
+    L_b1        257.5316    257.2765     -0.2551
+
+
+
+```python
 # ── Convergence plots ──────────────────────────────────────────────────────
 # Left:  all N_STARTS MSE-loss trajectories (winner highlighted) — shows how
 #        random starts either converge or stall in an asymmetric basin.
@@ -557,7 +661,13 @@ plt.show()
 ```
 
 
-```
+
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_10_0.png)
+
+
+
+
+```python
 sweep_wls = jnp.linspace(1260.0, 1360.0, 300)
 
 def get_raw_power_sweep(params, wavelengths):
@@ -592,6 +702,44 @@ print()
 print(f"Improvement: {diag_init.mean()*100:.1f}% -> {np.mean(diag_final)*100:.1f}%")
 
 ```
+
+    Computing final power routing matrix (winner)...
+
+
+
+
+![png](03_photonic_cmz_demux_files/03_photonic_cmz_demux_11_1.png)
+
+
+
+
+    Final routing contrast (diagonal):
+      Det_1 <- 1285 nm : 87.0%
+      Det_2 <- 1300 nm : 88.6%
+      Det_3 <- 1315 nm : 87.4%
+      Det_4 <- 1330 nm : 88.1%
+      Mean contrast: 87.8%
+
+    Improvement: 6.9% -> 87.8%
+
+
+    Pre-computing 44 wavelength sweeps for animation...
+
+
+      [  1/44] step 0
+
+
+      [ 16/44] step 25
+
+
+      [ 31/44] step 266
+
+
+    Done.
+
+
+    Saved → examples/inverse_design/cmz_optimisation.gif  (44 frames)
+
 
 ![cmz_optimisation.gif](cmz_optimisation.gif)
 

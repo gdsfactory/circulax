@@ -24,7 +24,7 @@ In this notebook we:
    matching-network L/C values — obtaining analytic gradients at each step.
 
 
-```
+```python
 import jax
 import jax.nn as jnn
 import jax.numpy as jnp
@@ -53,6 +53,12 @@ print("JAX backend:", jax.default_backend())
 
 ```
 
+    WARNING:2026-06-23 01:09:49,124:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
+    JAX backend: cpu
+
+
 ## Phase 1 — Differentiable HEMT Model
 
 Standard SPICE transistor models use piecewise branching:
@@ -78,7 +84,7 @@ undefined at the transition.  The fix is smooth approximations:
 The model is a **Modified Curtice-Quadratic** with three-terminal gate/drain/source ports.
 
 
-```
+```python
 @component(ports=("g", "d", "s"))
 def HEMT(signals, s,
          beta=0.012, Vp=-2.0, lam=0.05, alpha=4.0,
@@ -128,8 +134,15 @@ gm = float(jax.grad(lambda vg: hemt_test(g=vg, d=3.0, s=0.0)[0]["d"])(0.0))
 print(f"gm at Vgs=0, Vds=3 V: {gm*1e3:.2f} mS")
 ```
 
+    Ids at Vgs=0 V,   Vds=3 V: 55.20 mA  (Idss)
+    Ids at Vgs=-2.5 V (below pinch-off): 0.006 µA  (should be ~0)
 
-```
+
+    gm at Vgs=0, Vds=3 V: 55.20 mS
+
+
+
+```python
 def compute_Ids(Vgs, Vds,
                beta=0.012, Vp=-2.0, lam=0.05, alpha=4.0):
     sp_scale = 10.0
@@ -192,6 +205,15 @@ print("No kinks or discontinuities → Jacobian is well-defined everywhere.")
 
 ```
 
+
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_4_0.png)
+
+
+
+    No kinks or discontinuities → Jacobian is well-defined everywhere.
+
+
 ## Phase 2 — PA Circuit Architecture
 
 
@@ -211,7 +233,13 @@ The optimal load resistance for maximum class-A output power is `Ropt ≈ (Vdd �
 The matching networks are initialised deliberately off-resonance; the optimizer will tune them.
 
 
-```
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_6_0.png)
+
+
+
+
+```python
 # ── Frequency and harmonic parameters ──────────────────────────────────────────────
 F0      = 5e9    # Hz  (5 GHz)
 N_HARM  = 7      # harmonics → K = 15 time points per period
@@ -317,8 +345,13 @@ def _run_pa_hb(params, y_flat_init=None):
 
 ```
 
+    System size : 15 unknowns
+    Named ports : ['gate', 'drain', 'load']
+    Internal L_choke current state index: 9
 
-```
+
+
+```python
 y_dc = circuit.dc()
 
 V_gate     = float(circuit.port(y_dc, "gate"))
@@ -346,6 +379,20 @@ print(f"\n  The output L-match must transform 50 Ω → {Ropt:.0f} Ω at 5 GHz."
 
 ```
 
+    DC Operating Point
+      V_gate  = -0.0025 V   (Vgg = -0.5 V)
+      V_drain = 3.0000 V   (Vdd = 3.0 V)
+      I_drain = 55.06 mA  (from L_choke inductor state)
+      Ids check = 55.06 mA  (from HEMT formula directly)
+      Pdc     = 165.2 mW
+
+      Ropt ≈ (Vdd - Vknee) / (2 Idq)
+           = (3.0 - 0.3) / (2 × 55.1 mA)
+           = 24.5 Ω  (optimal load for class-A max power)
+
+      The output L-match must transform 50 Ω → 25 Ω at 5 GHz.
+
+
 ## Phase 2 — Forward PA Simulation via Harmonic Balance
 
 **How Harmonic Balance works here:**
@@ -367,7 +414,7 @@ a dense LU factorisation.
 periodic response. Tiling the DC solution `y_dc` across K time steps is a reliable warm start.
 
 
-```
+```python
 # compute_powers: differentiable PA metrics from HB Fourier coefficients.
 # y_freq[k, node] is the normalised complex Fourier coefficient at harmonic k.
 # The time-domain peak amplitude is  2 * |y_freq[k, node]|  for k >= 1.
@@ -411,8 +458,21 @@ print(f"  3rd harmonic at drain: {float(2*jnp.abs(drain_ref[3]))*1e3:.1f} mV  ({
 
 ```
 
+    Test point: +10 dBm available input → V_amplitude = 2.000 V
 
-```
+
+
+      Pout = 13.7 dBm
+      Gain = 3.7 dB
+      PAE  = 7.3%
+
+      Drain voltage swing : 1.974 V peak
+      Gate voltage swing  : 1.111 V peak
+      3rd harmonic at drain: 6.4 mV  (0.3% of fundamental)
+
+
+
+```python
 Pin_dBm_vals = np.linspace(-10, 22, 17)
 V_amp_vals   = np.sqrt(8.0 * 50.0 * 10.0 ** (Pin_dBm_vals / 10.0) * 1e-3)
 
@@ -439,8 +499,20 @@ for Pin_dBm, V_in in zip(Pin_dBm_vals, V_amp_vals):
 
 ```
 
+    Pin sweep (detuned matching network):
+       Pin (dBm)    Pout (dBm)   Gain (dB)   PAE (%)
+    --------------------------------------------------
 
-```
+
+             -10          -6.1         3.9       0.1
+              -2           1.9         3.9       0.5
+               6           9.8         3.8       3.2
+              14          16.8         2.8      11.5
+              22          18.6        -3.4     -38.3
+
+
+
+```python
 fig = make_subplots(
     rows=1, cols=3,
     subplot_titles=("Output Power vs Input Power", "Gain Compression", "Power Added Efficiency (detuned matching)"),
@@ -489,6 +561,12 @@ fig.show()
 
 ```
 
+
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_12_0.png)
+
+
+
 ## Phase 3 — Gradient-Based Matching Network Optimisation
 
 **Why matching matters for PAE:**
@@ -514,7 +592,7 @@ extra HB solves.
 positive and cover several decades without constraint handling.
 
 
-```
+```python
 # ── Target: maximise PAE at +12 dBm input (moderate saturation) ─────────────────────
 V_target = float(jnp.sqrt(8.0 * 50.0 * 10.0 ** (12.0 / 10.0) * 1e-3))
 print(f"Optimisation target: Pin = +12 dBm  (V_source amplitude = {V_target:.3f} V)")
@@ -567,8 +645,24 @@ print(f"\n{'All non-zero: implicit differentiation through HB is working.' if al
 
 ```
 
+    Optimisation target: Pin = +12 dBm  (V_source amplitude = 2.518 V)
 
-```
+
+    Initial PAE at +12 dBm: 10.3%
+
+
+
+    Analytic ∂PAE/∂param  (non-zero → gradient flows through HB):
+      ∂PAE/∂L_in  = +0.0616  per nH
+      ∂PAE/∂C_in  = -0.2025  per pF
+      ∂PAE/∂L_out = +0.0410  per nH
+      ∂PAE/∂C_out = -0.1864  per pF
+
+    All non-zero: implicit differentiation through HB is working.
+
+
+
+```python
 LR        = 3e-2
 optimizer  = optax.adam(learning_rate=LR)
 log_params = log_params_0
@@ -607,8 +701,36 @@ print(f"  C_out = {C_out_opt_val*1e12:.3f} pF   (was {C_out_init*1e12:.1f} pF)")
 print(f"\nFinal PAE: {pae_history[-1]:.1f}%  (initial: {pae_history[0]:.1f}%)")
 ```
 
+    Adam optimisation  (lr = 0.03,  200 steps)
+      Step   PAE (%)    L_in (nH)    C_in (pF)    L_out (nH)    C_out (pF)
+    ----------------------------------------------------------------------
 
-```
+
+         0      10.3        0.309        0.485         0.309         0.485
+
+
+        50      25.1        1.322        0.148         0.832         0.266
+
+
+       100      28.1        1.732        0.068         0.800         0.462
+
+
+       150      29.0        1.865        0.038         0.799         0.475
+
+
+       199      29.3        1.926        0.025         0.796         0.485
+
+    Optimised matching network:
+      L_in  = 1.926 nH   (was 0.3 nH)
+      C_in  = 0.025 pF   (was 0.5 pF)
+      L_out = 0.796 nH   (was 0.3 nH)
+      C_out = 0.485 pF   (was 0.5 pF)
+
+    Final PAE: 29.3%  (initial: 10.3%)
+
+
+
+```python
 # ── Build optimised parameter set for before/after comparison ────────────────────────
 L_in_f, C_in_f, L_out_f, C_out_f = jnp.exp(log_params)
 
@@ -696,7 +818,13 @@ fig.show()
 ```
 
 
-```
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_16_0.png)
+
+
+
+
+```python
 # ── Run HB at optimised matching, target drive level ───────────────────────────────────
 y_time_opt, y_freq_opt = _run_pa_hb(
     _pa_params(V_in=V_target, L_in=L_in_f, C_in=C_in_f, L_out=L_out_f, C_out=C_out_f),
@@ -776,6 +904,54 @@ print(f"  PAE  = {float(PAE_opt_val)*100:.1f}%")
 
 
 ```
+
+
+
+![png](04_hemt_pa_optimization_files/04_hemt_pa_optimization_17_0.png)
+
+
+
+
+    Optimised PA — final performance at +12 dBm input:
+      Pout = 19.3 dBm
+      Gain = 7.3 dB
+      PAE  = 29.3%
+
+
+    Pre-computing 41 PAE sweeps x 17 Pin points...
+
+
+      [  1/41] step   0 — PAE@+12dBm = 10.3%
+
+
+      [  6/41] step  25 — PAE@+12dBm = 21.8%
+
+
+      [ 11/41] step  50 — PAE@+12dBm = 25.1%
+
+
+      [ 16/41] step  75 — PAE@+12dBm = 27.1%
+
+
+      [ 21/41] step 100 — PAE@+12dBm = 28.1%
+
+
+      [ 26/41] step 125 — PAE@+12dBm = 28.7%
+
+
+      [ 31/41] step 150 — PAE@+12dBm = 29.0%
+
+
+      [ 36/41] step 175 — PAE@+12dBm = 29.2%
+
+
+      [ 41/41] step 199 — PAE@+12dBm = 29.3%
+    Done.
+
+
+    Saved → examples/inverse_design/pa_optimisation.gif
+    Frames: 41   Duration: 4.1s at 10 fps
+
 
 ![pa_optimisation.gif](pa_optimisation.gif)
 
