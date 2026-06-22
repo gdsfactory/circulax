@@ -155,6 +155,57 @@ def _schur_reduce_osdi_stamp(
     return cur_padded, chg_padded, j_padded
 
 
+def _assemble_osdi_gc_separate(
+    y: Array,
+    group,
+) -> tuple[Array, Array]:
+    """Return separate G (conductance) and C (capacitance) for one OSDI group.
+
+    Unlike ``_assemble_osdi_group`` (which returns combined j_eff = G + C/dt),
+    this splits G and C so callers like AC sweep can form Y(jω) = G + jωC.
+    """
+    try:
+        from osdi_jax import osdi_eval
+    except ImportError as _bosdi_err:
+        raise ImportError(
+            "OSDI support requires the 'bosdi' package."
+        ) from _bosdi_err
+
+    try:
+        from osdi_jax import osdi_eval_with_handle
+        _HAS_TIER3 = True
+    except ImportError:
+        _HAS_TIER3 = False
+
+    v_all = y[group.var_indices].astype(jnp.float64)
+
+    if _HAS_TIER3 and group.handle is not None:
+        _, cond, _, cap, _ = osdi_eval_with_handle(group.handle, v_all, group.states)
+    else:
+        _, cond, _, cap, _ = osdi_eval(group.model_id, v_all, group.params, group.states)
+
+    n = group.num_nodes
+    G = cond.reshape(-1, n, n)
+    C = cap.reshape(-1, n, n)
+
+    if group.use_schur_reduction:
+        T = group.num_pins
+        I = n - T
+        gmin = 1e-12
+        eye_I = jnp.eye(I, dtype=G.dtype)
+        G_II_reg = G[:, T:, T:] + gmin * eye_I
+        G_schur = G[:, :T, :T] - G[:, :T, T:] @ jnp.linalg.solve(G_II_reg, G[:, T:, :T])
+        C_schur = C[:, :T, :T] - C[:, :T, T:] @ jnp.linalg.solve(G_II_reg, C[:, T:, :T])
+        g_padded = jnp.zeros_like(G)
+        c_padded = jnp.zeros_like(C)
+        g_padded = g_padded.at[:, :T, :T].set(G_schur)
+        c_padded = c_padded.at[:, :T, :T].set(C_schur)
+        g_padded = g_padded.at[:, T:, T:].set(jnp.broadcast_to(eye_I, (G.shape[0], I, I)))
+        return g_padded.reshape(-1) + group.reg_diag.reshape(-1), c_padded.reshape(-1)
+
+    return (G + group.reg_diag).reshape(-1), C.reshape(-1)
+
+
 def _is_osdi(group) -> bool:
     return OsdiComponentGroup is not None and isinstance(group, OsdiComponentGroup)
 
@@ -339,9 +390,9 @@ def assemble_gc_real(
         n_entries = int(jnp.array(group.jac_rows).reshape(-1).shape[0])
 
         if _is_osdi(group):
-            _, _, j_eff = _assemble_osdi_group(y_guess, group, alpha=1.0, dt=1.0)
-            g_vals_list.append(j_eff.reshape(-1).astype(y_guess.dtype))
-            c_vals_list.append(jnp.zeros(n_entries, dtype=y_guess.dtype))
+            g_sep, c_sep = _assemble_osdi_gc_separate(y_guess, group)
+            g_vals_list.append(g_sep.reshape(-1).astype(y_guess.dtype))
+            c_vals_list.append(c_sep.reshape(-1).astype(y_guess.dtype))
             continue
 
         if group.is_fdomain:

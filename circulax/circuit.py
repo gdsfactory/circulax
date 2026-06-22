@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -478,6 +479,12 @@ def _group_outputs_complex(group: Any) -> bool:
             group.params,
         )
         f_vals, q_vals = group.physics_func(0.0, y0, params0)
-    except (AttributeError, TypeError, ValueError, IndexError, KeyError):
+    except (AttributeError, TypeError, ValueError, IndexError, KeyError) as exc:
+        warnings.warn(
+            f"Complex-mode auto-detection failed for group ({exc!r}); "
+            f"defaulting to real. Pass is_complex=True to compile_circuit() "
+            f"if this is a photonic/complex-valued circuit.",
+            stacklevel=2,
+        )
         return False
     return bool(jnp.iscomplexobj(f_vals) or jnp.iscomplexobj(q_vals))

@@ -4,6 +4,7 @@ Examples:
     pixi run python benchmarks/run.py list
     pixi run python benchmarks/run.py run ring -- 3 9
     pixi run python benchmarks/run.py run release
+
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent

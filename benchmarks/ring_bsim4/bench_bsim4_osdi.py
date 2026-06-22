@@ -26,7 +26,6 @@ REPO = Path("/home/cdaunt/code/circulax/circulax-va")
 sys.path.insert(0, str(REPO / "tests"))
 sys.path.insert(0, str(REPO / "scripts"))
 
-from circulax.components.osdi import osdi_component  # noqa: E402
 from circulax.va.va_defaults import parse_va_defaults_expanded  # noqa: E402
 
 from circulax import compile_netlist  # noqa: E402
@@ -36,6 +35,7 @@ from circulax.components.electronic import (  # noqa: E402
     SmoothPulse,
     VoltageSource,
 )
+from circulax.components.osdi import osdi_component  # noqa: E402
 from circulax.solvers import analyze_circuit, setup_transient  # noqa: E402
 from circulax.solvers.transient import TrapFactorizedTransientSolver  # noqa: E402
 

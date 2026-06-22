@@ -19,8 +19,6 @@ from typing import TYPE_CHECKING
 import jax
 import jax.numpy as jnp
 import klujax
-import numpy as np
-
 from circulax.solvers.assembly import assemble_system_real
 from circulax.solvers.linear import DC_DT, GROUND_STIFFNESS
 
@@ -150,7 +148,12 @@ def _compute_fd_gradients(
     eps: float,
     model_id_override: int | None,
 ) -> dict[str, jax.Array]:
-    """Core FD loop: compute ∂loss/∂p_k = -λᵀ · ∂F/∂p_k for each param.
+    """Batched FD: compute ∂loss/∂p_k = -λᵀ · ∂F/∂p_k for all params in one call.
+
+    All n_params × n_devices perturbations are evaluated in a single batched
+    ``osdi_residual_eval`` call (pure JAX, no Python loops over params or
+    devices).  The dot product with λ is computed directly at the group's
+    equation indices, avoiding the full-system scatter.
 
     Args:
         group: ``OsdiComponentGroup``.
@@ -169,47 +172,51 @@ def _compute_fd_gradients(
     from osdi_jax import osdi_residual_eval
 
     mid = group.model_id if model_id_override is None else model_id_override
-    sys_size = y_star.shape[0]
 
-    params_np = np.array(jax.device_get(group.params))  # (N, num_params)
-    n_devices = params_np.shape[0]
+    n_params = len(param_cols)
+    n_devices = group.params.shape[0]
+    num_nodes = group.num_nodes
 
-    # Base residual: evaluate F(y*, p_base) for this group
     v_all = y_star[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
+
+    # Base residual
     cur_base, _, _ = osdi_residual_eval(mid, v_all, group.params, group.states)
+    # cur_base: (N, num_nodes)
 
-    # Scatter to global vector
-    f_base_global = jnp.zeros(sys_size, dtype=jnp.float64)
-    f_base_global = f_base_global.at[group.eq_indices].add(cur_base)
+    # Build perturbation batch: (n_params, N, num_params)
+    # Replicate base params for each parameter perturbation
+    p_base = jnp.tile(group.params[None, :, :], (n_params, 1, 1))
 
-    gradients: dict[str, jax.Array] = {}
+    # Compute FD step sizes and apply perturbations
+    param_cols_arr = jnp.array(param_cols)  # (n_params,)
+    base_vals = group.params[:, param_cols_arr]  # (N, n_params) -> transpose to (n_params, N)
+    base_vals = base_vals.T  # (n_params, N)
+    h = eps * jnp.maximum(jnp.abs(base_vals), 1.0)  # (n_params, N)
 
-    for pname, pcol in zip(param_names, param_cols):
-        grad_per_device = np.zeros(n_devices, dtype=np.float64)
+    # Perturb: for param k, add h[k, i] to p_base[k, i, param_cols[k]]
+    k_idx = jnp.arange(n_params)[:, None]  # (n_params, 1)
+    i_idx = jnp.arange(n_devices)[None, :]  # (1, N)
+    col_idx = param_cols_arr[:, None]  # (n_params, 1) — broadcast to (n_params, N)
+    p_pert = p_base.at[k_idx, i_idx, col_idx].add(h)
 
-        for i in range(n_devices):
-            # Perturb device i's parameter p_k only
-            params_perturbed = params_np.copy()
-            p_val = params_np[i, pcol]
-            # Relative step; use eps as absolute step when p_val ≈ 0
-            h = eps * max(abs(p_val), 1.0)
-            params_perturbed[i, pcol] = p_val + h
+    # Flatten (n_params, N, ...) -> (n_params*N, ...) for a single batched FFI call
+    v_flat = jnp.tile(v_all, (n_params, 1))  # (n_params*N, num_nodes)
+    p_flat = p_pert.reshape(n_params * n_devices, -1)
+    s_flat = jnp.tile(group.states, (n_params, 1))
 
-            params_jax_pert = jnp.array(params_perturbed, dtype=jnp.float64)
-            cur_pert, _, _ = osdi_residual_eval(mid, v_all, params_jax_pert, group.states)
+    cur_flat, _, _ = osdi_residual_eval(mid, v_flat, p_flat, s_flat)
+    cur_pert = cur_flat.reshape(n_params, n_devices, num_nodes)
 
-            f_pert_global = jnp.zeros(sys_size, dtype=jnp.float64)
-            f_pert_global = f_pert_global.at[group.eq_indices].add(cur_pert)
+    # dF/dp at group's nodes: (n_params, N, num_nodes)
+    d_cur = (cur_pert - cur_base[None, :, :]) / h[:, :, None]
 
-            # ∂F/∂p_k[i] = (F_pert - F_base) / h
-            dF_dpk = (f_pert_global - f_base_global) / h
+    # Lambda at group's equation indices: (N, num_nodes)
+    lam_at_eqs = lam[group.eq_indices]  # gather λ only at this group's nodes
 
-            # ∂loss/∂p_k[i] = -λᵀ · ∂F/∂p_k
-            grad_per_device[i] = float(-jnp.dot(lam, dF_dpk))
+    # Gradient: -Σ_j λ[eq[i,j]] · dF[k,i,j] — shape (n_params, N)
+    grads = -jnp.sum(d_cur * lam_at_eqs[None, :, :], axis=2)
 
-        gradients[pname] = jnp.array(grad_per_device)
-
-    return gradients
+    return {pname: grads[k] for k, pname in enumerate(param_names)}
 
 
 # ---------------------------------------------------------------------------
