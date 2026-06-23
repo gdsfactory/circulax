@@ -2,8 +2,14 @@
 
 Examples:
     pixi run python benchmarks/run.py list
-    pixi run python benchmarks/run.py run ring -- 3 9
     pixi run python benchmarks/run.py run release
+    pixi run python benchmarks/run.py run rc
+    pixi run python benchmarks/run.py run ring -- 3 9
+
+VA-to-JAX benchmarks (``ring``, ``ring-va``, ``ring-sensitivity``,
+``juncap200``, ``mosvar``, ``ring-bsim4``) require the bosdi / openvaf-r
+toolchain and are not part of the release suite.  Run them individually by
+name when you need them.
 
 """
 
@@ -28,12 +34,24 @@ class BenchmarkCase:
 
 
 CASES: dict[str, BenchmarkCase] = {
+    # ── Release suite (pure analytical / no VA toolchain) ────────────────────
     "rc": BenchmarkCase(ROOT / "rc" / "run.py", "VACASK/ngspice/Circulax RC benchmark", release=True),
     "mul": BenchmarkCase(ROOT / "mul" / "run.py", "VACASK/ngspice/Circulax diode multiplier benchmark", release=True),
-    "ring": BenchmarkCase(ROOT / "ring" / "run.py", "PSP103 ring oscillator via OSDI", release=True),
-    "juncap200": BenchmarkCase(ROOT / "juncap200" / "run.py", "IHP juncap200 DC sweep via OSDI"),
-    "mosvar": BenchmarkCase(ROOT / "mosvar" / "run.py", "IHP mosvar DC sweep via OSDI"),
-    "ring-bsim4": BenchmarkCase(ROOT / "ring_bsim4" / "bench_bsim4_osdi.py", "BSIM4 ring oscillator via OSDI"),
+    # ── VA-to-JAX optional extras (bosdi + openvaf-r required) ───────────────
+    "ring": BenchmarkCase(ROOT / "ring" / "run.py", "PSP103 ring oscillator via OSDI", release=True, default_args=("3", "9", "15")),
+    "ring-va": BenchmarkCase(
+        ROOT / "ring" / "bench_circulax.py",
+        "PSP103 ring oscillator — VA-to-JAX MIR/XLA lowering [VA extra]",
+        default_args=("--variant", "va"),
+    ),
+    "ring-sensitivity": BenchmarkCase(
+        ROOT / "ring" / "bench_sensitivity.py",
+        "PSP103 ring oscillator — adjoint parameter sensitivity via OSDI [VA extra]",
+    ),
+    "juncap200": BenchmarkCase(ROOT / "juncap200" / "run.py", "IHP juncap200 DC sweep via OSDI [VA extra]"),
+    "mosvar": BenchmarkCase(ROOT / "mosvar" / "run.py", "IHP mosvar DC sweep via OSDI [VA extra]"),
+    "ring-bsim4": BenchmarkCase(ROOT / "ring_bsim4" / "bench_bsim4_osdi.py", "BSIM4 ring oscillator via OSDI [VA extra]"),
+    # ── Legacy ───────────────────────────────────────────────────────────────
     "legacy-rc-pulse": BenchmarkCase(ROOT / "legacy" / "rc_pulse_testbench.py", "Legacy RC pulse testbench"),
     "legacy-diode-cascade": BenchmarkCase(ROOT / "legacy" / "diode_cascade_testbench.py", "Legacy diode cascade testbench"),
     "legacy-rectifier": BenchmarkCase(ROOT / "legacy" / "fullwave_rect_testbench.py", "Legacy full-wave rectifier testbench"),

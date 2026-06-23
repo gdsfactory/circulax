@@ -1,10 +1,9 @@
 """Circulax ring oscillator for the benchmark sweep.
 
-Wraps the N-stage CMOS ring from scripts/ring_one_case.py so a single
-``run(n_stages=...)`` call produces the wall / µs-per-step numbers the
-harness in ``run.py`` needs.  Matches the VACASK ring template
-(W=10 µm NMOS, W=20 µm PMOS, L=1 µm, VDD=1.2 V, 1 µs tran at 50 ps
-fixed step → 20 000 steps).
+``run(n_stages=...)`` produces the wall / µs-per-step numbers the harness
+in ``run.py`` needs.  Matches the VACASK ring template (W=10 µm NMOS,
+W=20 µm PMOS, L=1 µm, VDD=1.2 V, 1 µs tran at 50 ps fixed step → 20 000
+steps).
 
 Models:
   - ``osdi``       — PSP103 via the bosdi FFI path to the compiled .osdi binary.
@@ -61,8 +60,45 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
     if variant == "va_static" and differentiable:
         raise ValueError("va_static bakes all params as SCCP constants; differentiable=True is not supported")
     if variant == "osdi":
-        from ring_one_case import build_netlist as _bn
-        return _bn(c_load=0.0, n_stages=n_stages)
+        from fixtures.psp103_models import geom_settings, make_psp103_descriptors
+
+        from circulax import compile_netlist
+        from circulax.components.electronic import Capacitor, Resistor, SmoothPulse, VoltageSource
+
+        psp103n, psp103p = make_psp103_descriptors()
+        mos_n = geom_settings(10e-6, 1e-6)
+        mos_p = geom_settings(20e-6, 1e-6)
+
+        instances = {
+            "Vvdd":  {"component": "vsrc",  "settings": {"V": 1.2}},
+            "Vkick": {"component": "kick",  "settings": {"V": 1.0, "delay": 1e-9, "tr": 1e-9}},
+            "Rkick": {"component": "r_kick","settings": {"R": 1e5}},
+        }
+        connections = {
+            "Vvdd,p1": "vdd,p1",   "Vvdd,p2": "GND,p1",
+            "Vkick,p1": "kick_n,p1", "Vkick,p2": "GND,p1",
+            "Rkick,p1": "kick_n,p1", "Rkick,p2": "n1,p1",
+        }
+        for stage in range(1, n_stages + 1):
+            in_n  = f"n{stage}"
+            out_n = f"n{stage % n_stages + 1}"
+            mn, mp = f"mn{stage}", f"mp{stage}"
+            instances[mn] = {"component": "nmos", "settings": mos_n}
+            instances[mp] = {"component": "pmos", "settings": mos_p}
+            connections[f"{mn},D"] = f"{out_n},p1"
+            connections[f"{mn},G"] = f"{in_n},p1"
+            connections[f"{mn},S"] = "GND,p1"
+            connections[f"{mn},B"] = "GND,p1"
+            connections[f"{mp},D"] = f"{out_n},p1"
+            connections[f"{mp},G"] = f"{in_n},p1"
+            connections[f"{mp},S"] = "vdd,p1"
+            connections[f"{mp},B"] = "vdd,p1"
+        models = {"nmos": psp103n, "pmos": psp103p, "vsrc": VoltageSource,
+                  "kick": SmoothPulse, "r_kick": Resistor, "cload": Capacitor}
+        return compile_netlist(
+            {"instances": instances, "connections": connections, "ports": {"out": "n1,p1"}},
+            models,
+        )
     if variant in ("va", "va_static"):
         import dataclasses
         import importlib.util
