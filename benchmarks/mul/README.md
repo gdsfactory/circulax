@@ -14,8 +14,8 @@ Mirrors `/home/cdaunt/code/vacask/VACASK/benchmark/mul/`.
 <!-- RESULTS -->
 | Simulator | Wall (s) | Compile (s) | n_steps | µs/step | Status |
 |-----------|----------|-------------|---------|---------|--------|
-| vacask | 1.04 | — | 500056 | 2.06 | ok |
-| ngspice | 1.11 | — | 500467 | 2.20 | ok |
-| circulax | 0.48 | 0.55 | 500000 | 0.96 | ok |
-_2026-04-22_
+| vacask | 1.05 | — | 500056 | 2.08 | ok |
+| ngspice | 1.06 | — | 500467 | 2.10 | ok |
+| circulax | 0.68 | 0.79 | 500000 | 1.37 | ok |
+_2026-06-23_
 <!-- /RESULTS -->
