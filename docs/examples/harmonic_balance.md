@@ -23,7 +23,7 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-06-23 01:06:02,141:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-23 09:42:46,367:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ---
@@ -429,11 +429,11 @@ print(f"y_time_fd shape: {y_time_fd.shape}")
 
 
 
+    DC operating point (f-domain): max|y_dc| = 0.00e+00 V
+
+
     /home/cdaunt/code/circulax/circulax/circulax/circuit.py:468: UserWarning: Complex-mode auto-detection failed for group (TypeError('_build_fdomain_component.<locals>.solver_call() takes 3 positional arguments but 4 were given')); defaulting to real. Pass is_complex=True to compile_circuit() if this is a photonic/complex-valued circuit.
       if _group_outputs_complex(group):
-
-
-    DC operating point (f-domain): max|y_dc| = 0.00e+00 V
 
 
     y_time_fd shape: (11, 5)

@@ -53,7 +53,7 @@ print("JAX backend:", jax.default_backend())
 
 ```
 
-    WARNING:2026-06-23 01:09:49,124:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-23 09:46:36,013:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
     JAX backend: cpu

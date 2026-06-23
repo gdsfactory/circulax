@@ -21,6 +21,11 @@ cheap OSDI evaluations** replaces $N_{params}$ full DC solves.
 | **Scales with** | Circuit size × $N_p$ | Circuit size + $N_p$ (decoupled) |
 | **Requires model source?** | Often yes (for internal FD) | No — works with compiled `.osdi` binaries |
 
+This example uses the **PSP103** MOSFET model compiled to an `.osdi` binary
+by [openvaf-reloaded](https://github.com/arpadbuermen/OpenVAF) and loaded
+via the [bosdi](https://github.com/gdsfactory/bosdi) FFI layer. circulax
+currently requires OSDI API version 0.4.
+
 ### What you will learn
 
 1. Loading a Verilog-A compact model via `osdi_component`
@@ -30,7 +35,7 @@ cheap OSDI evaluations** replaces $N_{params}$ full DC solves.
 5. Recovering process parameters from noisy I-V measurements
 
 
-```python
+```
 import json
 import time
 from pathlib import Path
@@ -50,9 +55,6 @@ from circulax.solvers.sensitivity import _resolve_param_cols
 jax.config.update("jax_enable_x64", True)
 ```
 
-    WARNING:2026-06-23 01:10:35,141:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 ## 1. Load the PSP103 OSDI Model
 
 `osdi_component` loads a compiled Verilog-A `.osdi` binary and creates a
@@ -60,7 +62,7 @@ model descriptor that `compile_circuit` can use directly. The 783-parameter
 model card is loaded from a reference JSON file.
 
 
-```python
+```
 DATA_DIR = Path("tests/data/va/psp103v4")
 
 for candidate in [DATA_DIR, Path.cwd().parents[1] / DATA_DIR]:
@@ -98,12 +100,6 @@ print(f"  Params: {len(psp103n.param_names)}")
 print(f"  Fitting: {PARAM_NAMES}")
 ```
 
-    Loaded PSP103 from tests/data/va/psp103v4/psp103.osdi
-      Pins:   ('D', 'G', 'S', 'B')
-      Params: 783
-      Fitting: ['VFBO', 'NSUBO', 'TOXO', 'UO', 'MUEO', 'THEMUO']
-
-
 ## 2. Build the Test Circuit
 
 A single NMOS transistor with gate and drain voltage sources. Source and
@@ -125,7 +121,7 @@ port map — it corresponds to the internal current variable of the `Vds`
 voltage source.
 
 
-```python
+```
 net_dict = {
     "instances": {
         "M1":  {"component": "nmos", "settings": {**NMOS_GEOM}},
@@ -163,18 +159,6 @@ for p in PARAM_NAMES:
     print(f"  {p:8s} = {nominal_vals[p]:12.4e}")
 ```
 
-    System size: 7
-    Drain current index (i_src of Vds): 3
-
-    Nominal parameter values:
-      VFBO     =  -1.1000e+00
-      NSUBO    =   3.0000e+23
-      TOXO     =   1.5000e-09
-      UO       =   3.5000e-02
-      MUEO     =   6.0000e-01
-      THEMUO   =   2.7500e+00
-
-
 ## 3. Generate Reference I-V Data
 
 We sweep $V_{gs}$ from 0 to 1.2 V at $V_{ds}$ = 1.0 V using the nominal
@@ -185,7 +169,7 @@ Passing an array-valued parameter to `circuit.dc()` automatically vmaps the
 Newton solver over all bias points in a single JIT-compiled call.
 
 
-```python
+```
 VGS_SWEEP = jnp.linspace(0.0, 1.2, 25)
 
 t0 = time.time()
@@ -202,12 +186,8 @@ print(f"DC sweep ({len(VGS_SWEEP)} points, vmapped): {t_sweep:.2f} s")
 print(f"Id range: {id_ref.min() * 1e3:.3f} mA to {id_ref.max() * 1e3:.3f} mA")
 ```
 
-    DC sweep (25 points, vmapped): 0.29 s
-    Id range: -1.867 mA to -0.000 mA
 
-
-
-```python
+```
 fig, ax = plt.subplots(figsize=(8, 4))
 ax.plot(VGS_SWEEP, id_ref * 1e3, "k-", lw=2, label="Clean (nominal)")
 ax.plot(VGS_SWEEP, id_ref_noisy * 1e3, "o", ms=5, color="C0", label="Noisy (target)")
@@ -217,12 +197,6 @@ ax.set_title("Reference Id\u2013Vgs at Vds = 1.0 V")
 ax.legend()
 plt.tight_layout()
 ```
-
-
-
-![png](05_psp103_ring_param_fitting_files/05_psp103_ring_param_fitting_8_0.png)
-
-
 
 ## 4. DC Adjoint Parameter Fitting
 
@@ -285,7 +259,7 @@ $$
 $$
 
 
-```python
+```
 N_OPT = 40
 LR = 0.02
 K_STARTS = 8
@@ -316,12 +290,8 @@ print(f"Multi-start setup: {K_STARTS} starts x {N_OPT} Adam steps x {len(VGS_SWE
 print(f"  = {K_STARTS * N_OPT * len(VGS_SWEEP):,} DC solves + sensitivities (vmapped)")
 ```
 
-    Multi-start setup: 8 starts x 40 Adam steps x 25 bias points
-      = 8,000 DC solves + sensitivities (vmapped)
 
-
-
-```python
+```
 def run_optimization(log_params_init, signs):
     """Run N_OPT Adam steps from a single starting point (JIT + lax.scan)."""
     sys_size = circuit.sys_size
@@ -379,24 +349,8 @@ for k in range(K_STARTS):
     print(f"  Start {k}: {float(all_losses[k, -1]):.4e}{marker}")
 ```
 
-    Compiling and running 8 parallel optimisations...
 
-
-    Total time: 5.5 s (8 starts, 40 steps each)
-
-    Final losses per start:
-      Start 0: 1.1542e-08 <-- best
-      Start 1: 1.6524e-08
-      Start 2: 1.1700e-08
-      Start 3: 7.6226e-08
-      Start 4: 7.1719e-08
-      Start 5: 1.4308e-08
-      Start 6: 1.2273e-08
-      Start 7: 1.6524e-08
-
-
-
-```python
+```
 best_lp = all_final_lp[best_idx]
 best_signs = signs_batch[best_idx]
 best_params = nominal_params.copy()
@@ -433,13 +387,7 @@ plt.tight_layout()
 ```
 
 
-
-![png](05_psp103_ring_param_fitting_files/05_psp103_ring_param_fitting_12_0.png)
-
-
-
-
-```python
+```
 log_nominal = np.log(np.abs(np.array([nominal_vals[p] for p in PARAM_NAMES])))
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
@@ -471,13 +419,7 @@ plt.tight_layout()
 ```
 
 
-
-![png](05_psp103_ring_param_fitting_files/05_psp103_ring_param_fitting_13_0.png)
-
-
-
-
-```python
+```
 print(f"Parameter recovery (best of {K_STARTS} starts):")
 fmt = "  {:10s}  {:>12s}  {:>12s}  {:>8s}"
 print(fmt.format("Parameter", "Nominal", "Optimised", "Error"))
@@ -488,17 +430,6 @@ for j, p in enumerate(PARAM_NAMES):
     err = abs(opt_val - nom) / abs(nom) * 100
     print(f"  {p:10s}  {nom:12.4e}  {opt_val:12.4e}  {err:7.2f}%")
 ```
-
-    Parameter recovery (best of 8 starts):
-      Parameter        Nominal     Optimised     Error
-      ------------------------------------------------
-      VFBO         -1.1000e+00   -1.1606e+00     5.51%
-      NSUBO         3.0000e+23    3.5214e+23    17.38%
-      TOXO          1.5000e-09    1.6920e-09    12.80%
-      UO            3.5000e-02    3.2959e-02     5.83%
-      MUEO          6.0000e-01    4.2183e-01    29.69%
-      THEMUO        2.7500e+00    2.6190e+00     4.76%
-
 
 ## Summary
 

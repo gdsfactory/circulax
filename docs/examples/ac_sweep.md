@@ -29,7 +29,7 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-06-23 01:06:42,813:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-23 09:43:26,338:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ---

@@ -22,7 +22,7 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-06-23 01:05:56,474:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-23 09:42:41,306:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Netlist
@@ -144,19 +144,17 @@ else:
 
        System Size: 4 variables
     2. Solving DC Operating Point...
-
-
        DC Solution (First 5): [0. 0. 0. 0.]
     3. Running Transient Simulation...
 
 
        ✅ Simulation Successful
-    Performed 591 steps performed in 0.75 seconds
+    Performed 591 steps performed in 0.65 seconds
 
 
 
 
-![png](diode_clipper_files/diode_clipper_6_4.png)
+![png](diode_clipper_files/diode_clipper_6_3.png)
 
 
 

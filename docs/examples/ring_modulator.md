@@ -64,7 +64,7 @@ from circulax.components.electronic import Resistor
 jax.config.update("jax_enable_x64", True)
 ```
 
-    WARNING:2026-06-23 01:10:57,184:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-23 09:47:49,688:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Component definitions

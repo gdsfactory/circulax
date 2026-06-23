@@ -72,7 +72,7 @@ plt.rcParams.update({
 
 ```
 
-    WARNING:2026-06-23 01:06:59,451:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-23 09:43:42,665:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## 1. Butterworth analytical targets

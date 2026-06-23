@@ -67,7 +67,7 @@ pio.renderers.default = "png"
 
 ```
 
-    WARNING:2026-06-23 01:07:07,606:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-23 09:43:51,413:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Van der Pol component
