@@ -26,7 +26,7 @@ currently requires OSDI API version 0.4.
 5. Extracting the oscillation frequency from the waveform
 
 
-```
+```python
 import time
 from pathlib import Path
 
@@ -45,6 +45,9 @@ from circulax.solvers.transient import TrapFactorizedTransientSolver
 jax.config.update("jax_enable_x64", True)
 ```
 
+    WARNING:2026-06-24 18:02:01,569:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+
+
 ## 1. Load the PSP103 OSDI Model
 
 `osdi_component` takes:
@@ -62,7 +65,7 @@ the Verilog-A source defaults with VACASK ring-oscillator overrides. The NMOS
 and PMOS cards are identical except for `TYPE` (+1 vs −1).
 
 
-```
+```python
 import json
 
 DATA_DIR = Path("tests/data/va/psp103v4")
@@ -98,13 +101,18 @@ print(f"  Pins:   {psp103n.ports}")
 print(f"  Params: {len(psp103n.param_names)}")
 ```
 
+    Loaded PSP103 from tests/data/va/psp103v4/psp103.osdi
+      Pins:   ('D', 'G', 'S', 'B')
+      Params: 783
+
+
 ### Per-instance geometry
 
 Each transistor instance receives width, length, and junction-area parameters.
 These override the model-card defaults for that instance only.
 
 
-```
+```python
 def geom_settings(w: float, length: float, ld: float = 0.5e-6, ls: float = 0.5e-6) -> dict:
     """Per-instance MOSFET geometry."""
     return {
@@ -130,7 +138,7 @@ The output of stage $i$ connects to the input of stage $i+1$, with stage
 $N$ feeding back to stage 1 (the ring).
 
 
-```
+```python
 def build_ring_netlist(n_stages: int = 9):
     """Build an N-stage CMOS ring oscillator netlist."""
     if n_stages < 3 or n_stages % 2 == 0:
@@ -178,7 +186,7 @@ def build_ring_netlist(n_stages: int = 9):
 ```
 
 
-```
+```python
 N_STAGES = 9
 
 groups, sys_size, port_map = build_ring_netlist(N_STAGES)
@@ -187,6 +195,11 @@ print(f"Ring oscillator: {N_STAGES} stages")
 print(f"System size:     {sys_size} unknowns")
 print(f"Ring nodes:      {[f'n{i},p1' for i in range(1, N_STAGES + 1)]}")
 ```
+
+    Ring oscillator: 9 stages
+    System size:     50 unknowns
+    Ring nodes:      ['n1,p1', 'n2,p1', 'n3,p1', 'n4,p1', 'n5,p1', 'n6,p1', 'n7,p1', 'n8,p1', 'n9,p1']
+
 
 ## 3. DC Operating Point
 
@@ -203,7 +216,7 @@ homotopy:
    the true device conductances take over
 
 
-```
+```python
 solver = analyze_circuit(groups, sys_size, backend="klu_split")
 
 t0 = time.perf_counter()
@@ -220,6 +233,21 @@ for i in range(1, N_STAGES + 1):
     print(f"  {key}: {float(y0[port_map[key]]):.4f} V")
 ```
 
+    DC converged in 0.59s
+    All finite: True
+
+    DC node voltages:
+      n1,p1: 0.6606 V
+      n2,p1: 0.6606 V
+      n3,p1: 0.6606 V
+      n4,p1: 0.6606 V
+      n5,p1: 0.6606 V
+      n6,p1: 0.6606 V
+      n7,p1: 0.6606 V
+      n8,p1: 0.6606 V
+      n9,p1: 0.6592 V
+
+
 ## 4. Transient Simulation
 
 We simulate 200 ns of circuit time at a fixed 50 ps timestep using
@@ -234,7 +262,7 @@ The kick pulse at $t = 1\text{ ns}$ breaks the metastable state and
 the oscillation builds up within ~50 ns.
 
 
-```
+```python
 T_END = 200e-9     # 200 ns
 DT    = 5e-11      # 50 ps
 N_SAVE = 4000      # output points (50 ps resolution)
@@ -271,13 +299,17 @@ print(f"Transient: {wall:.2f}s wall ({wall / n_steps * 1e6:.1f} µs/step)")
 print(f"Finite:    {np.all(np.isfinite(ys))}")
 ```
 
+    Transient: 1.39s wall (346.8 µs/step)
+    Finite:    True
+
+
 ## 5. Output Waveforms
 
 Plot the voltage at every ring node. Successive stages are phase-shifted
 by $\pi / N$ — the signature pattern of a ring oscillator.
 
 
-```
+```python
 fig, axes = plt.subplots(2, 1, figsize=(10, 6))
 
 # Full waveform — all stages
@@ -305,6 +337,12 @@ fig.tight_layout()
 plt.show()
 ```
 
+
+
+![png](ring_oscillator_osdi_files/ring_oscillator_osdi_14_0.png)
+
+
+
 ## 6. Oscillation Frequency
 
 We extract the frequency two ways:
@@ -316,7 +354,7 @@ We extract the frequency two ways:
 Both methods ignore the first 50 ns (startup transient).
 
 
-```
+```python
 def freq_from_crossings(t: np.ndarray, x: np.ndarray) -> float:
     """Rising mid-level zero-crossing frequency."""
     centered = x - x.mean()
@@ -356,8 +394,15 @@ print(f"  Period:         {1e9 / f_zc:.2f} ns")
 print(f"  Gate delay:     {1e12 / (2 * N_STAGES * f_zc):.1f} ps")
 ```
 
+    Oscillation frequency:
+      Zero-crossing: 289.6 MHz
+      FFT peak:      286.6 MHz
+      Period:         3.45 ns
+      Gate delay:     191.8 ps
 
-```
+
+
+```python
 fig, ax = plt.subplots(figsize=(10, 3))
 
 ax.semilogy(freqs / 1e9, power, linewidth=0.8)
@@ -372,6 +417,12 @@ fig.tight_layout()
 plt.show()
 ```
 
+
+
+![png](ring_oscillator_osdi_files/ring_oscillator_osdi_17_0.png)
+
+
+
 ## 7. Phase Relationship Between Stages
 
 In a ring oscillator, each stage introduces a delay of $T / (2N)$ where $T$
@@ -379,7 +430,7 @@ is the oscillation period. Adjacent outputs are therefore phase-shifted by
 $\pi / N$ radians.
 
 
-```
+```python
 fig, ax = plt.subplots(figsize=(10, 3))
 
 # Show 3 periods in steady state
@@ -400,6 +451,12 @@ fig.tight_layout()
 plt.show()
 ```
 
+
+
+![png](ring_oscillator_osdi_files/ring_oscillator_osdi_19_0.png)
+
+
+
 ## 8. Frequency vs. Number of Stages
 
 The oscillation frequency scales as $f \propto 1 / (2 N \cdot t_d)$ where
@@ -410,7 +467,7 @@ parasitic scaling cause deviations.
 We sweep $N \in \{3, 5, 7, 9, 11\}$ and measure the frequency.
 
 
-```
+```python
 stage_counts = [3, 5, 7, 9, 11]
 frequencies = []
 n_save_sweep = 4000
@@ -449,8 +506,23 @@ for n in stage_counts:
     print(f"  N={n:2d}: {f / 1e6:.1f} MHz  (gate delay = {1e12 / (2 * n * f):.1f} ps)")
 ```
 
+      N= 3: 907.9 MHz  (gate delay = 183.6 ps)
 
-```
+
+      N= 5: 523.6 MHz  (gate delay = 191.0 ps)
+
+
+      N= 7: 372.5 MHz  (gate delay = 191.8 ps)
+
+
+      N= 9: 289.6 MHz  (gate delay = 191.8 ps)
+
+
+      N=11: 237.0 MHz  (gate delay = 191.8 ps)
+
+
+
+```python
 stage_arr = np.array(stage_counts, dtype=float)
 freq_arr = np.array(frequencies)
 valid = np.isfinite(freq_arr)
@@ -480,6 +552,12 @@ ax2.set_title("Propagation delay per stage")
 fig.tight_layout()
 plt.show()
 ```
+
+
+
+![png](ring_oscillator_osdi_files/ring_oscillator_osdi_22_0.png)
+
+
 
 ## Summary
 

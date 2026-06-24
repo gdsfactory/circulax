@@ -67,7 +67,7 @@ pio.renderers.default = "png"
 
 ```
 
-    WARNING:2026-06-23 09:43:51,413:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:02:52,804:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Van der Pol component
@@ -197,6 +197,8 @@ print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (
     System size : 3 unknowns
     Named ports : ['osc']
     Oscillator port: 'osc'
+
+
     DC operating point: max|y_dc| = 0.00e+00 V  (trivially zero)
 
 

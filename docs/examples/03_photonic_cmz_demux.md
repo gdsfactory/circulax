@@ -180,7 +180,7 @@ TARGET_WLS = jnp.array([1285.0, 1300.0, 1315.0, 1330.0])   # nm
 Y_GUESS    = jnp.ones(circuit.sys_size * 2)   # flat initial guess for Newton-Raphson
 ```
 
-    WARNING:2026-06-23 09:44:46,960:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:03:56,823:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
     System size: 25 real nodes  (50 complex DOFs)
@@ -592,7 +592,7 @@ for name, p0, pf in zip(param_names, params_init, params):
     Training 8 parallel starts × 2000 Adam steps (lr=0.02)...
 
 
-      Finished in 57.8 s
+      Finished in 72.3 s
 
 
 

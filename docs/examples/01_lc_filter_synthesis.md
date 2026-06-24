@@ -72,7 +72,7 @@ plt.rcParams.update({
 
 ```
 
-    WARNING:2026-06-23 09:43:42,665:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:02:43,120:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## 1. Butterworth analytical targets
@@ -288,10 +288,10 @@ L1_opt, C1_opt, L2_opt = np.exp(np.array(log_params))
     Step  50: loss=0.000136  L1=90.66 nH  C1=57.51 pF  L2=90.66 nH
     Step 100: loss=0.000002  L1=80.49 nH  C1=63.10 pF  L2=80.49 nH
     Step 150: loss=0.000000  L1=79.50 nH  C1=63.71 pF  L2=79.50 nH
+
+
     Step 200: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
     Step 250: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
-
-
     Step 300: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
 
 

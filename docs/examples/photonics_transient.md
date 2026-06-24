@@ -24,7 +24,7 @@ from circulax.components.photonic import OpticalSourcePulse
 
 ```
 
-    WARNING:2026-06-23 09:47:43,130:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:07:30,329:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -114,8 +114,6 @@ else:
 
     --- DEMO: Photonic Transient (Flat Vector Fix) ---
     1. Compiling...
-
-
     2. Solving DC Operating Point...
 
 
@@ -128,4 +126,4 @@ else:
 
 
 
-![png](photonics_transient_files/photonics_transient_4_4.png)
+![png](photonics_transient_files/photonics_transient_4_3.png)
