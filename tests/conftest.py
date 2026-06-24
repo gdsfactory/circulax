@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import jax
+import kfnetlist as kfnl
 import pytest
 
 # Ensure project root is on sys.path so tests can import the local package
@@ -85,3 +86,38 @@ def simple_optical_netlist():
     }
 
     return net_dict, models_map
+
+
+@pytest.fixture
+def simple_lrc_kfnetlist():
+    """Returns (kfnetlist.Netlist, models_map) for a small LRC example."""
+    from circulax.components.electronic import (
+        Capacitor,
+        Inductor,
+        Resistor,
+        VoltageSource,
+    )
+
+    models_map = {
+        "resistor": Resistor,
+        "capacitor": Capacitor,
+        "inductor": Inductor,
+        "source_voltage": VoltageSource,
+        "ground": lambda: 0,
+    }
+
+    nl = kfnl.Netlist()
+    nl.create_inst(name="GND", kcl="", component="ground")
+    nl.create_inst(name="V1", kcl="", component="source_voltage", settings={"V": 5.0, "delay": 0.2e-8})
+    nl.create_inst(name="R1", kcl="", component="resistor", settings={"R": 10.0})
+    nl.create_inst(name="C1", kcl="", component="capacitor", settings={"C": 1e-11})
+    nl.create_inst(name="L1", kcl="", component="inductor", settings={"L": 5e-9})
+
+    gnd = kfnl.PortRef(instance="GND", port="p1")
+    nl.create_net(gnd, kfnl.PortRef(instance="V1", port="p1"), kfnl.PortRef(instance="C1", port="p2"))
+    nl.create_net(kfnl.PortRef(instance="V1", port="p2"), kfnl.PortRef(instance="R1", port="p1"))
+    nl.create_net(kfnl.PortRef(instance="R1", port="p2"), kfnl.PortRef(instance="L1", port="p1"))
+    nl.create_net(kfnl.PortRef(instance="L1", port="p2"), kfnl.PortRef(instance="C1", port="p1"))
+
+    nl.sort()
+    return nl, models_map

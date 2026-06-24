@@ -45,24 +45,20 @@ def _sanitize_port(name: str) -> str:
 
 
 @jax.jit
-def s_to_y(S: jax.Array, z0: float = 1.0) -> jax.Array:
+def s_to_y(S: jax.Array, z0: complex = 1.0 + 1e-12j) -> jax.Array:
     """Convert an S-parameter matrix to an admittance (Y) matrix.
 
-    Uses the formula ``Y = (1/z0) * (I - S) * (I + S)^-1``. Requires dense
-    matrix inversion; if a component can be defined directly in terms of a
-    Y-matrix it should be, to avoid the overhead of this conversion.
-
-    Args:
-        S: S-parameter matrix of shape ``(..., n, n)``.
-        z0: Reference impedance in ohms. Defaults to ``1.0``.
-
-    Returns:
-        Y-matrix of the same shape and dtype as ``S``.
-
+    Kurokawa power-wave form: ``Y = (I - S) (z0 S + z0* I)^-1``. Reduces to
+    ``(1/z0) (I - S) (I + S)^-1`` for real ``z0``. A small ``Im(z0)`` keeps
+    the inverse well-conditioned when ``S`` has eigenvalues at -1 (e.g. an
+    ideal lossless symmetric splitter).
     """
     n = S.shape[-1]
-    eye = jnp.eye(n, dtype=S.dtype)
-    return (1.0 / z0) * (eye - S) @ jnp.linalg.inv(eye + S)
+    eye = jnp.eye(n, dtype=jnp.complex128)
+    Sc = S.astype(jnp.complex128)
+    z0c = jnp.asarray(z0, dtype=jnp.complex128)
+    M = z0c * Sc + jnp.conj(z0c) * eye
+    return jnp.linalg.solve(M.swapaxes(-1, -2), (eye - Sc).swapaxes(-1, -2)).swapaxes(-1, -2)
 
 
 def sax_component(fn: callable, *, name: str | None = None) -> callable:
@@ -129,7 +125,11 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
     # every port name to be a valid Python identifier. Some SAX PDKs label
     # ports numerically ('1', '2'); coerce those to identifiers while keeping
     # the index ordering.
-    port_names = tuple(_sanitize_port(p) for p in detected_ports)
+    raw_to_sanitized = {str(p): _sanitize_port(p) for p in detected_ports}
+    sanitized_to_raw: dict[str, list[str]] = {}
+    for raw, sanitized in raw_to_sanitized.items():
+        sanitized_to_raw.setdefault(sanitized, []).append(raw)
+    port_names = tuple(raw_to_sanitized[str(p)] for p in detected_ports)
 
     def physics_wrapper(signals: Signals, s: States, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
         s_dict = fn(**kwargs)
@@ -171,7 +171,10 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
         ]
     )
 
-    return component(ports=port_names)(physics_wrapper)
+    cls = component(ports=port_names)(physics_wrapper)
+    cls._raw_to_sanitized_ports = raw_to_sanitized
+    cls._sanitized_to_raw_ports = {sanitized: tuple(raws) for sanitized, raws in sanitized_to_raw.items()}
+    return cls
 
 
 def _build_fdomain_component(

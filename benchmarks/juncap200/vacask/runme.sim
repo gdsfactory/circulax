@@ -1,0 +1,18 @@
+IHP juncap200 DC I-V sweep, Tier 0 reference
+
+load "juncap200.osdi"
+
+model v vsource
+v1 (a 0) v dc=0
+
+model junc juncap200
+
+subckt junctest()
+  j1 (a 0) junc
+ends
+
+control
+  elaborate circuit("junctest")
+  sweep v1 instance="v1" parameter="dc" from=-1.0 to=1.0 step=0.1
+    analysis dcsweep op
+endc

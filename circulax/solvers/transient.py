@@ -48,6 +48,8 @@ from circulax.solvers.linear import (
 
 def _compute_history(component_groups, y_c, t, num_vars) -> ArrayLike:
     """Computes total charge Q at time t (Initial Condition)."""
+    from circulax.solvers.assembly import _assemble_osdi_group, _is_osdi
+
     is_complex = jnp.iscomplexobj(y_c)
     total_q = jnp.zeros(
         2 * num_vars if is_complex else num_vars,
@@ -55,8 +57,13 @@ def _compute_history(component_groups, y_c, t, num_vars) -> ArrayLike:
     )
 
     for group in component_groups.values():
-        v_locs = y_c[group.var_indices]
-        _, q_l = jax.vmap(lambda v, p: group.physics_func(y=v, args=p, t=t))(v_locs, group.params)
+        if _is_osdi(group):
+            _, q_l, _ = _assemble_osdi_group(
+                y_c, group, alpha=1.0, dt=1.0, residual_only=True,
+            )
+        else:
+            v_locs = y_c[group.var_indices]
+            _, q_l = jax.vmap(lambda v, p: group.physics_func(y=v, args=p, t=t))(v_locs, group.params)
 
         if is_complex:
             total_q = total_q.at[group.eq_indices].add(q_l.real)
@@ -853,6 +860,269 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
         return y_next, y_error, {"y0": y0, "y1": y_next}, (y0, h_n), result
 
 
+# ==============================================================================
+# TRAPEZOIDAL — 2nd-ORDER A-STABLE SOLVER (zero numerical damping)
+# ==============================================================================
+#
+# Trapezoidal-rule companion-method discretisation of  F(V) + dQ/dt = 0:
+#
+#   Q(V_new) - Q(V_old) = -h/2 · (F(V_new) + F(V_old))
+#
+# Rearranged into the residual form circulax's Newton loop expects:
+#
+#   R(V_new) = F(V_new) + (2/h) · (Q(V_new) - Q_old) + F_old = 0
+#
+# So  α = 2  for the Jacobian stamp  J_eff = G + (α/h)·C  (vs α = 1 for BE,
+# α = α₀ ∈ [1, 5/3] for variable-step BDF2, α = 1/γ ≈ 2.29 for SDIRK3).
+
+
+def _compute_history_fq(component_groups, y_flat, t, num_vars, is_complex):
+    """Compute the (F, Q) residual pair at a given flat state vector — used by trap."""
+    if is_complex:
+        total_f, total_q = assemble_residual_only_complex(y_flat, component_groups, t, 1.0)
+    else:
+        total_f, total_q = assemble_residual_only_real(y_flat, component_groups, t, 1.0)
+    return total_f, total_q
+
+
+def _trap_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex):
+    """Compute trapezoidal coefficients, history terms (F_old, Q_old), and predictor.
+
+    ``solver_state`` is a 4-tuple ``(y_nm1, h_nm1, f_nm1, q_nm1)`` where
+    ``f_nm1`` and ``q_nm1`` are the cached F/Q values at ``y_nm1`` from the
+    previous step's converged Newton solution.  The cache avoids a redundant
+    physics evaluation at the start of each timestep.
+    """
+    y_nm1, h_nm1, f_old, q_old = solver_state
+
+    alpha = 2.0
+
+    rate = (y0 - y_nm1) / (h_nm1 + 1e-30)
+    y_pred = y0 + rate * h_n
+
+    def make_residual(total_f, total_q):
+        return total_f + (alpha * (total_q - q_old)) / h_n + f_old
+
+    return y_pred, alpha, make_residual
+
+
+def _trap_init(component_groups, y0, t0, num_vars, is_complex):
+    """Build the initial 4-tuple solver state for the trap solvers.
+
+    Computes f0, q0 at y0 so the first step can use the cached values
+    rather than recomputing them in ``_trap_preamble``.
+    """
+    f0, q0 = _compute_history_fq(component_groups, y0, t0, num_vars, is_complex)
+    return (y0, jnp.float64(jnp.inf), f0, q0)
+
+
+class TrapVectorizedTransientSolver(VectorizedTransientSolver):
+    """Trapezoidal-rule transient solver — circulax's default integrator.
+
+    2nd-order A-stable with zero numerical damping at all frequencies.
+    Preserves limit-cycle frequencies exactly, unlike BDF2/BE which
+    introduce L²-stable damping that pulls oscillator frequencies.
+
+    Use BDF2 instead if you see trapezoidal ringing (sawtooth at 2·dt)
+    on circuits with very sharp digital edges.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 2
+
+    def init(self, terms, t0, t1, y0, args):
+        component_groups, num_vars = args
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        return _trap_init(component_groups, y0, t0, num_vars, is_complex)
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+
+        y_pred, alpha, make_residual = _trap_preamble(
+            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
+        )
+
+        def newton_update_step(y, _) -> float:
+            if is_complex:
+                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha)
+                ground_indices = [0, num_vars]
+            else:
+                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha)
+                ground_indices = [0]
+
+            residual = make_residual(total_f, total_q)
+            for idx in ground_indices:
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            sol = self.linear_solver._solve_impl(all_vals, -residual)  # noqa: SLF001
+            delta = sol.value
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            return y + delta * damping
+
+        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=20, throw=False)
+
+        y_next = sol.value
+        y_error = y_next - y_pred
+
+        # Cache f/q at the converged solution for the next step's preamble.
+        f_new, q_new = _compute_history_fq(component_groups, y_next, t1, num_vars, is_complex)
+        new_state = (y0, h_n, f_new, q_new)
+
+        result = jax.lax.cond(
+            sol.result == optx.RESULTS.successful,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
+
+
+class TrapFactorizedTransientSolver(FactorizedTransientSolver):
+    """Trapezoidal upgrade of :class:`FactorizedTransientSolver`.
+
+    Factors J_eff once at the predictor and reuses the factorisation
+    across the Newton iteration.
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 2
+
+    def init(self, terms, t0, t1, y0, args):
+        component_groups, num_vars = args
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        return _trap_init(component_groups, y0, t0, num_vars, is_complex)
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+
+        y_pred, alpha, make_residual = _trap_preamble(
+            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
+        )
+
+        if is_complex:
+            _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha)
+            ground_indices = [0, num_vars]
+        else:
+            _, _, frozen_jac_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha)
+            ground_indices = [0]
+
+        numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
+
+        def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
+            if is_complex:
+                total_f, total_q = assemble_residual_only_complex(y, component_groups, t1, h_n)
+            else:
+                total_f, total_q = assemble_residual_only_real(y, component_groups, t1, h_n)
+
+            residual = make_residual(total_f, total_q)
+            for idx in ground_indices:
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            sol = self.linear_solver.solve_with_frozen_jacobian(-residual, numeric_handle)
+            delta = sol.value
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            return y + delta * damping
+
+        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        free_numeric(numeric_handle)
+
+        y_next = sol.value
+        y_error = y_next - y_pred
+
+        # Cache f/q at the converged solution for the next step's preamble.
+        f_new, q_new = _compute_history_fq(component_groups, y_next, t1, num_vars, is_complex)
+        new_state = (y0, h_n, f_new, q_new)
+
+        result = jax.lax.cond(
+            sol.result == optx.RESULTS.successful,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
+
+
+class TrapRefactoringTransientSolver(RefactoringTransientSolver):
+    """Trapezoidal upgrade of :class:`RefactoringTransientSolver`.
+
+    Refactors the KLU factorisation at every Newton iteration (full quadratic
+    convergence).
+    """
+
+    def order(self, terms) -> int:  # noqa: D102
+        return 2
+
+    def init(self, terms, t0, t1, y0, args):
+        component_groups, num_vars = args
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+        return _trap_init(component_groups, y0, t0, num_vars, is_complex)
+
+    def step(self, terms, t0, t1, y0, args, solver_state, options):  # noqa: ANN201, D102
+        component_groups, num_vars = args
+        h_n = t1 - t0
+        is_complex = getattr(self.linear_solver, "is_complex", False)
+
+        y_pred, alpha, make_residual = _trap_preamble(
+            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
+        )
+
+        if is_complex:
+            _, _, init_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha)
+            ground_indices = [0, num_vars]
+        else:
+            _, _, init_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha)
+            ground_indices = [0]
+
+        numeric_handle = self.linear_solver.factor_jacobian(init_vals)
+
+        def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
+            if is_complex:
+                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha)
+            else:
+                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha)
+
+            residual = make_residual(total_f, total_q)
+            for idx in ground_indices:
+                residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
+
+            if hasattr(self.linear_solver, "refactor_and_solve_jacobian"):
+                sol, _ = self.linear_solver.refactor_and_solve_jacobian(all_vals, -residual, numeric_handle)
+            else:
+                refreshed_handle = self.linear_solver.refactor_jacobian(all_vals, numeric_handle)
+                sol = self.linear_solver.solve_with_frozen_jacobian(-residual, refreshed_handle)
+            delta = sol.value
+            max_change = jnp.max(jnp.abs(delta))
+            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            return y + delta * damping
+
+        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        free_numeric(numeric_handle)
+
+        y_next = sol.value
+        y_error = y_next - y_pred
+
+        # Cache f/q at the converged solution for the next step's preamble.
+        f_new, q_new = _compute_history_fq(component_groups, y_next, t1, num_vars, is_complex)
+        new_state = (y0, h_n, f_new, q_new)
+
+        result = jax.lax.cond(
+            sol.result == optx.RESULTS.successful,
+            lambda _: diffrax.RESULTS.successful,
+            lambda _: diffrax.RESULTS.nonlinear_divergence,
+            None,
+        )
+        return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
+
+
 def setup_transient(
     groups: list, linear_strategy: CircuitLinearSolver, transient_solver: AbstractSolver = None
 ) -> Callable[..., diffrax.Solution]:
@@ -902,13 +1172,17 @@ def setup_transient(
         raise RuntimeError(msg)
 
     if transient_solver is None:
-        # Pick the best BDF2 variant the linear solver supports.
+        # Pick the best Trap variant the linear solver supports.
+        # Trap (2nd order, A-stable, zero numerical damping) is the right
+        # pick for oscillators, LC tanks, and harmonic balance.  For circuits
+        # with sharp digital edges that cause trapezoidal ringing, pass
+        # BDF2*TransientSolver explicitly.
         if hasattr(linear_strategy, "refactor_jacobian"):
-            transient_solver = BDF2RefactoringTransientSolver
+            transient_solver = TrapRefactoringTransientSolver
         elif hasattr(linear_strategy, "factor_jacobian"):
-            transient_solver = BDF2FactorizedTransientSolver
+            transient_solver = TrapFactorizedTransientSolver
         else:
-            transient_solver = BDF2VectorizedTransientSolver
+            transient_solver = TrapVectorizedTransientSolver
 
     import inspect
     tsolver = transient_solver(linear_solver=linear_strategy) if inspect.isclass(transient_solver) else transient_solver

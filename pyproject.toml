@@ -7,14 +7,13 @@ authors = [
 ]
 readme = "ReadMe.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 keywords = ["jax", "differentiable", "circuit", "simulation", "photonics"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
@@ -27,15 +26,13 @@ dependencies = [
     "matplotlib",
     "typing-extensions>=4.13.2",
     "lineax",
-    "klujax>=0.5.0"]
+    "equinox>=0.11",
+    "klujax>=0.5.0",
+    "kfnetlist>=0.1.4"]
 
 [project.optional-dependencies]
-test = [
-    "pytest>=8",
-    "papermill",
-    "ipykernel>=6.29.5",   # required by papermill to execute notebooks
-    "schemdraw",
-    "jupyter-dash",        # pulls plotly + dash; used by inverse_design notebooks
+verilog-a = [
+    "bosdi>=0.1.3",
 ]
 docs = [
     "ipykernel>=6.29.5",
@@ -60,12 +57,14 @@ docs = [
     "mkdocs-glightbox>=0.4.0",
     "mkdocs-minify-plugin>=0.8.0",
     "jupyter-dash",
-    "kaleido>=1.2.0,<2"
+    "kaleido>=1.2.0,<2",
 ]
 dev = [
-    "circulax[test,docs]",
+    "circulax[docs, verilog-a]",
     "black",
     "ruff",
+    "pytest>=8",
+    "pytest-xdist",
     "mypy",
     "pre-commit",
 ]
@@ -99,12 +98,9 @@ packages = ["circulax"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["linux-64","osx-arm64"]
+platforms = ["linux-64","osx-arm64","win-64"]
 # pixi-build is still preview-gated
 preview = ["pixi-build"]
-
-[tool.pixi.activation]
-scripts = ["scripts/activate.sh"]
 
 # Shared editable install for all environments
 [tool.pixi.pypi-dependencies]
@@ -125,9 +121,6 @@ backend = { name = "pixi-build-python", version = "*" }
 # Features — one per Python version
 # ---------------------------------------------------------------------------
 
-[tool.pixi.feature.py311.dependencies]
-python = "3.11.*"
-
 [tool.pixi.feature.py312.dependencies]
 python = "3.12.*"
 
@@ -135,14 +128,23 @@ python = "3.12.*"
 python = "3.13.*"
 tqdm = ">=4.67.1,<5"
 
-# Test feature — used by CI environments
+# Test feature — lean CI environment (no docs, no dev tooling)
+# Used for the non-default Python matrix (py311, py312).
 [tool.pixi.feature.test.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["test"] }
+circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+pytest = ">=8"
+pytest-xdist = "*"
 
-# Dev tooling feature
+# Dev tooling feature — full local development environment
+# Includes git-cliff (changelog), uv (build), and the docs/papermill extras.
+[tool.pixi.feature.dev.pypi-dependencies]
+circulax = { path = ".", editable = true, extras = ["dev"] }
+
 [tool.pixi.feature.dev.dependencies]
 tqdm = ">=4.67.1,<5"
 uv = ">=0.6"
+git-cliff = ">=2"
+schemdraw = ">=0.18"
 
 # Benchmark feature — NGSpice accuracy comparison
 [tool.pixi.feature.benchmark.dependencies]
@@ -155,7 +157,7 @@ tqdm = ">=4.67"
 ngspice = "*"
 
 [tool.pixi.feature.benchmark.pypi-dependencies]
-circulax = { path = ".", editable = true }
+circulax = { path = ".", editable = true, extras = ["verilog-a"] }
 
 
 # ---------------------------------------------------------------------------
@@ -163,13 +165,13 @@ circulax = { path = ".", editable = true }
 # ---------------------------------------------------------------------------
 
 [tool.pixi.tasks]
-copy_readme      = "cp ReadMe.md docs/index.md && sed -i 's|docs/||g' docs/index.md"
+copy_readme      = { cmd = ["python", "scripts/copy_readme.py"],   description = "Copy README into docs/ and strip docs/ prefixes" }
 install_ipkernel = "python -m ipykernel install --user --name circulax"
-nbrun            = { cmd = ["/bin/sh", "-c", "find examples -name '*.ipynb' -not -path '*/.ipynb_checkpoints/*' | xargs -P4 -I NB papermill NB NB -k circulax"], depends-on = ["install_ipkernel"], description = "Execute all notebooks in-place with papermill (parallel)" }
-nbdocs           = { cmd = ["/bin/sh", "-c", "rm -rf docs/examples && mkdir -p docs/examples && jupyter nbconvert --config docs/nbconvert_config.py --to markdown && find examples -name '*.gif' | xargs -I GIF cp GIF docs/examples/"], depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
+nbrun            = { cmd = ["python", "scripts/run_notebooks.py"], depends-on = ["install_ipkernel"], description = "Execute all notebooks in-place with papermill" }
+nbdocs           = { cmd = ["python", "scripts/build_docs.py"],    depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
 docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
-pytest_run       = { cmd = ["pytest", "tests",], depends-on = ["install_ipkernel"], description = "Fast tests only (excludes @pytest.mark.long, e.g. notebook execution)" }
+pytest_run       = { cmd = ["pytest", "tests", "-m", "not long"], description = "Fast tests only — skips @pytest.mark.long (notebook execution)" }
 pytest_all       = { cmd = ["pytest", "tests", "-m", "long or not long"], depends-on = ["install_ipkernel"], description = "All tests including @pytest.mark.long (notebook execution)" }
 lint_format      = "ruff format"
 lint_check       = "ruff -v check"
@@ -177,11 +179,16 @@ build            = { cmd = "uv build", description = "Build sdist and wheel into
 build-wheel      = { cmd = "uv build --wheel", description = "Build wheel only" }
 build-sdist      = { cmd = "uv build --sdist", description = "Build sdist only" }
 build-conda      = { cmd = "pixi build", description = "Build conda package" }
-clean-dist       = { cmd = "rm -rf dist/", description = "Remove build artifacts" }
-bench_rc         = { cmd = ["python", "benchmarking/rc_pulse_testbench.py"],        description = "RC pulse testbench" }
-bench_cascade    = { cmd = ["python", "benchmarking/diode_cascade_testbench.py"],   description = "Diode cascade testbench" }
-bench_rectifier  = { cmd = ["python", "benchmarking/fullwave_rect_testbench.py"],   description = "Full-wave rectifier testbench" }
-bench_lc_ladder  = { cmd = ["python", "benchmarking/lc_ladder_testbench.py"],       description = "LC ladder scalability testbench" }
+clean-dist       = { cmd = ["python", "scripts/clean_dist.py"],    description = "Remove build artefacts" }
+changelog        = { cmd = "git cliff --output CHANGELOG.md", description = "Regenerate full CHANGELOG.md from git history" }
+changelog-unreleased = { cmd = "git cliff --unreleased", description = "Preview changelog entries since the last tag" }
+bench_list       = { cmd = ["python", "benchmarks/run.py", "list"],                 description = "List benchmark cases" }
+bench_release    = { cmd = ["python", "benchmarks/run.py", "run", "release"],       description = "Run release benchmark suite" }
+bench_rc         = { cmd = ["python", "benchmarks/run.py", "run", "rc"],            description = "VACASK/ngspice/Circulax RC benchmark" }
+bench_ring       = { cmd = ["python", "benchmarks/run.py", "run", "ring"],          description = "PSP103 OSDI ring benchmark" }
+bench_cascade    = { cmd = ["python", "benchmarks/run.py", "run", "legacy-diode-cascade"], description = "Legacy diode cascade testbench" }
+bench_rectifier  = { cmd = ["python", "benchmarks/run.py", "run", "legacy-rectifier"],      description = "Legacy full-wave rectifier testbench" }
+bench_lc_ladder  = { cmd = ["python", "benchmarks/run.py", "run", "legacy-lc-ladder"],      description = "Legacy LC ladder scalability testbench" }
 
 # ---------------------------------------------------------------------------
 # Environments
@@ -190,10 +197,10 @@ bench_lc_ladder  = { cmd = ["python", "benchmarking/lc_ladder_testbench.py"],   
 [tool.pixi.environments]
 default = { features = ["py313", "dev"], solve-group = "py313" }
 
-# CI matrix — minimal, no dev extras
-py311 = { features = ["py311", "dev"], solve-group = "py311" }
-py312 = { features = ["py312", "dev"], solve-group = "py312" }
-py313 = { features = ["py313", "dev"], solve-group = "py313" }
+# CI matrix: non-default Pythons use the lean 'test' feature (no dev tooling,
+# no docs/papermill) so the matrix solves quickly and only tests core behaviour.
+py312 = { features = ["py312", "test"], solve-group = "py312" }
+py313 = { features = ["py313", "dev"],  solve-group = "py313" }
 
 # Benchmark environment — includes NGSpice for accuracy comparisons
 benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }
@@ -222,7 +229,7 @@ filterwarnings = [
 
 [tool.ruff]
 fix = true
-target-version = "py311"
+target-version = "py312"
 line-length = 132
 
 [tool.ruff.format]

@@ -10,6 +10,7 @@
     * [AC Sweep](examples/ac_sweep.md)
 * Electrical Examples
     * [MOS Differential Pair](examples/mos_diff_pair.md)
+    * [OSDI Ring Oscillator](examples/ring_oscillator_osdi.md)
     * [Diode Clipper](examples/diode_clipper.md)
     * [Harmonic Balance](examples/harmonic_balance.md)
     * [LC Ladder](examples/lc_ladder.md)
@@ -22,4 +23,5 @@
     * [Oscillator HB Tuning](examples/02_oscillator_hb_tuning.md)
     * [Photonic CMZ Demux](examples/03_photonic_cmz_demux.md)
     * [HEMT PA Optimisation](examples/04_hemt_pa_optimization.md)
+    * [PSP103 OSDI Parameter Fitting](examples/05_psp103_ring_param_fitting.md)
 * [API Reference](references/)

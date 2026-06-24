@@ -188,8 +188,12 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             sol = self._solve_impl(all_vals, -total_f_grounded)
             delta = sol.value
 
+            # Scale-invariant damping based on the *current* solution norm
+            # (not y+delta, which creates positive feedback and runaway on
+            # exponential I-V devices like MOSFETs).
             max_change = jnp.max(jnp.abs(delta))
-            damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
+            y_scale = jnp.maximum(jnp.max(jnp.abs(y)), 1.0)
+            damping = jnp.minimum(1.0, DAMPING_FACTOR * y_scale / (max_change + DAMPING_EPS))
 
             return y + delta * damping
 
@@ -306,6 +310,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         component_groups: dict[str, Any],
         y_guess: jax.Array,
         n_steps: int = 10,
+        scale_start: float = 1e-3,
         rtol: float = 1e-6,
         atol: float = 1e-6,
         max_steps: int = 100,
@@ -313,17 +318,19 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         """DC Operating Point via source stepping (homotopy rescue).
 
         Ramps all source amplitudes (components tagged with ``amplitude_param``)
-        from 10 % to 100 % of their netlist values, using each converged
-        solution as the warm start for the next step.  This guides Newton
-        through the nonlinear region without the large initial step from 0V to
-        full excitation.
+        logarithmically from ``scale_start`` to ``1.0`` of their netlist
+        values, using each converged solution as the warm start for the next
+        step.  Log spacing clusters samples near zero where the circuit is
+        nearly linear (Newton converges trivially), then widens toward 1.0 as
+        nonlinearity grows.
 
         Implemented with ``jax.lax.scan`` — fully JIT/grad/vmap-compatible.
 
         Args:
             component_groups: Compiled circuit components.
             y_guess: Initial guess (typically ``jnp.zeros(sys_size)``).
-            n_steps: Number of uniformly-spaced steps from 0.1 to 1.0.
+            n_steps: Number of log-uniform steps from ``scale_start`` to 1.0.
+            scale_start: Starting fraction of full source amplitude.
             rtol: Relative tolerance for each inner Newton solve.
             atol: Absolute tolerance for each inner Newton solve.
             max_steps: Max Newton iterations per step.
@@ -332,7 +339,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             Converged solution vector at full source amplitude.
 
         """
-        scales = jnp.linspace(0.1, 1.0, n_steps)
+        scales = jnp.logspace(jnp.log10(scale_start), 0.0, n_steps)
 
         def step(y: jax.Array, scale: jax.Array) -> tuple[jax.Array, None]:
             y_new, _ = self._run_newton(component_groups, y, source_scale=scale, rtol=rtol, atol=atol, max_steps=max_steps)
@@ -772,9 +779,9 @@ backends: dict[str, type[CircuitLinearSolver]] = {
     "klu_split_factor": KLUSplitLinear,
     "klu_split_refactor": KLUSplitQuadratic if split_refactor_available else KLUSplitLinear,
 }
-# Default uses klu_split (split symbolic/numeric): wins for linear and mildly nonlinear
-# circuits; use klu_split_refactor explicitly for strongly nonlinear.
-backends["default"] = backends["klu_split_factor"]
+# Default uses the frozen-factor split KLU path. Use ``klu_split`` or
+# ``klu_split_refactor`` explicitly for refactor-capable nonlinear solves.
+backends["default"] = backends["klu_split_linear"]
 
 
 def analyze_circuit(
@@ -790,8 +797,9 @@ def analyze_circuit(
             structure and properties.
         num_vars (int): The total number of variables in the linear system.
         backend (str, optional): The name of the solver backend to use.
-            Supported backends are 'klu', 'klu_split', 'dense', and 'sparse'.
-            Defaults to 'default', which uses 'klu_split'.
+            Supported backends are 'klu', 'klu_split_linear', 'klu_split',
+            'dense', and 'sparse'. Defaults to 'default', which uses
+            'klu_split_linear'.
         is_complex (bool, optional): A flag indicating whether the circuit
             analysis involves complex numbers. Defaults to False.
 

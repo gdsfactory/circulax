@@ -1,0 +1,4 @@
+
+Checking parameters for BSIM 3.3 model nmos
+Warning: Pd = 0 is less than W.
+Warning: Ps = 0 is less than W.

@@ -1,0 +1,50 @@
+27 stage ring oscillator (generated)
+
+load "psp103v4.osdi"
+
+include "models.inc"
+model vsource vsource
+model isource isource
+
+subckt inverter (in out vdd vss)
+parameters w=1u l=0.2u pfact=2
+  mp (out in vdd vdd) pmos w=w*pfact l=l
+  mn (out in vss vss) nmos w=w l=l
+ends
+
+i0 (0 1) isource type="pulse" val0=0 val1=10u delay=1n rise=1n fall=1n width=1n
+u1 (1 2 vdd 0)  inverter w=10u l=1u
+u2 (2 3 vdd 0)  inverter w=10u l=1u
+u3 (3 4 vdd 0)  inverter w=10u l=1u
+u4 (4 5 vdd 0)  inverter w=10u l=1u
+u5 (5 6 vdd 0)  inverter w=10u l=1u
+u6 (6 7 vdd 0)  inverter w=10u l=1u
+u7 (7 8 vdd 0)  inverter w=10u l=1u
+u8 (8 9 vdd 0)  inverter w=10u l=1u
+u9 (9 10 vdd 0)  inverter w=10u l=1u
+u10 (10 11 vdd 0)  inverter w=10u l=1u
+u11 (11 12 vdd 0)  inverter w=10u l=1u
+u12 (12 13 vdd 0)  inverter w=10u l=1u
+u13 (13 14 vdd 0)  inverter w=10u l=1u
+u14 (14 15 vdd 0)  inverter w=10u l=1u
+u15 (15 16 vdd 0)  inverter w=10u l=1u
+u16 (16 17 vdd 0)  inverter w=10u l=1u
+u17 (17 18 vdd 0)  inverter w=10u l=1u
+u18 (18 19 vdd 0)  inverter w=10u l=1u
+u19 (19 20 vdd 0)  inverter w=10u l=1u
+u20 (20 21 vdd 0)  inverter w=10u l=1u
+u21 (21 22 vdd 0)  inverter w=10u l=1u
+u22 (22 23 vdd 0)  inverter w=10u l=1u
+u23 (23 24 vdd 0)  inverter w=10u l=1u
+u24 (24 25 vdd 0)  inverter w=10u l=1u
+u25 (25 26 vdd 0)  inverter w=10u l=1u
+u26 (26 27 vdd 0)  inverter w=10u l=1u
+u27 (27 1 vdd 0)  inverter w=10u l=1u
+
+vdd (vdd 0) vsource dc=1.2
+
+control
+  options tran_method="trap"
+  analysis tran1 tran step=0.05n stop=1u maxstep=0.05n
+  print stats
+endc

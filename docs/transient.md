@@ -10,11 +10,12 @@ forward in time from an initial condition, typically the DC operating point.  Ea
 
 ## Time Discretisation and Accuracy
 
-Circulax provides three implicit time-stepping schemes.  The default is selected automatically based on the linear solver backend.
+Circulax provides several implicit time-stepping schemes. The high-level `circuit.transient(...)` method uses `setup_transient()` internally, which selects the best trapezoidal variant supported by the chosen linear backend.
 
 | Solver | Order | Method | Notes |
 |--------|-------|--------|-------|
-| `BDF2` | 2nd | Variable-step Gear/BDF2 | **Default.** Backward Euler on step 1, BDF2 from step 2. |
+| `Trap` | 2nd | Trapezoidal rule | **Default.** A-stable, low numerical damping; selected by backend capability. |
+| `BDF2` | 2nd | Variable-step Gear/BDF2 | Useful for sharp digital edges where trapezoidal ringing is undesirable. |
 | `SDIRK3` | 3rd | Alexander SDIRK (3 stages) | A-stable; 3 Newton solves per step. Higher accuracy at larger step sizes. |
 | `BackwardEuler` | 1st | Backward Euler | First-order fallback; rarely needed directly. |
 
@@ -25,16 +26,18 @@ Higher-order solvers reduce **global truncation error**:
 - BDF2 achieves $\mathcal{O}(h^2)$ accuracy — halving the step size reduces the error by 4×.
 - SDIRK3 achieves $\mathcal{O}(h^3)$ — halving the step size reduces the error by 8×.
 
-For most circuits BDF2 is the right choice.  Use SDIRK3 when high accuracy at large step sizes is needed (e.g., long simulations with tightly-toleranced outputs).
+For most circuits the default Trap path is the right choice. Use BDF2 for highly discontinuous waveforms and SDIRK3 when high accuracy at large step sizes is needed.
 
-To select SDIRK3 explicitly:
+To select a low-level solver explicitly:
 
 ```python
 from circulax.solvers.transient import SDIRK3VectorizedTransientSolver
 
-transient_sim = setup_transient(
-    groups=groups,
-    linear_strategy=linear_strat,
+sol = circuit.transient(
+    t0=0.0,
+    t1=1e-6,
+    dt0=1e-9,
+    y0=y_op,
     transient_solver=SDIRK3VectorizedTransientSolver,
 )
 ```
@@ -48,7 +51,7 @@ transient_sim = setup_transient(
 By default the step size is fixed at `dt0` throughout the simulation:
 
 ```python
-sol = transient_sim(
+sol = circuit.transient(
     t0=0.0, t1=1e-6, dt0=1e-9,
     y0=y_op, saveat=saveat, max_steps=10000,
 )
@@ -75,7 +78,7 @@ pid = diffrax.PIDController(
     force_dtmin=True,   # accept steps at dtmin rather than aborting
 )
 
-sol = transient_sim(
+sol = circuit.transient(
     t0=0.0, t1=1e-6, dt0=1e-11,
     y0=y_op,
     saveat=saveat, max_steps=50000,
@@ -111,27 +114,25 @@ print(sol.stats)
 ```python
 import diffrax
 import jax.numpy as jnp
-from circulax import compile_circuit, setup_transient
+from circulax import compile_circuit
 
 # 1. Compile and solve DC operating point
 circuit = compile_circuit(net_dict, models_map)
-y_op = circuit()
+y_op = circuit.dc()
 
-# 2. Set up transient solver
-transient_sim = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
-
-# 3. Run with adaptive stepping
+# 2. Run with adaptive stepping
 pid = diffrax.PIDController(rtol=1e-3, atol=1e-6, pcoeff=0.2, icoeff=0.5,
                              dcoeff=0.0, error_order=2, dtmin=1e-14, force_dtmin=True)
-saveat = diffrax.SaveAt(ts=jnp.linspace(0, 1e-6, 1000))
 
-sol = transient_sim(
+sol = circuit.transient(
     t0=0.0, t1=1e-6, dt0=1e-11,
-    y0=y_op, saveat=saveat, max_steps=50000,
+    y0=y_op, saveat=jnp.linspace(0, 1e-6, 1000), max_steps=50000,
     stepsize_controller=pid,
 )
 
-# 4. Extract results
+# 3. Extract results
 ts = sol.ts
-v_out = circuit.get_port_field(sol.ys, "R1,p2")
+v_out = circuit.port(sol.ys, "R1,p2")
 ```
+
+Advanced users can still call `setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)` directly when they need to pass custom Diffrax terms, solver objects, or lower-level arguments.

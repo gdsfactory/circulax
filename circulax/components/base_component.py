@@ -252,6 +252,8 @@ def _build_component(  # noqa: C901
     *,
     uses_time: bool,
     amplitude_param: str = "",
+    setup_fn: Any = None,
+    differentiable_params: "tuple[str, ...] | None" = None,
 ) -> type[CircuitComponent]:
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
@@ -300,6 +302,17 @@ def _build_component(  # noqa: C901
 
     param_specs = params[len(reserved) :]
 
+    # Optional analog-init slot. When the physics function declares ``init``
+    # as the first non-reserved positional argument, the framework will
+    # inject the return value of a ``@<Component>.setup``-registered
+    # function there at evaluation time. The ``init`` arg is NOT a regular
+    # JAX-traced parameter — it is computed from the other params each
+    # call, allowing gradients to flow through the setup body and matching
+    # Verilog-A's ``analog initial`` semantic.
+    has_init_arg = bool(param_specs) and param_specs[0].name == "init"
+    if has_init_arg:
+        param_specs = param_specs[1:]
+
     if not uses_time:
         for p in param_specs:
             if p.name == "t":
@@ -316,12 +329,26 @@ def _build_component(  # noqa: C901
     _defaults = {p.name: p.default for p in param_specs}
 
     try:
-        if uses_time:
+        if has_init_arg:
+            # Dry-run only validates non-init args; ``init`` will be injected
+            # by the closure once the user registers ``.setup`` — pass an
+            # empty dict here as a structural placeholder.
+            if uses_time:
+                fn(_dummy_P, _dummy_S, 0.0, {}, **_defaults)
+            else:
+                fn(_dummy_P, _dummy_S, {}, **_defaults)
+        elif uses_time:
             fn(_dummy_P, _dummy_S, 0.0, **_defaults)
         else:
             fn(_dummy_P, _dummy_S, **_defaults)
     except Exception as exc:
-        raise TypeError(f"Dry-run failed: {exc}") from exc
+        # Bodies that index into init with concrete keys will fail the
+        # placeholder dry-run; that's expected and harmless. Suppress only
+        # KeyError/IndexError/AttributeError, which are the typical "init
+        # was the empty placeholder" failure modes — anything else is a
+        # real signature bug.
+        if not (has_init_arg and isinstance(exc, (KeyError, IndexError, AttributeError, TypeError))):
+            raise TypeError(f"Dry-run failed: {exc}") from exc
 
     n_p = len(ports)
     full_keys = ports + states
@@ -329,6 +356,43 @@ def _build_component(  # noqa: C901
     _user_fn = fn
     _PortsType = namedtuple("Ports", ports) if ports else None  # noqa: PYI024
     _StatesType = namedtuple("States", states) if states else None  # noqa: PYI024
+
+    # Mutable cell for the analog-init function — populated by the
+    # ``@<Component>.setup`` classmethod after class construction. The
+    # closure below reads from this list so re-registration works without
+    # rebuilding ``_fast_physics``.
+    _setup_cell: list[Any] = [None]
+
+    def _resolve_init(kw: dict[str, Any]) -> Any:
+        """Run the registered setup fn with the current params, returning init.
+
+        Called from inside ``_fast_physics`` / ``_invoke_physics`` when the
+        physics signature declares an ``init`` argument. The setup body is
+        re-traced each call — XLA constant-folds it for static params,
+        and gradients flow through it for differentiable ones.
+        """
+        setup_fn = _setup_cell[0]
+        if setup_fn is None:
+            msg = (
+                f"{fn.__name__}: physics function declares an 'init' argument "
+                f"but no setup function has been registered. "
+                f"Use ``@{fn.__name__}.setup`` to register one."
+            )
+            raise RuntimeError(msg)
+        # Pass through only kwargs the setup function declares — ergonomic
+        # for setups that consume a subset of the physics params.  When the
+        # setup wrapper uses **kwargs (e.g. emitted _register_setup), pass
+        # everything so the inner function receives the actual param values.
+        setup_sig = inspect.signature(setup_fn)
+        has_var_kw = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in setup_sig.parameters.values()
+        )
+        if has_var_kw:
+            return setup_fn(**kw)
+        accepts = {p.name for p in setup_sig.parameters.values()}
+        sub_kw = {k: v for k, v in kw.items() if k in accepts}
+        return setup_fn(**sub_kw)
 
     if len(full_keys) == 0:
         _fast_physics = lambda v, p, t: (jnp.zeros(0), jnp.zeros(0))  # noqa: E731
@@ -342,7 +406,13 @@ def _build_component(  # noqa: C901
             signals = _PortsType(*vars_vec[:n_p]) if _PortsType else ()
             s = _StatesType(*vars_vec[n_p:]) if _StatesType else ()
             kw = {name: _extract_param(params, name) for name in _param_names}
-            if uses_time:
+            if has_init_arg:
+                init_value = _resolve_init(kw)
+                if uses_time:
+                    f_dict, q_dict = _user_fn(signals, s, t, init_value, **kw)
+                else:
+                    f_dict, q_dict = _user_fn(signals, s, init_value, **kw)
+            elif uses_time:
                 f_dict, q_dict = _user_fn(signals, s, t, **kw)
             else:
                 f_dict, q_dict = _user_fn(signals, s, **kw)
@@ -360,6 +430,9 @@ def _build_component(  # noqa: C901
             params: Any,
         ) -> tuple[dict, dict]:
             kw = {name: _extract_param(params, name) for name in _param_names}
+            if has_init_arg:
+                init_value = _resolve_init(kw)
+                return _user_fn(signals, s, t, init_value, **kw)
             return _user_fn(signals, s, t, **kw)
     else:
 
@@ -371,10 +444,80 @@ def _build_component(  # noqa: C901
             params: Any,
         ) -> tuple[dict, dict]:
             kw = {name: _extract_param(params, name) for name in _param_names}
+            if has_init_arg:
+                init_value = _resolve_init(kw)
+                return _user_fn(signals, s, init_value, **kw)
             return _user_fn(signals, s, **kw)
 
     annotations = {p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any) for p in param_specs}
-    defaults = {p.name: p.default for p in param_specs}
+
+    # Distinguish JAX-traced params (numeric scalars / arrays) from static
+    # config fields (strings, None, bools). Static fields are carried on the
+    # Equinox module but not stacked across instances or traced through
+    # transformations — useful for absorbing GDSFactory-style "config"
+    # settings like ``cross_section="strip"`` or ``width=None``.
+    #
+    # ``differentiable_params`` (from va_component) overrides the default
+    # staticness for numeric params:
+    #   - ``()``      → all numeric params are static (fastest; no jax.grad)
+    #   - ``None``    → all numeric params are dynamic JAX leaves (full grad)
+    #   - ``("W",)``  → only named params are dynamic; rest are static
+    def _is_static(p: Any) -> bool:
+        if p.default is None or isinstance(p.default, (str, bool)):
+            return True
+        if differentiable_params is None:
+            return False
+        return p.name not in differentiable_params
+
+    _static_names: set[str] = set()
+    defaults: dict[str, Any] = {}
+    for p in param_specs:
+        if _is_static(p):
+            defaults[p.name] = eqx.field(default=p.default, static=True)
+            _static_names.add(p.name)
+        else:
+            defaults[p.name] = p.default
+    _diff_param_names_tuple = tuple(p.name for p in param_specs if p.name not in _static_names)
+
+    def _register_setup(cls_inner: type, setup_fn: Any) -> type:
+        """Register an analog-init / setup function on the component class.
+
+        Used as ``@<Component>.setup`` decorator. The registered function
+        will be called inside the JAX trace each time the component is
+        evaluated, with the same parameters the physics function receives
+        (filtered to those the setup function declares). Its return value
+        is injected as the ``init`` argument of the physics function —
+        the physics function MUST declare ``init`` as the first
+        non-reserved positional argument for ``.setup`` to work.
+
+        Returns ``cls_inner`` for decorator chaining.
+
+        Raises:
+            TypeError: physics function did not declare ``init`` arg.
+            RuntimeError: ``.setup`` was already registered on this class.
+
+        """
+        if not has_init_arg:
+            msg = (
+                f"@{fn.__name__}.setup requires the physics function to declare "
+                f"an 'init' argument as the first non-reserved positional "
+                f"parameter. Add ``init`` to the signature, e.g. "
+                f"``def {fn.__name__}(signals, s, init, R=1.0): ...``"
+            )
+            raise TypeError(msg)
+        if _setup_cell[0] is not None:
+            msg = (
+                f"@{fn.__name__}.setup is already registered. Re-register "
+                f"is intentionally rejected to catch typos; if you really "
+                f"want to replace it, set ``cls._setup_fn_ref = None`` first."
+            )
+            raise RuntimeError(msg)
+        if not callable(setup_fn):
+            msg = f"@{fn.__name__}.setup expects a callable; got {type(setup_fn).__name__}"
+            raise TypeError(msg)
+        _setup_cell[0] = setup_fn
+        cls_inner._setup_fn_ref = staticmethod(setup_fn)
+        return cls_inner
 
     namespace = {
         "__annotations__": annotations,
@@ -384,6 +527,12 @@ def _build_component(  # noqa: C901
         "_invoke_physics": _invoke_physics,
         "_uses_time": uses_time,
         "amplitude_param": amplitude_param,
+        "_has_init_arg": has_init_arg,
+        "_setup_fn_ref": None,
+        "setup": classmethod(_register_setup),
+        # Expose static/diff param name splits for _install_custom_jvp.
+        "_static_param_names": tuple(sorted(_static_names)),
+        "_diff_param_names": _diff_param_names_tuple,
         **defaults,
     }
 
