@@ -387,6 +387,10 @@ def transient_parameter_sensitivity(
     Implements the correct discrete adjoint of the Backward Euler time-stepping
     scheme, with full inter-step coupling through the capacitance matrix (J_q).
 
+    Note:
+        This function uses host-side loops and ``jax.device_get`` for
+        finite-difference perturbations and cannot be JIT-compiled.
+
     The adjoint recurrence is (k = N, N-1, ..., 1):
 
         ψ[k] = ∂L/∂y[k]|direct + (J_q[k] / dt)^T · λ[k+1]

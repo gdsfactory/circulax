@@ -513,6 +513,8 @@ def _infer_is_complex(groups: dict) -> bool:
 
 
 def _group_outputs_complex(group: Any) -> bool:
+    if getattr(group, "is_fdomain", False):
+        return False
     try:
         count = group.var_indices.shape[0]
         y0 = jnp.zeros(group.var_indices.shape[1])
