@@ -16,6 +16,45 @@ if TYPE_CHECKING:
     from circulax.solvers.linear import CircuitLinearSolver
 
 
+def _resolve_osdi_param_col(group: Any, param_key: str) -> int:
+    """Resolve a parameter name to its column index in an OSDI group's params array."""
+    try:
+        from bosdi.osdi_registry import get_model  # type: ignore[import]
+
+        model = get_model(group.model_id)
+        name_to_col = {n.lower(): i for i, n in enumerate(model.param_names)}
+    except (ImportError, Exception) as exc:
+        msg = (
+            f"Cannot resolve OSDI parameter '{param_key}': "
+            f"bosdi registry lookup failed ({exc!r})."
+        )
+        raise ValueError(msg) from exc
+    col = name_to_col.get(param_key.lower())
+    if col is None:
+        msg = (
+            f"Parameter '{param_key}' not found in OSDI model "
+            f"(available: {sorted(name_to_col)})."
+        )
+        raise ValueError(msg)
+    return col
+
+
+def _update_osdi_param(
+    groups_dict: dict,
+    group_name: str,
+    group: Any,
+    instance_name: str,
+    param_key: str,
+    new_value: float,
+) -> dict:
+    """Update a single parameter for one OSDI instance and return new groups dict."""
+    col = _resolve_osdi_param_col(group, param_key)
+    instance_idx = group.index_map[instance_name]
+    new_params = group.params.at[instance_idx, col].set(new_value)
+    new_group = group.with_params(new_params)
+    return {**groups_dict, group_name: new_group}
+
+
 class Circuit:
     """A compiled, callable circuit with SAX-like parameter API.
 
@@ -76,10 +115,13 @@ class Circuit:
                 index_map = getattr(group, "index_map", None)
                 if index_map is None or instance_name not in index_map:
                     continue
-                if not hasattr(group.params, param_key):
-                    msg = f"Instance '{instance_name}' has no parameter '{param_key}'."
-                    raise ValueError(msg)
-                updated = update_params_dict(updated, group_name, instance_name, param_key, value)
+                if hasattr(group, "model_id"):
+                    updated = _update_osdi_param(updated, group_name, group, instance_name, param_key, value)
+                else:
+                    if not hasattr(group.params, param_key):
+                        msg = f"Instance '{instance_name}' has no parameter '{param_key}'."
+                        raise ValueError(msg)
+                    updated = update_params_dict(updated, group_name, instance_name, param_key, value)
                 break
             else:
                 msg = f"Instance '{instance_name}' not found in compiled circuit."

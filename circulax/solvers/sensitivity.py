@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 import jax
 import jax.numpy as jnp
 import klujax
+
 from circulax.solvers.assembly import assemble_system_real
 from circulax.solvers.linear import DC_DT, GROUND_STIFFNESS
 
