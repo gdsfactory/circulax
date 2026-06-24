@@ -129,7 +129,7 @@ python = "3.13.*"
 tqdm = ">=4.67.1,<5"
 
 # Test feature — lean CI environment (no docs, no dev tooling)
-# Used for the non-default Python matrix (py311, py312).
+# Used for the non-default Python matrix (py312).
 [tool.pixi.feature.test.pypi-dependencies]
 circulax = { path = ".", editable = true, extras = ["verilog-a"] }
 pytest = ">=8"

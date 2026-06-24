@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        env: [py311, py312, py313]
+        env: [py312, py313]
 
     steps:
       - uses: actions/checkout@v4
