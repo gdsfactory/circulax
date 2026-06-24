@@ -13,6 +13,7 @@ Outputs:
 from __future__ import annotations
 
 import csv
+import os
 import subprocess
 import sys
 import time
@@ -24,11 +25,11 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, "/home/cdaunt/code/vacask/VACASK/python")
+sys.path.insert(0, os.environ.get("VACASK_PYTHON", str(Path.home() / "code/vacask/VACASK/python")))
 
 import bench_circulax as cx  # noqa: E402
 
-VACASK_BIN = "/home/cdaunt/opt/vacask/bin/vacask"
+VACASK_BIN = os.environ.get("VACASK_BIN", str(Path.home() / "opt/vacask/bin/vacask"))
 VACASK_DIR = HERE / "vacask"
 RAW_FILE = VACASK_DIR / "dcsweep.raw"
 CSV_PATH = HERE / "results.csv"
@@ -39,13 +40,10 @@ def _ensure_vacask_osdi() -> None:
     target = VACASK_DIR / "juncap200.osdi"
     if target.exists():
         return
-    src_va = (
-        "/home/cdaunt/code/gdsfactory/pdks/IHP-Open-PDK/ihp-sg13g2/"
-        "libs.tech/verilog-a/psp103/juncap200.va"
-    )
+    src_va = str(HERE / "va_source" / "juncap200.va")
     subprocess.run(
         ["openvaf-r", src_va, "-o", str(target)],
-        cwd=Path(src_va).parent, check=True, capture_output=True, text=True,
+        cwd=str(HERE / "va_source"), check=True, capture_output=True, text=True,
     )
 
 
