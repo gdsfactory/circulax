@@ -172,7 +172,6 @@ def _generate_lcr_animation() -> None:
     if out_path.exists():
         return  # already generated; skip during incremental rebuilds
 
-    import diffrax
     import jax
     import jax.numpy as jnp
     import matplotlib
@@ -182,7 +181,6 @@ def _generate_lcr_animation() -> None:
 
     from circulax import compile_circuit
     from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
-    from circulax.solvers import setup_transient
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -202,6 +200,7 @@ def _generate_lcr_animation() -> None:
             "R1,p2": "L1,p1",
             "L1,p2": "C1,p1",
         },
+        "ports": {"source": "V1,p1", "cap": "C1,p1"},
     }
     models = {
         "resistor": Resistor, "capacitor": Capacitor,
@@ -210,18 +209,17 @@ def _generate_lcr_animation() -> None:
     }
 
     circuit = compile_circuit(net_dict, models)
-    y_op    = circuit()
-    sim     = setup_transient(groups=circuit.groups, linear_strategy=circuit.solver)
+    y_op    = circuit.dc()
     t_max   = 3e-9
-    sol     = sim(
+    sol     = circuit.transient(
         t0=0.0, t1=t_max, dt0=1e-3 * t_max, y0=y_op,
-        saveat=diffrax.SaveAt(ts=jnp.linspace(0, t_max, 500)),
+        saveat=jnp.linspace(0, t_max, 500),
         max_steps=100_000,
     )
 
     ts    = sol.ts
-    v_src = circuit.get_port_field(sol.ys, "V1,p1")
-    v_cap = circuit.get_port_field(sol.ys, "C1,p1")
+    v_src = circuit.port(sol.ys, "source")
+    v_cap = circuit.port(sol.ys, "cap")
     i_ind = sol.ys[:, 5]
 
     plt.rcParams.update({

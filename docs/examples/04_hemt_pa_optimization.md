@@ -1,5 +1,11 @@
 # RF Power Amplifier Optimization via Differentiable Harmonic Balance
 
+Inverse design will be used to tune the input and output L-match networks of a 5 GHz Class-A HEMT power amplifier to maximise **Power-Added Efficiency (PAE)**, resulting in the following:
+
+<!-- animation -->
+
+The following is how this is performed in circulax.
+
 Traditional EDA tools (ADS, AWR) solve Harmonic Balance (HB) efficiently, but their built-in optimisers
 use gradient-free algorithms — genetic algorithms, random search, or Nelder-Mead — that require hundreds
 of full HB evaluations to converge.
@@ -28,7 +34,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
-from circulax import compile_circuit, setup_harmonic_balance
+from circulax import compile_circuit
 from circulax.components.base_component import component
 from circulax.components.electronic import (
     Capacitor,
@@ -37,7 +43,6 @@ from circulax.components.electronic import (
     VoltageSource,
     VoltageSourceAC,
 )
-from circulax.utils import update_params_dict
 
 jax.config.update("jax_enable_x64", True)
 
@@ -45,12 +50,10 @@ pio.templates.default = "plotly_white"
 pio.renderers.default = "png"
 print("JAX backend:", jax.default_backend())
 
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-
-
-    WARNING:2026-04-17 17:33:14,391:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:06:08,518:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
     JAX backend: cpu
@@ -275,6 +278,7 @@ pa_net = {
         "L_out":   {"component": "inductor",        "settings": {"L": L_out_init}},
         "C_out":   {"component": "capacitor",       "settings": {"C": C_out_init}},
         "R_load":  {"component": "resistor",        "settings": {"R": 50.0}},
+        "GND":     {"component": "ground"},
     },
     "connections": {
         "Vs,p1":      "Rs_src,p1",
@@ -293,6 +297,7 @@ pa_net = {
         "C_out,p2":   "GND,p1",
         "R_load,p2":  "GND,p1",
     },
+    "ports": {"gate": "Q1,g", "drain": "Q1,d", "load": "R_load,p1"},
 }
 
 models = {
@@ -302,38 +307,55 @@ models = {
     "inductor":        Inductor,
     "capacitor":       Capacitor,
     "hemt":            HEMT,
+    "ground":          lambda: 0,
 }
 
 circuit = compile_circuit(pa_net, models, backend="dense")
-groups = circuit.groups
-num_vars = circuit.sys_size
-net_map = circuit.port_map
-print(f"System size : {num_vars} unknowns")
-print(f"Groups      : {list(groups.keys())}")
-print(f"Net map     : {dict(sorted(net_map.items()))}")
+print(f"System size : {circuit.sys_size} unknowns")
+print(f"Named ports : {list(pa_net['ports'])}")
 
-# Extract key node indices for later use
-osc_node_drain = net_map["Q1,d"]
-osc_node_gate  = net_map["Q1,g"]
-load_node      = net_map["R_load,p1"]
-choke_iL_idx   = net_map["L_choke,i_L"]
-print(f"\nKey indices: drain={osc_node_drain}, gate={osc_node_gate}, "
-      f"load={load_node}, choke_iL={choke_iL_idx}")
+# Internal state used for drain-current and DC-power inspection.
+choke_iL_idx = circuit.port_map["L_choke,i_L"]
+print(f"Internal L_choke current state index: {choke_iL_idx}")
+
+
+def _pa_params(V_in=None, L_in=None, C_in=None, L_out=None, C_out=None):
+    updates = {}
+    if V_in is not None:
+        updates["Vs.V"] = V_in
+    if L_in is not None:
+        updates["L_in.L"] = L_in
+    if C_in is not None:
+        updates["C_in.C"] = C_in
+    if L_out is not None:
+        updates["L_out.L"] = L_out
+    if C_out is not None:
+        updates["C_out.C"] = C_out
+    return updates
+
+
+def _run_pa_hb(params, y_flat_init=None):
+    return circuit.hb(
+        freq=F0,
+        harmonics=N_HARM,
+        y0=y_dc,
+        params=params,
+        y_flat_init=y_flat_init,
+    )
+
 ```
 
     System size : 15 unknowns
-    Groups      : ['voltagesourceac', 'resistor', 'inductor', 'capacitor', 'voltagesource', 'hemt']
-    Net map     : {'C_block,p1': 1, 'C_block,p2': 2, 'C_in,p1': 3, 'C_in,p2': 0, 'C_out,p1': 4, 'C_out,p2': 0, 'GND,p1': 0, 'L_choke,i_L': 11, 'L_choke,p1': 5, 'L_choke,p2': 1, 'L_in,i_L': 10, 'L_in,p1': 6, 'L_in,p2': 3, 'L_out,i_L': 12, 'L_out,p1': 2, 'L_out,p2': 4, 'Q1,d': 1, 'Q1,g': 3, 'Q1,s': 0, 'R_bias,p1': 3, 'R_bias,p2': 7, 'R_load,p1': 4, 'R_load,p2': 0, 'Rs_src,p1': 8, 'Rs_src,p2': 6, 'Vdd,i_src': 14, 'Vdd,p1': 5, 'Vdd,p2': 0, 'Vgg,i_src': 13, 'Vgg,p1': 7, 'Vgg,p2': 0, 'Vs,i_src': 9, 'Vs,p1': 8, 'Vs,p2': 0}
-
-    Key indices: drain=1, gate=3, load=4, choke_iL=11
+    Named ports : ['gate', 'drain', 'load']
+    Internal L_choke current state index: 9
 
 
 
 ```python
-y_dc = circuit()
+y_dc = circuit.dc()
 
-V_gate     = float(y_dc[net_map["Q1,g"]])
-V_drain    = float(y_dc[net_map["Q1,d"]])
+V_gate     = float(circuit.port(y_dc, "gate"))
+V_drain    = float(circuit.port(y_dc, "drain"))
 I_drain_dc = float(y_dc[choke_iL_idx])
 
 # Verify with HEMT formula
@@ -354,6 +376,7 @@ print("\n  Ropt ≈ (Vdd - Vknee) / (2 Idq)")
 print(f"       = ({Vdd_val} - 0.3) / (2 × {I_drain_dc*1e3:.1f} mA)")
 print(f"       = {Ropt:.1f} Ω  (optimal load for class-A max power)")
 print(f"\n  The output L-match must transform 50 Ω → {Ropt:.0f} Ω at 5 GHz.")
+
 ```
 
     DC Operating Point
@@ -397,7 +420,7 @@ periodic response. Tiling the DC solution `y_dc` across K time steps is a reliab
 # The time-domain peak amplitude is  2 * |y_freq[k, node]|  for k >= 1.
 def compute_powers(y_freq, V_src_amp, Vdd):
     # Output power at fundamental
-    V_load_amp = 2.0 * jnp.abs(y_freq[1, load_node])
+    V_load_amp = 2.0 * jnp.abs(circuit.port(y_freq, "load")[1])
     Pout_W     = V_load_amp**2 / (4.0 * 50.0)   # delivered to matched 50 Ω
 
     # Available input power
@@ -418,20 +441,21 @@ def compute_powers(y_freq, V_src_amp, Vdd):
 V_test = float(jnp.sqrt(8.0 * 50.0 * 10.0 ** (10.0 / 10.0) * 1e-3))
 print(f"Test point: +10 dBm available input → V_amplitude = {V_test:.3f} V")
 
-grps_test   = update_params_dict(groups, "voltagesourceac", "Vs", "V", V_test)
-run_hb_test = setup_harmonic_balance(grps_test, num_vars, freq=F0, num_harmonics=N_HARM)
-
 y_flat_init = jnp.tile(y_dc, K)
-y_time_ref, y_freq_ref = jax.jit(run_hb_test)(y_dc, y_flat_init=y_flat_init)
+y_time_ref, y_freq_ref = _run_pa_hb(_pa_params(V_in=V_test), y_flat_init=y_flat_init)
 
 Pout_t, Gain_t, PAE_t = compute_powers(y_freq_ref, V_test, Vdd_val)
 print(f"\n  Pout = {float(Pout_t):.1f} dBm")
 print(f"  Gain = {float(Gain_t):.1f} dB")
 print(f"  PAE  = {float(PAE_t)*100:.1f}%")
-print(f"\n  Drain voltage swing : {float(2*jnp.abs(y_freq_ref[1, osc_node_drain])):.3f} V peak")
-print(f"  Gate voltage swing  : {float(2*jnp.abs(y_freq_ref[1, osc_node_gate])):.3f} V peak")
-h3_ratio = float(jnp.abs(y_freq_ref[3, osc_node_drain]) / (jnp.abs(y_freq_ref[1, osc_node_drain]) + 1e-20))
-print(f"  3rd harmonic at drain: {float(2*jnp.abs(y_freq_ref[3, osc_node_drain]))*1e3:.1f} mV  ({h3_ratio*100:.1f}% of fundamental)")
+
+drain_ref = circuit.port(y_freq_ref, "drain")
+gate_ref = circuit.port(y_freq_ref, "gate")
+print(f"\n  Drain voltage swing : {float(2*jnp.abs(drain_ref[1])):.3f} V peak")
+print(f"  Gate voltage swing  : {float(2*jnp.abs(gate_ref[1])):.3f} V peak")
+h3_ratio = float(jnp.abs(drain_ref[3]) / (jnp.abs(drain_ref[1]) + 1e-20))
+print(f"  3rd harmonic at drain: {float(2*jnp.abs(drain_ref[3]))*1e3:.1f} mV  ({h3_ratio*100:.1f}% of fundamental)")
+
 ```
 
     Test point: +10 dBm available input → V_amplitude = 2.000 V
@@ -455,9 +479,7 @@ V_amp_vals   = np.sqrt(8.0 * 50.0 * 10.0 ** (Pin_dBm_vals / 10.0) * 1e-3)
 
 def run_at_amplitude(V_in: jax.Array):
     # Run HB and return (Pout_dBm, Gain_dB, PAE) at source amplitude V_in.
-    grps = update_params_dict(groups, "voltagesourceac", "Vs", "V", V_in)
-    run_hb_i = setup_harmonic_balance(grps, num_vars, freq=F0, num_harmonics=N_HARM)
-    _, y_freq_i = run_hb_i(y_dc, y_flat_init=jnp.tile(y_dc, K))
+    _, y_freq_i = _run_pa_hb(_pa_params(V_in=V_in), y_flat_init=jnp.tile(y_dc, K))
     return compute_powers(y_freq_i, V_in, Vdd_val)
 
 
@@ -474,6 +496,7 @@ for Pin_dBm, V_in in zip(Pin_dBm_vals, V_amp_vals):
     PAE_list.append(float(PAE) * 100)
     if round(Pin_dBm) in (-10, -2, 6, 14, 22):
         print(f"{Pin_dBm:>12.0f}  {float(Pout):>12.1f}  {float(Gain):>10.1f}  {float(PAE)*100:>8.1f}")
+
 ```
 
     Pin sweep (detuned matching network):
@@ -574,9 +597,6 @@ positive and cover several decades without constraint handling.
 V_target = float(jnp.sqrt(8.0 * 50.0 * 10.0 ** (12.0 / 10.0) * 1e-3))
 print(f"Optimisation target: Pin = +12 dBm  (V_source amplitude = {V_target:.3f} V)")
 
-# Fix source amplitude for optimisation (we tune matching only)
-groups_target = update_params_dict(groups, "voltagesourceac", "Vs", "V", V_target)
-
 # Fixed warm start: tile DC solution across K time points.
 # For a driven PA the source always forces a non-trivial solution, so this is reliable.
 y_flat_warmstart = jnp.tile(y_dc, K)
@@ -586,13 +606,10 @@ def loss_fn(log_params: jax.Array) -> jax.Array:
     # Negative PAE - minimising this maximises PAE at +12 dBm input.
     L_in, C_in, L_out, C_out = jnp.exp(log_params)
 
-    grps = update_params_dict(groups_target, "inductor",  "L_in",  "L", L_in)
-    grps = update_params_dict(grps,          "capacitor", "C_in",  "C", C_in)
-    grps = update_params_dict(grps,          "inductor",  "L_out", "L", L_out)
-    grps = update_params_dict(grps,          "capacitor", "C_out", "C", C_out)
-
-    run_hb_i = setup_harmonic_balance(grps, num_vars, freq=F0, num_harmonics=N_HARM)
-    _, y_freq_i = run_hb_i(y_dc, y_flat_init=y_flat_warmstart)
+    _, y_freq_i = _run_pa_hb(
+        _pa_params(V_in=V_target, L_in=L_in, C_in=C_in, L_out=L_out, C_out=C_out),
+        y_flat_init=y_flat_warmstart,
+    )
 
     _, _, PAE = compute_powers(y_freq_i, V_target, Vdd_val)
     return -PAE
@@ -625,6 +642,7 @@ print(f"  ∂PAE/∂C_out = {C_out_g:+.4f}  per pF")
 
 all_nonzero = all(abs(g) > 1e-6 for g in [L_in_g, C_in_g, L_out_g, C_out_g])
 print(f"\n{'All non-zero: implicit differentiation through HB is working.' if all_nonzero else 'WARNING: zero gradients detected.'}")
+
 ```
 
     Optimisation target: Pin = +12 dBm  (V_source amplitude = 2.518 V)
@@ -713,18 +731,15 @@ print(f"\nFinal PAE: {pae_history[-1]:.1f}%  (initial: {pae_history[0]:.1f}%)")
 
 
 ```python
-# ── Build optimised groups for before/after comparison ────────────────────────────────
+# ── Build optimised parameter set for before/after comparison ────────────────────────
 L_in_f, C_in_f, L_out_f, C_out_f = jnp.exp(log_params)
-groups_opt = update_params_dict(groups,     "inductor",  "L_in",  "L", L_in_f)
-groups_opt = update_params_dict(groups_opt, "capacitor", "C_in",  "C", C_in_f)
-groups_opt = update_params_dict(groups_opt, "inductor",  "L_out", "L", L_out_f)
-groups_opt = update_params_dict(groups_opt, "capacitor", "C_out", "C", C_out_f)
 
 
 def run_at_amplitude_opt(V_in):
-    grps = update_params_dict(groups_opt, "voltagesourceac", "Vs", "V", V_in)
-    run_hb_i = setup_harmonic_balance(grps, num_vars, freq=F0, num_harmonics=N_HARM)
-    _, y_freq_i = run_hb_i(y_dc, y_flat_init=jnp.tile(y_dc, K))
+    _, y_freq_i = _run_pa_hb(
+        _pa_params(V_in=V_in, L_in=L_in_f, C_in=C_in_f, L_out=L_out_f, C_out=C_out_f),
+        y_flat_init=jnp.tile(y_dc, K),
+    )
     _, _, PAE = compute_powers(y_freq_i, V_in, Vdd_val)
     return PAE
 
@@ -811,22 +826,23 @@ fig.show()
 
 ```python
 # ── Run HB at optimised matching, target drive level ───────────────────────────────────
-grps_wf   = update_params_dict(groups_opt, "voltagesourceac", "Vs", "V", V_target)
-run_hb_wf = setup_harmonic_balance(grps_wf, num_vars, freq=F0, num_harmonics=N_HARM)
-y_time_opt, y_freq_opt = jax.jit(run_hb_wf)(y_dc, y_flat_init=jnp.tile(y_dc, K))
+y_time_opt, y_freq_opt = _run_pa_hb(
+    _pa_params(V_in=V_target, L_in=L_in_f, C_in=C_in_f, L_out=L_out_f, C_out=C_out_f),
+    y_flat_init=jnp.tile(y_dc, K),
+)
 
 T    = 1.0 / F0                                       # period [s]
 t_ps = np.linspace(0, T * 1e12, K, endpoint=False)   # time axis [ps]
 
-v_gate  = np.real(np.array(y_time_opt[:, osc_node_gate]))
-v_drain = np.real(np.array(y_time_opt[:, osc_node_drain]))
+v_gate  = np.real(np.array(circuit.port(y_time_opt, "gate")))
+v_drain = np.real(np.array(circuit.port(y_time_opt, "drain")))
 i_drain = np.real(np.array(y_time_opt[:, choke_iL_idx]))
 
 Pout_opt, Gain_opt, PAE_opt_val = compute_powers(y_freq_opt, V_target, Vdd_val)
 
 harmonics    = np.arange(N_HARM + 1)
 scale        = np.where(harmonics == 0, 1.0, 2.0)
-spectrum     = scale * np.abs(np.array(y_freq_opt[:N_HARM + 1, osc_node_drain]))
+spectrum     = scale * np.abs(np.array(circuit.port(y_freq_opt, "drain")[:N_HARM + 1]))
 tick_labels  = ["DC" if k == 0 else f"{k}f₀" for k in harmonics]
 i_dc_bias    = float(jnp.real(y_freq_opt[0, choke_iL_idx])) * 1e3
 
@@ -885,6 +901,7 @@ print("\nOptimised PA — final performance at +12 dBm input:")
 print(f"  Pout = {float(Pout_opt):.1f} dBm")
 print(f"  Gain = {float(Gain_opt):.1f} dB")
 print(f"  PAE  = {float(PAE_opt_val)*100:.1f}%")
+
 
 ```
 

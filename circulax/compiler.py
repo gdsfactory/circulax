@@ -9,9 +9,17 @@ from typing import Any
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import kfnetlist as kfnl
 
 from circulax.components.base_component import PhysicsReturn, Signals
-from circulax.netlist import build_net_map
+from circulax.netlist import build_net_map_kfnetlist, sax_to_kfnetlist
+
+try:
+    from bosdi.circulax import _BOSDI_AVAILABLE, OsdiComponentGroup, OsdiModelDescriptor
+except ImportError:
+    OsdiComponentGroup = None  # type: ignore[assignment,misc]
+    OsdiModelDescriptor = None  # type: ignore[assignment]
+    _BOSDI_AVAILABLE = False
 
 
 def ensure_time_signature(model_func: callable) -> callable:
@@ -61,6 +69,7 @@ class ComponentGroup(eqx.Module):
     index_map: dict[str, int] | None = eqx.field(static=True, default=None)
     is_fdomain: bool = eqx.field(static=True, default=False)
     amplitude_param: str = eqx.field(static=True, default="")
+    combined_func: Any = eqx.field(static=True, default=None)
 
 
 def get_model_width(func: callable) -> int:
@@ -165,117 +174,63 @@ def solve_connectivity(connections: dict) -> dict:  # noqa: C901
     return node_map, node_counter
 
 
-def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]:  # noqa: C901, PLR0912, PLR0915
+def compile_netlist(netlist: dict | kfnl.Netlist, models_map: dict) -> tuple[dict, int, dict]:  # noqa: C901, PLR0912, PLR0915
     """Compile a netlist into batched, vectorized component groups ready for simulation.
 
-    This function bridges the gap between a human-readable netlist description and
-    the internal representation required by the ODE solver. It resolves net
-    connectivity, instantiates component objects, assigns state variable indices,
-    and batches components of the same type into vectorized groups for efficient
-    JAX execution.
-
-    The compilation proceeds in three stages:
-
-    1. **Connectivity resolution** — ``build_net_map`` assigns a unique integer
-       node index to every net, returning a flat map of ``"Instance,Port"`` keys
-       to node indices.
-    2. **Instance processing** — each instance is instantiated as an Equinox
-       object using its settings, its port indices are looked up in the node map,
-       and it is placed into a bucket keyed by ``(component_type, tree_structure)``.
-       The tree structure is included in the key so that instances whose static
-       fields differ (e.g. a callable parameter) are never incorrectly batched
-       together.
-    3. **Vectorization** — each bucket is stacked into a single
-       :class:`ComponentGroup` with batched parameters and pre-computed Jacobian
-       sparsity index arrays, ready to be passed directly to the solver.
-
-    Args:
-        netlist: Circuit description dict. Expected to contain an
-            ``"instances"`` key mapping instance names to dicts with at least
-            a ``"component"`` key (model name string) and an optional
-            ``"settings"`` key (parameter dict forwarded to the component
-            constructor). A ``"GND"`` instance with ``component="ground"`` is
-            recognised and skipped; see ``models_map`` note on reserved types.
-
-            **Settings filtering**: settings whose value is ``None`` are
-            dropped (GDSFactory convention — ``None`` means "use the model
-            default"). Settings whose key is not declared on the model are
-            also silently ignored, which allows GDSFactory netlists carrying
-            geometry-only keys (e.g. ``dy``, ``dx``, ``cross_section``) to
-            be passed directly without preprocessing.  *Note*: a mis-spelled
-            parameter name will be silently ignored rather than raising an
-            error; double-check spelling if a parameter appears to have no
-            effect.
-        models_map: Mapping from model name strings to
-            :class:`~circulax.components.base_component.CircuitComponent`
-            subclasses, e.g. ``{"Resistor": Resistor, "Capacitor": Capacitor}``.
-            ``"ground"`` is a **reserved** component type — it does not need
-            to appear in this map (instances with ``component="ground"`` or
-            named ``"GND"`` are skipped automatically).
-            Raw SAX model functions (callable with all-defaulted parameters and
-            a ``sax.SDict``/``sax.SDense``/``sax.SCoo``/``sax.SType`` return
-            annotation) are accepted directly and auto-wrapped via
-            :func:`~circulax.s_transforms.sax_component`; no manual decoration
-            required.
+    Accepts either a ``kfnetlist.Netlist`` (preferred) or a SAX-format dict
+    (auto-converted via :func:`sax_to_kfnetlist`).
 
     Returns:
-        A three-tuple ``(compiled_groups, sys_size, port_to_node_map)`` where:
-
-        - **compiled_groups** (``dict[str, ComponentGroup]``) — maps group name
-            to a fully vectorized :class:`ComponentGroup`. If all instances of a
-            type share the same tree structure there is one group per type, named
-            after the type (e.g. ``"Resistor"``). When a type is split across
-            multiple structures the groups are numbered (``"Resistor_0"``,
-            ``"Resistor_1"``, …).
-        - **sys_size** (``int``) — total number of scalar unknowns in the system
-            vector ``y``, equal to the number of nets plus the total number of
-            state variables across all instances. This is the length of the array
-            passed to the solver.
-        - **port_to_node_map** (``dict[str, int]``) — maps both
-            ``"Instance,port"`` and ``"Instance,state"`` keys to their integer
-            indices in the global state vector ``y``. Port keys resolve to shared
-            node indices (multiple ports on the same net share one index); state
-            keys resolve to unique per-instance indices. Use this to extract
-            specific node voltages or internal state variables from the solution.
-
-    Raises:
-        ValueError: If a component type listed in the netlist is not present in
-            ``models_map``, or if a port declared on a component class has no
-            corresponding entry in the netlist connections.
-        TypeError: If the settings dict for an instance does not match the
-            constructor signature of its component class.
+        ``(compiled_groups, sys_size, port_to_node_map)``
 
     """
-    # ``"ground"`` is a reserved component type — instances with
-    # ``component="ground"`` (or named ``"GND"``) are skipped during
-    # compilation and never looked up in ``models_map``.  Users do NOT need
-    # to include ``"ground"`` in the models map; if they do, the entry is
-    # silently ignored.
     _RESERVED = frozenset({"ground"})
 
-    # Auto-wrap raw SAX model functions into CircuitComponent classes so callers
-    # can pass PDKs of plain SAX models straight through the netlist interface.
-    # CircuitComponent subclasses pass through unchanged; anything else raises.
-    from circulax.s_transforms import _normalize_model  # noqa: PLC0415
-    models_map = {
-        k: _normalize_model(v, name=k)
-        for k, v in models_map.items()
-        if k not in _RESERVED
-    }
+    from circulax.s_transforms import _normalize_model
 
-    port_to_node_map, num_nodes = build_net_map(netlist)
+    def _maybe_normalize(k: str, v: Any) -> Any:
+        if OsdiModelDescriptor is not None and isinstance(v, OsdiModelDescriptor):
+            return v
+        return _normalize_model(v, name=k)
+
+    models_map = {k: _maybe_normalize(k, v) for k, v in models_map.items() if k not in _RESERVED}
+
+    # --- 1. Normalize to kfnetlist.Netlist ---
+    settings_override: dict[str, dict[str, Any]] = {}
+    if isinstance(netlist, dict):
+        netlist, settings_override = sax_to_kfnetlist(netlist)
+
+    port_to_node_map, num_nodes = build_net_map_kfnetlist(netlist)
+
+    def _port_candidates(comp_cls: type, port: str) -> tuple[str, ...]:
+        aliases = getattr(comp_cls, "_sanitized_to_raw_ports", {})
+        raw_aliases = tuple(raw for raw in aliases.get(port, ()) if raw != port)
+        return (port, *raw_aliases)
+
+    def _resolve_port_index(comp_cls: type, inst_name: str, port: str) -> int:
+        candidates = _port_candidates(comp_cls, port)
+        for candidate in candidates:
+            key = f"{inst_name},{candidate}"
+            if key in port_to_node_map:
+                idx = port_to_node_map[key]
+                port_to_node_map.setdefault(f"{inst_name},{port}", idx)
+                return idx
+        expected = f"{inst_name},{port}"
+        if len(candidates) > 1:
+            expected += f" (aliases: {', '.join(f'{inst_name},{p}' for p in candidates[1:])})"
+        msg = f"Port '{port}' on '{inst_name}' is unconnected.\nYour netlist connections must include '{expected}'"
+        raise ValueError(msg)
 
     # Buckets: Key = (comp_type_name, tree_structure), Value = list of instances
     buckets = defaultdict(list)
+    # Separate bucket for OSDI instances (keyed by comp_type only)
+    osdi_buckets: dict[str, list] = defaultdict(list)
     sys_size = num_nodes
 
     # --- 2. Process Instances ---
-    instances = netlist.get("instances", {})
+    for name, inst in netlist.instances.items():
+        comp_type = inst.component
 
-    for name, data in instances.items():
-        comp_type = data["component"]
-
-        # Skip ground (it's just a marker, already handled in build_net_map)
         if comp_type == "ground" or name == "GND":
             continue
 
@@ -284,16 +239,40 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             raise ValueError(msg)
 
         comp_cls = models_map[comp_type]
+        settings = settings_override.get(name, inst.settings or {})
+
+        # OSDI components use a descriptor object instead of an Equinox class.
+        if OsdiModelDescriptor is not None and isinstance(comp_cls, OsdiModelDescriptor):
+            if not _BOSDI_AVAILABLE:
+                raise ImportError(
+                    f"Component '{name}' uses an OSDI model but the bosdi runtime "
+                    "(osdi_loader) is not available. Install circulax[verilog-a] to "
+                    "enable OSDI support. Note: OSDI is not available on all platforms."
+                )
+            port_indices = []
+            for port in comp_cls.ports:
+                key = f"{name},{port}"
+                if key in port_to_node_map:
+                    port_indices.append(port_to_node_map[key])
+                else:
+                    msg = f"Port '{port}' on '{name}' is unconnected.\nYour netlist connections must include '{key}'"
+                    raise ValueError(msg)
+            osdi_buckets[comp_type].append(
+                {
+                    "params_dict": comp_cls.make_instance(settings),
+                    "ports": port_indices,
+                    "name": name,
+                }
+            )
+            continue
+
         # GDSFactory netlists carry geometry settings that don't appear on
         # the simulation model (e.g. ``dy``/``dx`` on a ``coupler_strip``
         # instance, or ``allow_min_radius_violation`` on a ``bend_euler``).
         # Filter to fields the model actually declares, and drop ``None``
         # values (GDSFactory convention: ``None`` means "use the default").
         known_fields = {f.name for f in dataclasses.fields(comp_cls)}
-        settings = {
-            k: v for k, v in data.get("settings", {}).items()
-            if v is not None and k in known_fields
-        }
+        settings = {k: v for k, v in settings.items() if v is not None and k in known_fields}
 
         # A. Create Equinox Object
         try:
@@ -305,13 +284,7 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         # B. Get Port Indices
         port_indices = []
         for port in comp_cls.ports:
-            key = f"{name},{port}"
-
-            if key in port_to_node_map:
-                port_indices.append(port_to_node_map[key])
-            else:
-                msg = f"Port '{port}' on '{name}' is unconnected.\nYour netlist connections must include '{key}'"
-                raise ValueError(msg)
+            port_indices.append(_resolve_port_index(comp_cls, name, port))
 
         # Group by Type AND Structure (to handle static field differences)
         structure = jax.tree.structure(comp_obj)
@@ -368,6 +341,7 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
         # Create Index Map for parameter updates
         index_map = {item["name"]: i for i, item in enumerate(items)}
 
+        _combined_func = getattr(comp_cls, "_combined_fn", None) if getattr(comp_cls, "_has_combined_fn", False) else None
         compiled_groups[group_name] = ComponentGroup(
             name=group_name,
             var_indices=var_indices_arr,
@@ -379,6 +353,76 @@ def compile_netlist(netlist: dict, models_map: dict) -> tuple[dict, int, dict]: 
             index_map=index_map,
             is_fdomain=getattr(comp_cls, "_is_fdomain", False),
             amplitude_param=getattr(comp_cls, "amplitude_param", ""),
+            combined_func=_combined_func,
+        )
+
+    # --- Process OSDI buckets (requires circulax[verilog-a] / bosdi) ---
+    for comp_type, items in osdi_buckets.items():
+        descriptor: OsdiModelDescriptor = models_map[comp_type]
+        group_name = comp_type
+        n_dev = len(items)
+        n_pins = descriptor.model.num_pins
+        n_nodes = descriptor.model.num_nodes  # terminals + non-collapsed internal
+        n_internal = n_nodes - n_pins  # extra unknowns per instance
+
+        params_arr = jnp.array(
+            [[item["params_dict"][k] for k in descriptor.param_names] for item in items],
+            dtype=jnp.float64,
+        )  # (N, num_params)
+        states_arr = jnp.zeros((n_dev, descriptor.model.num_states), dtype=jnp.float64)
+
+        # Bosdi Tier-3: pre-bake params into an OsdiBatchHandle so per-Newton-iter
+        # OSDI calls skip the params upload (~20–40 % faster for PSP103).
+        handle = None
+        try:
+            import numpy as _np
+            from osdi_jax import osdi_setup_batch
+            handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
+        except ImportError:
+            pass  # older bosdi without Tier-3; legacy model_id + params path still works
+
+        # Regularisation diagonal: 1.0 only on internal reactive-only nodes.
+        # External terminal nodes never need it — the wider circuit KCL provides
+        # their equations.  Internal reactive-only nodes have no equation from
+        # any other component, so j_eff[i,:] would be zero without this term.
+        is_internal = jnp.arange(n_nodes) >= n_pins
+        is_reactive = ~jnp.array(descriptor.model.resistive_mask, dtype=bool)
+        reg_mask = (is_internal & is_reactive).astype(jnp.float64)
+        reg_diag = jnp.diag(reg_mask)  # (num_nodes, num_nodes)
+
+        # Build (N, n_nodes) index array: terminal indices first, then one new
+        # state slot per internal node per instance (appended to global state vector).
+        all_var_idx_list = []
+        for item in items:
+            terminal_indices = item["ports"]
+            internal_indices = []
+            for _i in range(n_internal):
+                internal_indices.append(sys_size)
+                sys_size += 1
+            all_var_idx_list.append(terminal_indices + internal_indices)
+
+        all_var_idx = jnp.array(all_var_idx_list, dtype=jnp.int32)  # (N, n_nodes)
+
+        jac_rows = jnp.broadcast_to(all_var_idx[:, :, None], (n_dev, n_nodes, n_nodes)).reshape(-1)
+        jac_cols = jnp.broadcast_to(all_var_idx[:, None, :], (n_dev, n_nodes, n_nodes)).reshape(-1)
+
+        compiled_groups[group_name] = OsdiComponentGroup(
+            name=group_name,
+            model_id=descriptor.model.id,
+            num_pins=n_pins,
+            num_nodes=n_nodes,
+            num_params=descriptor.model.num_params,
+            num_states=descriptor.model.num_states,
+            params=params_arr,
+            states=states_arr,
+            var_indices=all_var_idx,
+            eq_indices=all_var_idx,
+            jac_rows=jac_rows,
+            jac_cols=jac_cols,
+            reg_diag=reg_diag,
+            index_map={item["name"]: i for i, item in enumerate(items)},
+            use_schur_reduction=getattr(descriptor, "use_schur_reduction", False),
+            handle=handle,
         )
 
     return compiled_groups, sys_size, port_to_node_map

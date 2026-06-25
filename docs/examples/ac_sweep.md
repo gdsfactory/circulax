@@ -1,6 +1,6 @@
 ## AC Small-Signal Analysis (S-parameters)
 
-This notebook demonstrates `setup_ac_sweep` on two circuits:
+This notebook demonstrates `circuit.ac(...)` on three circuits:
 
 1. **Parallel RC — single port** — a minimal benchmark.  We compare $S_{11}(f)$ against the analytical admittance formula.
 2. **Series-R shunt-C lowpass — two ports** — a classic LC prototype filter.  We recover all four S-parameters and verify passivity.
@@ -8,9 +8,10 @@ This notebook demonstrates `setup_ac_sweep` on two circuits:
 
 AC analysis linearises the circuit DAE at the DC operating point and sweeps a range of frequencies:
 
-$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial y\big|_{y_\text{dc}}, \quad C = \partial Q/\partial y\big|_{y_\text{dc}}$$
+$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial yig|_{y_	ext{dc}}, \quad C = \partial Q/\partial yig|_{y_	ext{dc}}$$
 
-With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N\times N$ S-matrix at once.
+With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N	imes N$ S-matrix at once.
+
 
 
 ```python
@@ -21,14 +22,14 @@ import numpy as np
 import schemdraw
 import schemdraw.elements as elm
 
-from circulax import compile_circuit, fdomain_component, setup_ac_sweep
+from circulax import compile_circuit, fdomain_component
 from circulax.components.electronic import Capacitor, Resistor
 
 jax.config.update("jax_enable_x64", True)
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:33:02,607:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:02:23,719:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ---
@@ -88,18 +89,17 @@ net_rc = {
         "R1,p2": "GND,p1",
         "C1,p2": "GND,p1",
     },
+    "ports": {"in": "R1,p1"},
 }
 
 circuit = compile_circuit(net_rc, models)
-y_dc = circuit()
-
-port_nodes = [circuit.port_map["R1,p1"]]
-run_ac = setup_ac_sweep(circuit.groups, circuit.sys_size, port_nodes, z0=Z0)
+y_dc = circuit.dc()
 
 freqs = jnp.logspace(6, 10, 300)  # 1 MHz → 10 GHz
-S = jax.jit(run_ac)(y_dc, freqs)
+S = jax.jit(lambda f: circuit.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc))(freqs)
 S11 = S[:, 0, 0]
 print(f"S shape: {S.shape}  (N_freqs, N_ports, N_ports)")
+
 ```
 
     S shape: (300, 1, 1)  (N_freqs, N_ports, N_ports)
@@ -200,16 +200,15 @@ net_lp = {
         "R1,p2": "C1,p1",  # junction = port 2 node
         "C1,p2": "GND,p1",
     },
+    "ports": {"in": "R1,p1", "out": "R1,p2"},
 }
 
 circuit_lp = compile_circuit(net_lp, models)
-y_dc_lp = circuit_lp()
+y_dc_lp = circuit_lp.dc()
 
-port_nodes_lp = [circuit_lp.port_map["R1,p1"], circuit_lp.port_map["R1,p2"]]
-run_ac_lp = setup_ac_sweep(circuit_lp.groups, circuit_lp.sys_size, port_nodes_lp, z0=Z0)
-
-S_lp = jax.jit(run_ac_lp)(y_dc_lp, freqs)
+S_lp = jax.jit(lambda f: circuit_lp.ac(ports=["in", "out"], freqs=f, z0=Z0, y_dc=y_dc_lp))(freqs)
 print(f"S shape: {S_lp.shape}  (N_freqs, 2, 2)")
+
 ```
 
     S shape: (300, 2, 2)  (N_freqs, 2, 2)
@@ -320,13 +319,13 @@ net_skin = {
         "SR1,p2": "GND,p1",
         "Rbig,p2": "GND,p1",
     },
+    "ports": {"in": "SR1,p1"},
 }
 
 circuit_sk = compile_circuit(net_skin, models_skin)
-y_dc_sk = circuit_sk()
+y_dc_sk = circuit_sk.dc()
 
-run_ac_sk = setup_ac_sweep(circuit_sk.groups, circuit_sk.sys_size, [circuit_sk.port_map["SR1,p1"]], z0=Z0)
-S_sk = jax.jit(run_ac_sk)(y_dc_sk, freqs)
+S_sk = jax.jit(lambda f: circuit_sk.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc_sk))(freqs)
 S11_sk = S_sk[:, 0, 0]
 
 # Analytical: Z(f) is real so |Γ| = |Z - Z0| / |Z + Z0|
@@ -343,8 +342,8 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 ax1.semilogx(freqs / 1e6, np.array(Z_skin), "C0", lw=2)
 ax1.set_xlabel("Frequency (MHz)")
 ax1.set_ylabel("Impedance (Ω)")
-ax1.set_title(f"Skin-effect impedance: $Z(f) = {R0}\\,\\Omega + {a:.0e}\\sqrt{{f}}$")
-ax1.axhline(Z0, color="gray", ls="--", lw=1, label=f"$Z_0 = {Z0:.0f}\\,\\Omega$")
+ax1.set_title(rf"Skin-effect impedance: $Z(f) = {R0}\,\Omega + {a:.0e}\sqrt{{f}}$")
+ax1.axhline(Z0, color="gray", ls="--", lw=1, label=rf"$Z_0 = {Z0:.0f}\,\Omega$")
 ax1.legend()
 
 ax2.semilogx(freqs / 1e6, 20 * np.log10(np.abs(S11_sk)), "C0", lw=2, label="circulax")
@@ -361,17 +360,26 @@ print(
     f"\nS11 at DC   ({float(freqs[0]) / 1e6:.1f} MHz): {float(jnp.abs(S11_sk[0])):.4f}  (expected {float(jnp.abs(S11_sk_ref[0])):.4f})"
 )
 print(f"S11 at 10 GHz: {float(jnp.abs(S11_sk[-1])):.4f}  (expected {float(jnp.abs(S11_sk_ref[-1])):.4f})")
+
 ```
+
+    /home/cdaunt/code/circulax/circulax/circulax/circuit.py:468: UserWarning: Complex-mode auto-detection failed for group (TypeError('_build_fdomain_component.<locals>.solver_call() takes 3 positional arguments but 4 were given')); defaulting to real. Pass is_complex=True to compile_circuit() if this is a photonic/complex-valued circuit.
+      if _group_outputs_complex(group):
+
 
     Max |ΔS11| (skin effect) = 1.78e-11
 
 
 
 
-![png](ac_sweep_files/ac_sweep_11_1.png)
+![png](ac_sweep_files/ac_sweep_11_2.png)
 
 
 
 
     S11 at DC   (1.0 MHz): 0.3332  (expected 0.3332)
     S11 at 10 GHz: 0.3158  (expected 0.3158)
+
+
+!!! note "Advanced port-node workflows"
+    `circuit.ac(...)` is the normal API for named S-parameter ports. The lower-level `setup_ac_sweep()` helper remains available when you need to build custom port-node lists or transform-control loops around compiled groups.

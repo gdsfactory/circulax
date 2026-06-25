@@ -16,14 +16,14 @@ import numpy as np
 import schemdraw
 import schemdraw.elements as elm
 
-from circulax import compile_circuit, setup_harmonic_balance
+from circulax import compile_circuit
 from circulax.components.electronic import Capacitor, Diode, Inductor, Resistor, VoltageSourceAC
 
 jax.config.update("jax_enable_x64", True)
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:32:50,875:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:01:35,444:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ---
@@ -90,6 +90,7 @@ lcr_net = {
         "R1": {"component": "resistor", "settings": {"R": R_val}},
         "L1": {"component": "inductor", "settings": {"L": L_val}},
         "C1": {"component": "capacitor", "settings": {"C": C_val}},
+        "GND": {"component": "ground"},
     },
     "connections": {
         "Vs,p1": "R1,p1",
@@ -106,32 +107,32 @@ models = {
     "resistor": Resistor,
     "inductor": Inductor,
     "capacitor": Capacitor,
+    "ground": lambda: 0,
 }
 
 circuit = compile_circuit(lcr_net, models, backend="dense")
-groups = circuit.groups
 num_vars = circuit.sys_size
-net_map = circuit.port_map
 print(f"System size: {num_vars} variables")
-print(f"Node map: {net_map}")
+print(f"Named ports: {list(lcr_net['ports'])}")
+
 ```
 
     System size: 6 variables
-    Node map: {'L1,p2': 1, 'C1,p1': 1, 'Vs,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'R1,p2': 2, 'L1,p1': 2, 'R1,p1': 3, 'Vs,p1': 3, 'Vs,i_src': 4, 'L1,i_L': 5}
+    Named ports: ['in', 'out']
 
 
 
 ```python
 # DC operating point (zero for a purely AC circuit)
-y_dc = circuit()
+y_dc = circuit.dc()
 
-# Harmonic Balance: 5 harmonics → K = 11 time points per period
+# Harmonic Balance: 5 harmonics -> K = 11 time points per period
 N_harmonics = 5
-run_hb = setup_harmonic_balance(groups, num_vars, freq=f_drive, num_harmonics=N_harmonics)
-y_time, y_freq = run_hb(y_dc)
+y_time, y_freq = circuit.hb(freq=f_drive, harmonics=N_harmonics, y0=y_dc)
 
 print(f"y_time shape : {y_time.shape}  (K={2 * N_harmonics + 1} time points × {num_vars} variables)")
 print(f"y_freq shape : {y_freq.shape}  ({N_harmonics + 1} harmonics × {num_vars} variables)")
+
 ```
 
     y_time shape : (11, 6)  (K=11 time points × 6 variables)
@@ -144,12 +145,14 @@ K = 2 * N_harmonics + 1
 T = 1.0 / f_drive
 t_ns = np.linspace(0, T * 1e9, K, endpoint=False)  # nanoseconds
 
-vin_idx = net_map["Vs,p1"]
-vout_idx = net_map["C1,p1"]
+vin_t = circuit.port(y_time, "in")
+vout_t = circuit.port(y_time, "out")
+vin_f = circuit.port(y_freq, "in")
+vout_f = circuit.port(y_freq, "out")
 
 fig, ax = plt.subplots(figsize=(8, 3.5))
-ax.plot(t_ns, np.array(y_time[:, vin_idx]), "C0o-", ms=6, label=r"$V_\mathrm{in}$")
-ax.plot(t_ns, np.array(y_time[:, vout_idx]), "C1s-", ms=6, label=r"$V_\mathrm{out}$")
+ax.plot(t_ns, np.array(vin_t), "C0o-", ms=6, label=r"$V_\mathrm{in}$")
+ax.plot(t_ns, np.array(vout_t), "C1s-", ms=6, label=r"$V_\mathrm{out}$")
 ax.set_xlabel("Time (ns)")
 ax.set_ylabel("Voltage (V)")
 ax.set_title("LCR — time-domain waveform (one period)")
@@ -158,13 +161,14 @@ ax.grid(True, alpha=0.4)
 plt.tight_layout()
 plt.show()
 
-# Two-sided amplitude: multiply by 2 for k≥1 (rfft folds negative frequencies)
+# Two-sided amplitude: multiply by 2 for k>=1 (rfft folds negative frequencies)
 harmonics = np.arange(N_harmonics + 1)
 scale = np.where(harmonics == 0, 1.0, 2.0)
-vin_amp = scale * np.abs(np.array(y_freq[:, vin_idx]))
-vout_amp = scale * np.abs(np.array(y_freq[:, vout_idx]))
+vin_amp = scale * np.abs(np.array(vin_f))
+vout_amp = scale * np.abs(np.array(vout_f))
 print(f"|V_in  @ f_drive| = {vin_amp[1]:.4f} V  (expected {V_amp:.4f} V)")
 print(f"|V_out @ f_drive| = {vout_amp[1]:.4f} V  (expected Q={Q:.4f} V at resonance)")
+
 ```
 
 
@@ -208,28 +212,36 @@ plt.show()
 
 ### Frequency Sweep with `jax.vmap`
 
-Because `setup_harmonic_balance` computes `omega` and `t_points` using standard JAX arithmetic, the **entire HB solve — including the Newton loop — is vmappable over the drive frequency**.
+`circuit.hb(...)` exposes the HB solve through the same high-level parameter-update API used by DC, transient, and AC. The solve is still vmappable over the drive frequency, and the source model's own `freq` setting is updated at the same time.
 
 The pattern is:
 
 ```python
-def hb_solve_freq(freq):          # freq is now a JAX argument (i.e it is vectorized), not just a Python float
-    run_hb = setup_harmonic_balance(groups, num_vars, freq=freq, ...)
-    _, y_freq = run_hb(y_dc)
-    return y_freq
+def hb_solve_freq(freq):
+    _, y_freq = circuit.hb(
+        freq=freq,
+        harmonics=N_harmonics,
+        y0=y_dc,
+        params={"Vs.freq": freq},
+    )
+    return circuit.port(y_freq, "out")
 
 y_freq_sweep = jax.jit(jax.vmap(hb_solve_freq))(sweep_freqs)
 ```
 
-`jax.vmap` batches `freq` across the call — `omega` and `t_points` are derived per-element, and JAX lifts the Newton `lax.while_loop` to execute for all batch elements simultaneously.  `jax.jit` then compiles the entire vectorised computation as a single XLA program.
+`jax.vmap` batches `freq` across the call. `jax.jit` then compiles the vectorised computation as a single XLA program.
+
 
 
 ```python
 # A thin wrapper that exposes freq as a JAX argument, making the function vmappable.
-# groups and y_dc are captured by the outer closure and are shared across all frequencies.
 def hb_solve_freq(freq):
-    run_hb = setup_harmonic_balance(groups, num_vars, freq=freq, num_harmonics=N_harmonics)
-    _, y_freq = run_hb(y_dc)  # y_dc is a non-batched free variable (same DC op-point for all freqs)
+    _, y_freq = circuit.hb(
+        freq=freq,
+        harmonics=N_harmonics,
+        y0=y_dc,
+        params={"Vs.freq": freq},
+    )
     return y_freq  # shape: (N_harmonics+1, num_vars)
 
 
@@ -238,13 +250,13 @@ sweep_freqs = jnp.geomspace(f_res * 0.35, f_res * 5.0, 10)
 print("Sweep frequencies:", [f"{float(f) / 1e6:.3f} MHz" for f in sweep_freqs])
 
 # jax.vmap maps the HB solve over all 10 frequencies in a single XLA compilation.
-# Internally, omega and t_points are computed from the batched freq axis, and the
-# Newton loop (via optx.fixed_point / lax.while_loop) is lifted to handle the batch.
 y_freq_sweep = jax.jit(jax.vmap(hb_solve_freq))(sweep_freqs)
 # y_freq_sweep: shape (10, N_harmonics+1, num_vars)
 
 # |H(jw)| = |V_out| / |V_in| at the fundamental (k=1)
-H_hb_sweep = jnp.abs(y_freq_sweep[:, 1, vout_idx]) / jnp.abs(y_freq_sweep[:, 1, vin_idx])
+vin_sweep = circuit.port(y_freq_sweep, "in")
+vout_sweep = circuit.port(y_freq_sweep, "out")
+H_hb_sweep = jnp.abs(vout_sweep[:, 1]) / jnp.abs(vin_sweep[:, 1])
 
 # --- Plot against the analytical Bode curve ---
 fig, ax = plt.subplots(figsize=(8, 3.5))
@@ -272,6 +284,7 @@ for f, Hv in zip(sweep_freqs, H_hb_sweep):
     w_rad = 2 * np.pi * float(f)
     H_exact = abs(1.0 / (1 - w_rad**2 * L_val * C_val + 1j * w_rad * R_val * C_val))
     print(f"  {float(f) / 1e6:.3f} MHz:  HB = {float(Hv):.4f},  analytical = {H_exact:.4f}")
+
 ```
 
     Sweep frequencies: ['1.762 MHz', '2.367 MHz', '3.181 MHz', '4.274 MHz', '5.744 MHz', '7.718 MHz', '10.371 MHz', '13.936 MHz', '18.727 MHz', '25.165 MHz']
@@ -374,6 +387,7 @@ lcr_fd_net = {
         "R1": {"component": "resistor", "settings": {"R": R_val}},
         "L1": {"component": "inductor_fd", "settings": {"L": L_val}},
         "C1": {"component": "capacitor_fd", "settings": {"C": C_val}},
+        "GND": {"component": "ground"},
     },
     "connections": {
         "Vs,p1": "R1,p1",
@@ -390,30 +404,33 @@ models_fd = {
     "resistor": Resistor,
     "inductor_fd": InductorFD,
     "capacitor_fd": CapacitorFD,
+    "ground": lambda: 0,
 }
 
 circuit_fd = compile_circuit(lcr_fd_net, models_fd, backend="dense")
-groups_fd = circuit_fd.groups
 num_vars_fd = circuit_fd.sys_size
-net_map_fd = circuit_fd.port_map
 
 print(f"Time-domain LCR  →  system size = {num_vars} variables  (nodes + i_L + i_src)")
 print(f"F-domain LCR     →  system size = {num_vars_fd} variables  (nodes + i_src, no i_L state)")
 print()
 
 # DC operating point — trivially zero for a purely AC source
-y_dc_fd = circuit_fd()
+y_dc_fd = circuit_fd.dc()
 print(f"DC operating point (f-domain): max|y_dc| = {float(jnp.max(jnp.abs(y_dc_fd))):.2e} V")
 
 # Harmonic Balance with same settings as Part 1
-run_hb_fd = setup_harmonic_balance(groups_fd, num_vars_fd, freq=f_drive, num_harmonics=N_harmonics)
-y_time_fd, y_freq_fd = run_hb_fd(y_dc_fd)
+y_time_fd, y_freq_fd = circuit_fd.hb(freq=f_drive, harmonics=N_harmonics, y0=y_dc_fd)
 print(f"y_time_fd shape: {y_time_fd.shape}")
+
 ```
 
     Time-domain LCR  →  system size = 6 variables  (nodes + i_L + i_src)
     F-domain LCR     →  system size = 5 variables  (nodes + i_src, no i_L state)
 
+
+
+    /home/cdaunt/code/circulax/circulax/circulax/circuit.py:468: UserWarning: Complex-mode auto-detection failed for group (TypeError('_build_fdomain_component.<locals>.solver_call() takes 3 positional arguments but 4 were given')); defaulting to real. Pass is_complex=True to compile_circuit() if this is a photonic/complex-valued circuit.
+      if _group_outputs_complex(group):
 
 
     DC operating point (f-domain): max|y_dc| = 0.00e+00 V
@@ -424,16 +441,10 @@ print(f"y_time_fd shape: {y_time_fd.shape}")
 
 
 ```python
-# Extract Vin and Vout by node name from each net_map
-vin_td_idx = net_map["Vs,p1"]
-vout_td_idx = net_map["C1,p1"]
-vin_fd_idx = net_map_fd["Vs,p1"]
-vout_fd_idx = net_map_fd["C1,p1"]
-
-vin_td = np.array(y_time[:, vin_td_idx])
-vout_td = np.array(y_time[:, vout_td_idx])
-vin_fd = np.array(y_time_fd[:, vin_fd_idx])
-vout_fd = np.array(y_time_fd[:, vout_fd_idx])
+vin_td = np.array(circuit.port(y_time, "in"))
+vout_td = np.array(circuit.port(y_time, "out"))
+vin_fd = np.array(circuit_fd.port(y_time_fd, "in"))
+vout_fd = np.array(circuit_fd.port(y_time_fd, "out"))
 
 max_err_in = float(jnp.max(jnp.abs(jnp.array(vin_td) - jnp.array(vin_fd))))
 max_err_out = float(jnp.max(jnp.abs(jnp.array(vout_td) - jnp.array(vout_fd))))
@@ -469,9 +480,10 @@ plt.suptitle(
 )
 plt.tight_layout()
 plt.show()
+
 ```
 
-    Max |ΔV_in|  (time-domain vs f-domain) = 3.97e-18 V
+    Max |ΔV_in|  (time-domain vs f-domain) = 5.38e-18 V
     Max |ΔV_out| (time-domain vs f-domain) = 3.16e-10 V
 
 
@@ -525,6 +537,7 @@ clipper_net = {
         "Rs": {"component": "resistor", "settings": {"R": R_clip}},
         "D1": {"component": "diode", "settings": {}},
         "RL": {"component": "resistor", "settings": {"R": RL_clip}},
+        "GND": {"component": "ground"},
     },
     "connections": {
         "Vs,p1": "Rs,p1",
@@ -536,19 +549,16 @@ clipper_net = {
     "ports": {"in": "Vs,p1", "out": "RL,p1"},
 }
 
-clip_models = {"vsrc": VoltageSourceAC, "resistor": Resistor, "diode": Diode}
+clip_models = {"vsrc": VoltageSourceAC, "resistor": Resistor, "diode": Diode, "ground": lambda: 0}
 
 circuit_clip = compile_circuit(clipper_net, clip_models, backend="dense")
-clip_groups = circuit_clip.groups
-clip_vars = circuit_clip.sys_size
-clip_map = circuit_clip.port_map
-clip_dc = circuit_clip()
+clip_dc = circuit_clip.dc()
 
 N_clip = 10  # 10 harmonics to capture the rectified waveform
-run_hb_clip = setup_harmonic_balance(clip_groups, clip_vars, freq=f_clip, num_harmonics=N_clip)
-yt_clip, yf_clip = run_hb_clip(clip_dc)
+yt_clip, yf_clip = circuit_clip.hb(freq=f_clip, harmonics=N_clip, y0=clip_dc)
 
 print(f"Converged. y_time shape: {yt_clip.shape}")
+
 ```
 
     Converged. y_time shape: (21, 5)
@@ -560,15 +570,17 @@ K_clip = 2 * N_clip + 1
 T_clip = 1.0 / f_clip
 t_ms = np.linspace(0, T_clip * 1e3, K_clip, endpoint=False)
 
-vin_c = clip_map["Vs,p1"]
-vout_c = clip_map["RL,p1"]
+vin_clip_t = circuit_clip.port(yt_clip, "in")
+vout_clip_t = circuit_clip.port(yt_clip, "out")
+vin_clip_f = circuit_clip.port(yf_clip, "in")
+vout_clip_f = circuit_clip.port(yf_clip, "out")
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 3.8))
 
 # Left: time-domain
 ax = axes[0]
-ax.plot(t_ms, np.array(yt_clip[:, vin_c]), "C0o-", ms=5, label=r"$V_\mathrm{in}$")
-ax.plot(t_ms, np.array(yt_clip[:, vout_c]), "C1s-", ms=5, label=r"$V_\mathrm{out}$")
+ax.plot(t_ms, np.array(vin_clip_t), "C0o-", ms=5, label=r"$V_\mathrm{in}$")
+ax.plot(t_ms, np.array(vout_clip_t), "C1s-", ms=5, label=r"$V_\mathrm{out}$")
 ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.set_xlabel("Time (ms)")
 ax.set_ylabel("Voltage (V)")
@@ -580,8 +592,8 @@ ax.grid(True, alpha=0.4)
 ax = axes[1]
 harms = np.arange(N_clip + 1)
 sc = np.where(harms == 0, 1.0, 2.0)
-vin_spec = sc * np.abs(np.array(yf_clip[:, vin_c]))
-vout_spec = sc * np.abs(np.array(yf_clip[:, vout_c]))
+vin_spec = sc * np.abs(np.array(vin_clip_f))
+vout_spec = sc * np.abs(np.array(vout_clip_f))
 
 w = 0.35
 ax.bar(harms - w / 2, vin_spec, width=w, color="C0", alpha=0.8, label=r"$V_\mathrm{in}$")
@@ -601,6 +613,7 @@ print("Output harmonic amplitudes:")
 for k in range(N_clip + 1):
     label = "DC" if k == 0 else f"{k}f0"
     print(f"  {label:4s}: {vout_spec[k]:.4f} V")
+
 ```
 
 

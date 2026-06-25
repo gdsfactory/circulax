@@ -1,13 +1,17 @@
 """circulax netlists.
 
-SAX netlists will be used as much as possible in circulax;
-however, connections for node based simulators need to be handled slightly differently.
+Supports both kfnetlist.Netlist (primary) and SAX-format dicts (backward compat).
+SAX dicts are converted to kfnetlist.Netlist via :func:`sax_to_kfnetlist` before
+node-index assignment.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, NotRequired, TypeAlias
+import json
+from collections import defaultdict
+from typing import Annotated, Any, NotRequired, TypeAlias
 
+import kfnetlist as kfnl
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -36,24 +40,181 @@ circulaxNetlist = Annotated[
     ),
     bval(sax_netlist.val_netlist),
 ]
-"""A complete netlist definition for an optical circuit.
-
-Contains all information needed to define a circuit: instances,
-connections, external ports, and optional placement/settings.
-
-Attributes:
-    instances: The component instances in the circuit.
-    connections: Point-to-point connections between instances.
-    ports: Mapping of external ports to internal instance ports.
-    placements: Physical placement information for instances.
-    settings: Global circuit settings.
-"""
+"""Legacy SAX-format netlist type. Prefer ``kfnetlist.Netlist`` for new code."""
 
 Netlist = circulaxNetlist
 
 # Monkeypatch sax.Netlist to be circulaxNetlist so that all functions using sax.Netlist
 # May need to make this explicit in the future
 sax_netlist.Netlist = circulaxNetlist  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# kfnetlist-native node mapping
+# ---------------------------------------------------------------------------
+
+
+def build_net_map_kfnetlist(nl: kfnl.Netlist) -> tuple[dict[str, int], int]:
+    """Map every port in a kfnetlist.Netlist to a node index.
+
+    Each ``Net`` in the netlist becomes one electrical node.  Nets
+    containing a ground instance port, or a synthetic net label containing
+    ``"GND"``, are assigned node index 0.
+
+    Returns:
+        port_to_idx: ``{"Instance,port": node_id, ...}``
+        num_nets: next free node index (== number of non-ground nets + 1).
+
+    """
+    port_to_idx: dict[str, int] = {}
+    current_idx = 1
+
+    for net in nl.nets:
+        is_ground = any(
+            (
+                isinstance(m, kfnl.PortRef)
+                and (m.instance == "GND" or (m.instance in nl.instances and nl.instances[m.instance].component == "ground"))
+            )
+            or (isinstance(m, kfnl.NetlistPort) and "GND" in m.name)
+            for m in net
+        )
+        net_id = 0 if is_ground else current_idx
+
+        for member in net:
+            if isinstance(member, kfnl.PortRef):
+                port_to_idx[f"{member.instance},{member.port}"] = net_id
+            elif isinstance(member, kfnl.NetlistPort):
+                port_to_idx[member.name] = net_id
+
+        if not is_ground:
+            current_idx += 1
+
+    return port_to_idx, current_idx
+
+
+# ---------------------------------------------------------------------------
+# SAX → kfnetlist converter
+# ---------------------------------------------------------------------------
+
+
+def _is_json_safe(v: Any) -> bool:
+    """Return True if *v* can survive a round-trip through serde_json."""
+    try:
+        json.dumps(v)
+        return True
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def sax_to_kfnetlist(
+    sax_dict: dict,
+) -> tuple[kfnl.Netlist, dict[str, dict[str, Any]]]:
+    """Convert a SAX-format netlist dict to a ``kfnetlist.Netlist``.
+
+    Pairwise SAX ``connections`` (and GDSFactory-style ``nets`` lists)
+    are grouped into equivalence classes via union-find, then emitted as
+    one ``kfnetlist.Net`` per class.
+
+    Returns:
+        A 2-tuple ``(netlist, settings_override)`` where
+        *settings_override* maps instance names to their full settings
+        dict (including non-JSON-safe values such as complex numbers).
+        When all settings are JSON-safe the override dict is empty.
+
+    """
+    nl = kfnl.Netlist()
+    settings_override: dict[str, dict[str, Any]] = {}
+
+    # --- instances ---
+    for name, data in sax_dict.get("instances", {}).items():
+        raw_settings = data.get("settings") or {}
+        safe_settings = {k: v for k, v in raw_settings.items() if _is_json_safe(v)}
+        nl.create_inst(
+            name=name,
+            kcl="",
+            component=data["component"],
+            settings=safe_settings or None,
+        )
+        if len(safe_settings) != len(raw_settings):
+            settings_override[name] = raw_settings
+
+    # --- ports ---
+    declared_ports: set[str] = set()
+    top_port_targets: list[tuple[str, str]] = []
+    for port_name, target in sax_dict.get("ports", {}).items():
+        nl.create_port(port_name)
+        declared_ports.add(port_name)
+        top_port_targets.append((port_name, target))
+
+    # --- connectivity: union-find over SAX connections + GDSFactory nets ---
+    parent: dict[str, str] = {}
+
+    def _find(x: str) -> str:
+        if x not in parent:
+            parent[x] = x
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(a: str, b: str) -> None:
+        ra, rb = _find(a), _find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    known_instances = set(sax_dict.get("instances", {}))
+
+    def _net_member_ref(port_str: str) -> kfnl.PortRef | kfnl.NetlistPort:
+        if "," not in port_str:
+            msg = f"Expected SAX port reference 'instance,port', got {port_str!r}"
+            raise ValueError(msg)
+        inst, _port = port_str.split(",", 1)
+        if inst not in known_instances:
+            if port_str not in declared_ports:
+                nl.create_port(port_str)
+                declared_ports.add(port_str)
+            return kfnl.NetlistPort(port_str)
+        return kfnl.PortRef(instance=inst, port=_port)
+
+    for src, targets in sax_dict.get("connections", {}).items():
+        if isinstance(targets, str):
+            targets = [targets]
+        for tgt in targets:
+            _find(src)
+            _find(tgt)
+            _union(src, tgt)
+
+    for net_entry in sax_dict.get("nets", []):
+        p1, p2 = net_entry["p1"], net_entry["p2"]
+        _find(p1)
+        _find(p2)
+        _union(p1, p2)
+
+    for _port_name, target in top_port_targets:
+        _find(target)
+
+    # Group ports by their root → one kfnetlist.Net per group
+    groups: dict[str, list[str]] = defaultdict(list)
+    for port in parent:
+        groups[_find(port)].append(port)
+
+    top_ports_by_root: dict[str, list[str]] = defaultdict(list)
+    for port_name, target in top_port_targets:
+        top_ports_by_root[_find(target)].append(port_name)
+
+    for root, members in groups.items():
+        refs = [kfnl.NetlistPort(port_name) for port_name in top_ports_by_root.get(root, [])]
+        for port_str in sorted(members):
+            refs.append(_net_member_ref(port_str))
+        nl.create_net(*refs)
+
+    nl.sort()
+    return nl, settings_override
+
+
+# ---------------------------------------------------------------------------
+# Legacy SAX build_net_map (kept for backward compat / draw_circuit_graph)
+# ---------------------------------------------------------------------------
 
 
 def build_net_map(netlist: dict) -> tuple[dict[str, int], int]:
@@ -66,25 +227,20 @@ def build_net_map(netlist: dict) -> tuple[dict[str, int], int]:
     """
     g = nx.Graph()
 
-    # Add connections (SAX-style ``connections`` dict)
     for src, targets in netlist.get("connections", {}).items():
         if isinstance(targets, str):
             targets = [targets]
         for tgt in targets:
             g.add_edge(src, tgt)
 
-    # Add nets (GDSFactory-style ``nets`` list of {"p1": ..., "p2": ...} dicts).
-    # Equivalent to connections; supported so circulax accepts modern GDSFactory
-    # netlists directly without an explicit nets→connections conversion.
     for net in netlist.get("nets", []):
         g.add_edge(net["p1"], net["p2"])
 
-    # Find connected components (nets)
     components = list(nx.connected_components(g))
-    components.sort(key=lambda x: natsorted(list(x))[0])  # Deterministic sort
+    components.sort(key=lambda x: natsorted(list(x))[0])
 
     port_to_idx = {}
-    current_idx = 1  # Start at 1, 0 is reserved for Ground
+    current_idx = 1
 
     for comp in components:
         is_ground = any("GND" in node for node in comp)
@@ -100,54 +256,34 @@ def build_net_map(netlist: dict) -> tuple[dict[str, int], int]:
 
 
 def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
-    netlist: dict[str, dict],
+    netlist: dict[str, dict] | kfnl.Netlist,
     layout_attempts: int = 10,
     *,
     show: bool = True,
 ) -> mpl.figure.Figure:
     """Visualize a circuit netlist as a connectivity graph.
 
-    Nodes are split into two categories:
-      - Instance nodes: large circles (red for components, black for GND)
-        representing circuit components.
-      - Port nodes: small skyblue circles representing the pins on each
-        component. Each port is drawn close to its parent instance.
-
-    Edges are split into two categories:
-      - Internal edges: solid lines connecting each port to its parent instance.
-      - External edges (wires): dashed gray lines connecting ports that share
-        the same net, labelled with the net index.
-
-    The layout is computed by running ``networkx.spring_layout`` up to
-    ``layout_attempts`` times with different seeds. Each candidate layout is
-    scored by counting proper edge-segment crossings, and the layout with the
-    fewest crossings is used. Port nodes are warm-started near their parent
-    instance to encourage tight visual clustering regardless of which seed wins.
+    Accepts either a SAX-format dict or a ``kfnetlist.Netlist``.
 
     Args:
-        netlist: Circuit description dict. Must contain an ``"instances"`` key
-            mapping component names to their data. Connectivity is derived via
-            ``build_net_map``, which returns a port map of the form
-            ``"InstanceName,PinName" -> net_index``.
-        show: If ``True``, call ``plt.show()`` before returning. Set to
-            ``False`` when embedding the figure in a larger application or
-            when running in a non-interactive environment.
-        layout_attempts: Number of spring-layout seeds to try. The candidate
-            with the fewest edge crossings is kept. Higher values improve
-            crossing minimisation at the cost of extra compute time.
-            Defaults to ``10``; values between ``20`` and ``30`` are
-            reasonable for larger netlists.
+        netlist: Circuit description (SAX dict or kfnetlist.Netlist).
+        show: If ``True``, call ``plt.show()`` before returning.
+        layout_attempts: Number of spring-layout seeds to try.
 
     Returns:
         The :class:`matplotlib.figure.Figure` containing the rendered graph.
 
     """
-    port_map, _ = build_net_map(netlist)
+    if isinstance(netlist, kfnl.Netlist):
+        port_map, _ = build_net_map_kfnetlist(netlist)
+        instance_names = list(netlist.instances)
+    else:
+        port_map, _ = build_net_map(netlist)
+        instance_names = list(netlist.get("instances", {}))
 
     G = nx.Graph()
 
-    instances = netlist.get("instances", {})
-    for name in instances:
+    for name in instance_names:
         if name == "GND":
             G.add_node(name, color="black", size=1500, label=name)
         else:
@@ -294,11 +430,13 @@ def draw_circuit_graph(  # noqa: C901, PLR0912, PLR0915
     return fig
 
 
-# being explicit here
+# SAX type aliases kept for backward compatibility
 Port = sax.Port
 Ports = sax.Ports
 Net = sax.Net
 Nets = sax.Nets
 Placements = sax.Placements
 Instances = sax.Instances
-netlist = sax.netlist
+
+# Primary netlist type is now kfnetlist.Netlist
+netlist = kfnl.Netlist

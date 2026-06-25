@@ -27,8 +27,7 @@ from circulax.components.electronic import Resistor
 from circulax.components.photonic import Grating, OpticalSource, OpticalWaveguide, Splitter
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:32:40,004:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:07:23,601:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 
@@ -78,6 +77,7 @@ net_dict = {
         "WG_Out,p2": "GC_Out,waveguide",
         "GC_Out,grating": "Detector,p1",
     },
+    "ports": {"detector": "Detector,p1"},
 }
 ```
 
@@ -106,11 +106,11 @@ wavelengths = jnp.linspace(1260, 1360, 2000)
 
 print("Sweeping Wavelength...")
 start = time.time()
-solutions = jax.jit(circuit)(wavelength_nm=wavelengths)
+solutions = jax.jit(lambda wl: circuit.dc(wavelength_nm=wl))(wavelengths)
 total = time.time() - start
 print(f"Sweep time: {total:.3f}s")
 
-v_out1 = circuit.get_port_field(solutions, "Detector,p1")
+v_out1 = circuit.port(solutions, "detector")
 p_out1_db = 10.0 * jnp.log10(jnp.abs(v_out1) ** 2 + 1e-12)
 
 plt.figure(figsize=(8, 4))
@@ -121,6 +121,7 @@ plt.ylabel("Received Power (dB)")
 plt.legend()
 plt.grid(True)
 plt.show()
+
 ```
 
     --- DEMO: Photonic Splitter & Grating Link (Wavelength Sweep) ---
@@ -129,7 +130,7 @@ plt.show()
     Sweeping Wavelength...
 
 
-    Sweep time: 1.565s
+    Sweep time: 1.122s
 
 
 

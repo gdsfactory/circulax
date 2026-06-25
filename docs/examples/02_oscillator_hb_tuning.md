@@ -1,7 +1,10 @@
 # Van der Pol Oscillator Tuning via Backpropagation through Harmonic Balance
 
-This notebook shows how automatic differentiation through the Harmonic Balance solver
-can solve oscillator design problems that are impractical with traditional tools.
+Inverse design will be used to tune a nonlinear Van der Pol oscillator's **frequency and limit-cycle amplitude** to prescribed targets by backpropagating through the Harmonic Balance solver, resulting in the following:
+
+<!-- animation -->
+
+The following is how this is performed in circulax.
 
 ## The problem
 
@@ -50,10 +53,9 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
-from circulax import compile_circuit, setup_harmonic_balance
+from circulax import compile_circuit
 from circulax.components.base_component import PhysicsReturn, Signals, States, component
 from circulax.components.electronic import Capacitor, Inductor, Resistor
-from circulax.utils import update_group_params, update_params_dict
 
 # 64-bit precision is important: HB Newton requires accurate Jacobians, and
 # gradient-based optimisation accumulates floating-point error across steps.
@@ -62,10 +64,10 @@ jax.config.update("jax_enable_x64", True)
 pio.templates.default = "plotly_white"
 pio.renderers.default = "png"
 
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:33:04,338:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:02:52,804:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Van der Pol component
@@ -139,13 +141,14 @@ print(f"Net gain margin         : {abs(-2.0 * 0.01) / (1.0 / R_damp):.0f}×  >> 
 
 # ── Netlist ──────────────────────────────────────────────────────────────────
 # All four elements are in parallel between top_node and GND.
-# GND is the special reserved name — any port touching "GND" is assigned node 0.
+# GND is declared as the reserved ground instance and assigned node 0.
 vdp_net = {
     "instances": {
         "VDP":   {"component": "vdp",       "settings": {"mu": 2.0,    "G0": 0.01}},
         "L1":    {"component": "inductor",   "settings": {"L": L_val}},
         "C1":    {"component": "capacitor",  "settings": {"C": C_val}},
         "Rdamp": {"component": "resistor",   "settings": {"R": R_damp}},
+        "GND":   {"component": "ground"},
     },
     "connections": {
         # Connect all negative terminals to GND (node 0)
@@ -153,6 +156,7 @@ vdp_net = {
         # Connect all positive terminals to the same top_node
         "VDP,p1":  ("L1,p1", "C1,p1", "Rdamp,p1"),
     },
+    "ports": {"osc": "VDP,p1"},
 }
 
 models = {
@@ -160,26 +164,26 @@ models = {
     "inductor":  Inductor,
     "capacitor": Capacitor,
     "resistor":  Resistor,
+    "ground":    lambda: 0,
 }
 
-# compile_circuit runs once: builds ComponentGroup objects with batched JAX arrays
-# for parameters, and pre-computes index arrays for residual assembly.
+# compile_circuit runs once; scalar params passed to circuit.hb(...) update
+# instance values without re-compiling the topology.
 circuit = compile_circuit(vdp_net, models)
-groups = circuit.groups
 num_vars = circuit.sys_size
-net_map = circuit.port_map
 
 print(f"\nSystem size : {num_vars} unknowns")
-print(f"Node map    : {net_map}")
-print(f"Groups      : {list(groups.keys())}")
+print(f"Named ports : {list(vdp_net['ports'])}")
 
-# The oscillator node — all parallel elements share this port
-osc_node = net_map["VDP,p1"]
-print(f"Oscillator node index: {osc_node}")
+# Advanced initialization detail: the custom HB warm starts below need the flat
+# state-vector index of the oscillator port.
+osc_idx = circuit.port_map["osc"]
+print("Oscillator port: 'osc'")
 
 # DC operating point: V=0 is the only fixed point (the VDP element has I(0)=0)
-y_dc = circuit()
+y_dc = circuit.dc()
 print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (trivially zero)")
+
 ```
 
     Tank resonant frequency : 5.0329 MHz
@@ -191,9 +195,8 @@ print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (
 
 
     System size : 3 unknowns
-    Node map    : {'VDP,p1': 1, 'C1,p1': 1, 'Rdamp,p1': 1, 'L1,p1': 1, 'C1,p2': 0, 'VDP,p2': 0, 'GND,p1': 0, 'Rdamp,p2': 0, 'L1,p2': 0, 'L1,i_L': 2}
-    Groups      : ['vdp', 'inductor', 'capacitor', 'resistor']
-    Oscillator node index: 1
+    Named ports : ['osc']
+    Oscillator port: 'osc'
 
 
     DC operating point: max|y_dc| = 0.00e+00 V  (trivially zero)
@@ -205,46 +208,44 @@ Transient simulation would need to integrate forward in time until the oscillati
 envelope settles — often hundreds of RF cycles. Harmonic Balance finds the periodic
 steady state **directly** by solving for the Fourier coefficients of the waveform.
 
-`setup_harmonic_balance` builds a residual function over K = 2N+1 equally-spaced time
-samples per period and solves it with Newton–Raphson (via Optimistix's
-`FixedPointIteration` backed by `jax.lax.while_loop`). The result is JIT-compatible and
-differentiable end-to-end.
+`circuit.hb(...)` builds and runs the HB solve from the compiled circuit. The result is JIT-compatible and differentiable end-to-end, while named ports such as `"osc"` keep waveform extraction readable.
+
 
 
 ```python
 N_harm = 7   # 7 harmonics → K = 15 time points per period
 K      = 2 * N_harm + 1
 
-# Pass osc_node so setup_harmonic_balance automatically tries several sinusoidal
-# initial amplitudes via jax.vmap and selects the limit-cycle solution.
-# Users never need to choose a starting amplitude or think about the trivial y=0
-# fixed point — the multi-start strategy handles it transparently.
-run_hb = setup_harmonic_balance(groups, num_vars, freq=f0, num_harmonics=N_harm, osc_node=osc_node)
-y_time, y_freq = jax.jit(run_hb)(y_dc)
+# Pass osc_node so circuit.hb automatically tries several sinusoidal initial
+# amplitudes and selects the limit-cycle solution.
+y_time, y_freq = circuit.hb(freq=f0, harmonics=N_harm, y0=y_dc, osc_node="osc")
 
 print(f"y_time shape : {y_time.shape}  (K={K} time samples × {num_vars} nodes)")
 print(f"y_freq shape : {y_freq.shape}  ({N_harm+1} harmonics × {num_vars} nodes)")
 
+y_osc_freq = circuit.port(y_freq, "osc")
+
 # y_freq[0] is the DC component, y_freq[1] is the fundamental, etc.
 # Two-sided amplitude at harmonic k>=1 is 2 * |y_freq[k]|  (rfft folds negative freqs)
-A_dc   = float(jnp.abs(y_freq[0, osc_node]))
-A_fund = float(2.0 * jnp.abs(y_freq[1, osc_node]))
-A_2nd  = float(2.0 * jnp.abs(y_freq[2, osc_node]))
-A_3rd  = float(2.0 * jnp.abs(y_freq[3, osc_node]))
+A_dc   = float(jnp.abs(y_osc_freq[0]))
+A_fund = float(2.0 * jnp.abs(y_osc_freq[1]))
+A_2nd  = float(2.0 * jnp.abs(y_osc_freq[2]))
+A_3rd  = float(2.0 * jnp.abs(y_osc_freq[3]))
 
-print(f"\nOscillator node (index {osc_node}) harmonic amplitudes:")
+print("\nOscillator port 'osc' harmonic amplitudes:")
 print(f"  DC (0f0)       : {A_dc:.4f} V")
 print(f"  Fundamental f0 : {A_fund:.4f} V")
 print(f"  2nd harmonic   : {A_2nd:.4f} V  ({A_2nd/A_fund*100:.1f}% of fundamental)")
 print(f"  3rd harmonic   : {A_3rd:.4f} V  ({A_3rd/A_fund*100:.1f}% of fundamental)")
 print(f"\nExpected amplitude (VdP limit cycle): ~2*sqrt(mu) = {2*np.sqrt(2.0):.3f} V")
 
+
 ```
 
     y_time shape : (15, 3)  (K=15 time samples × 3 nodes)
     y_freq shape : (8, 3)  (8 harmonics × 3 nodes)
 
-    Oscillator node (index 1) harmonic amplitudes:
+    Oscillator port 'osc' harmonic amplitudes:
       DC (0f0)       : 0.0000 V
       Fundamental f0 : 2.9139 V
       2nd harmonic   : 0.0000 V  (0.0% of fundamental)
@@ -258,17 +259,17 @@ print(f"\nExpected amplitude (VdP limit cycle): ~2*sqrt(mu) = {2*np.sqrt(2.0):.3
 # ── Plot: time-domain waveform and harmonic spectrum ─────────────────────────
 T     = 1.0 / f0
 t_ns  = np.linspace(0.0, T * 1e9, K, endpoint=False)
-v_osc = np.array(y_time[:, osc_node])
+v_osc = np.array(circuit.port(y_time, "osc"))
 
 harmonics   = np.arange(N_harm + 1)
 scale       = np.where(harmonics == 0, 1.0, 2.0)
-spectrum    = scale * np.abs(np.array(y_freq[:, osc_node]))
-tick_labels = ["DC" if k == 0 else f"{k}f\u2080" for k in harmonics]
+spectrum    = scale * np.abs(np.array(circuit.port(y_freq, "osc")))
+tick_labels = ["DC" if k == 0 else f"{k}f₀" for k in harmonics]
 
 fig = make_subplots(
     rows=1, cols=2,
     subplot_titles=(
-        f"Van der Pol limit cycle — f\u2080 = {f0/1e6:.3f} MHz",
+        f"Van der Pol limit cycle — f₀ = {f0/1e6:.3f} MHz",
         "Harmonic spectrum",
     ),
 )
@@ -296,6 +297,7 @@ fig.show()
 print("The odd-harmonic dominance (f0, 3f0, 5f0) is a hallmark of the symmetric cubic nonlinearity.")
 print("Even harmonics (2f0, 4f0) are near-zero because I(-V) = -I(V) — the VDP element is odd.")
 
+
 ```
 
 
@@ -312,38 +314,37 @@ print("Even harmonics (2f0, 4f0) are near-zero because I(-V) = -I(V) — the VDP
 
 Goal: find the value of μ such that the fundamental amplitude equals a target $A_{\text{target}}$.
 
-The key insight: `setup_harmonic_balance` returns a function that is **end-to-end
-differentiable** with respect to any JAX-traceable quantity captured in `groups`. The
-parameter update is done with `update_group_params` (uses `eqx.tree_at` under the hood —
-a pure functional update with no in-place mutation), so the entire loss computation is a
-valid JAX program that `jax.grad` can differentiate through.
+The key insight: `circuit.hb(params={...})` is **end-to-end differentiable** with respect to scalar JAX values passed as instance parameters. The whole loss computation is a valid JAX program that `jax.grad` can differentiate through.
 
 Optimistix's `FixedPointIteration` implements implicit differentiation: the gradient of
 the fixed-point solution with respect to μ is computed via the implicit function theorem
 rather than unrolling the Newton iterations.
 
 
+
 ```python
 A_target = 1.5  # V  (requires mu* = (A_target/2)^2 = 0.5625)
 
-# Fixed warm start for the loss function: sinusoidal at 3.5 V at osc_node, all
-# other variables zero.  3.5 V is above the limit-cycle amplitude for all mu in
-# [0.5, 3] (LC range [1.5V, 3.46V]), so Newton always descends to the LC, never
-# to the trivial y=0 fixed point.  Using a constant here keeps the gradient path
-# free of argmax (Optimistix's implicit diff works cleanly through the fixed point).
+# Fixed warm start for the loss function: sinusoidal at 3.5 V at osc_idx, all
+# other variables zero. This advanced initialization detail uses the flat state
+# vector because HB solves for all time samples at once.
 _phase = 2.0 * jnp.pi * jnp.arange(K, dtype=jnp.float64) / K
 y_flat_warmstart = (
     jnp.zeros(K * num_vars, dtype=jnp.float64)
-    .at[jnp.arange(K) * num_vars + osc_node].set(3.5 * jnp.sin(_phase))
+    .at[jnp.arange(K) * num_vars + osc_idx].set(3.5 * jnp.sin(_phase))
 )
 
 
 def loss_fn_mu(mu: jax.Array) -> jax.Array:
     """Squared error between fundamental amplitude and target, as a function of mu."""
-    groups_new = update_group_params(groups, "vdp", "mu", mu)
-    run_hb_new = setup_harmonic_balance(groups_new, num_vars, freq=f0, num_harmonics=N_harm)
-    _, y_freq_new = run_hb_new(y_dc, y_flat_init=y_flat_warmstart)
-    A_fund = 2.0 * jnp.abs(y_freq_new[1, osc_node])
+    _, y_freq_new = circuit.hb(
+        freq=f0,
+        harmonics=N_harm,
+        y0=y_dc,
+        params={"VDP.mu": mu},
+        y_flat_init=y_flat_warmstart,
+    )
+    A_fund = 2.0 * jnp.abs(circuit.port(y_freq_new, "osc")[1])
     return (A_fund - A_target) ** 2
 
 
@@ -370,71 +371,68 @@ for step in range(80):
     mu = mu - lr * g
     mu_history.append(float(mu))
     if step % 20 == 0 or step == 79:
-        groups_cur = update_group_params(groups, "vdp", "mu", mu)
-        _, yf_cur  = jax.jit(setup_harmonic_balance(groups_cur, num_vars, freq=f0, num_harmonics=N_harm, osc_node=osc_node))(y_dc)
-        A_cur = float(2.0 * jnp.abs(yf_cur[1, osc_node]))
+        _, yf_cur = circuit.hb(freq=f0, harmonics=N_harm, y0=y_dc, params={"VDP.mu": mu}, osc_node="osc")
+        A_cur = float(2.0 * jnp.abs(circuit.port(yf_cur, "osc")[1]))
         print(f"  Step {step:3d}: mu = {float(mu):.4f},  loss = {float(loss):.6f},  A_fund = {A_cur:.4f} V")
 
 mu_opt = float(mu)
 print(f"\nOptimised mu = {mu_opt:.4f}  (analytical: {(A_target/2)**2:.4f})")
 
+
 ```
 
-    At mu=2.0:  loss = 1.9991 V²,  grad = 3.4346 V²/[mu]
+    At mu=2.0:  loss = 1.9992 V²,  grad = 3.4345 V²/[mu]
       Current amplitude ≈ 2.914 V,  target = 1.5 V
       Positive gradient → decreasing mu reduces amplitude toward target
 
     Gradient descent (lr=0.05, starting from mu=3.0):
 
 
-      Step   0: mu = 2.5133,  loss = 4.027752,  A_fund = 3.2511 V
+      Step   0: mu = 2.5087,  loss = 4.018053,  A_fund = 3.2403 V
 
 
-      Step  20: mu = 0.5763,  loss = 0.013855,  A_fund = 1.5303 V
+      Step  20: mu = 0.5763,  loss = 0.013698,  A_fund = 1.5301 V
 
 
-      Step  40: mu = 0.5078,  loss = 0.000000,  A_fund = 1.5000 V
+      Step  40: mu = 0.5077,  loss = 0.000000,  A_fund = 1.5002 V
 
 
-      Step  60: mu = 0.5076,  loss = 0.000000,  A_fund = 1.4998 V
+      Step  60: mu = 0.5075,  loss = 0.000000,  A_fund = 1.4999 V
 
 
-      Step  79: mu = 0.5076,  loss = 0.000000,  A_fund = 1.4998 V
+      Step  79: mu = 0.5075,  loss = 0.000000,  A_fund = 1.4999 V
 
-    Optimised mu = 0.5076  (analytical: 0.5625)
+    Optimised mu = 0.5075  (analytical: 0.5625)
 
 
 
 ```python
 # ── Compute waveforms before and after optimisation ───────────────────────────
-groups_before = update_group_params(groups, "vdp", "mu", jnp.array(2.0))
-groups_after  = update_group_params(groups, "vdp", "mu", jnp.array(mu_opt))
+_, yf_before = circuit.hb(freq=f0, harmonics=N_harm, y0=y_dc, params={"VDP.mu": jnp.array(2.0)}, osc_node="osc")
+yt_after, yf_after = circuit.hb(freq=f0, harmonics=N_harm, y0=y_dc, params={"VDP.mu": jnp.array(mu_opt)}, osc_node="osc")
 
-_, yf_before = jax.jit(setup_harmonic_balance(groups_before, num_vars, freq=f0, num_harmonics=N_harm, osc_node=osc_node))(y_dc)
-yt_after, yf_after = jax.jit(setup_harmonic_balance(groups_after, num_vars, freq=f0, num_harmonics=N_harm, osc_node=osc_node))(y_dc)
+A_before = float(2.0 * jnp.abs(circuit.port(yf_before, "osc")[1]))
+A_after  = float(2.0 * jnp.abs(circuit.port(yf_after, "osc")[1]))
 
-A_before = float(2.0 * jnp.abs(yf_before[1, osc_node]))
-A_after  = float(2.0 * jnp.abs(yf_after[1, osc_node]))
-
-v_before = np.array(y_time[:, osc_node])
-v_after  = np.array(yt_after[:, osc_node])
+v_before = np.array(circuit.port(y_time, "osc"))
+v_after  = np.array(circuit.port(yt_after, "osc"))
 
 fig = make_subplots(
     rows=1, cols=2,
     subplot_titles=(
-        "Before and after \u03bc tuning",
+        "Before and after μ tuning",
         f"Amplitude tuning convergence (target {A_target} V)",
     ),
 )
 
 fig.add_trace(
     go.Scatter(x=t_ns, y=v_before, mode="lines", line=dict(width=2),
-               name=f"\u03bc=2.00 \u2192 A={A_before:.2f} V (initial)"),
+               name=f"μ=2.00 → A={A_before:.2f} V (initial)"),
     row=1, col=1,
 )
 fig.add_trace(
     go.Scatter(x=t_ns, y=v_after, mode="lines", line=dict(width=2.5, dash="dash"),
-               name=f"\u03bc={mu_opt:.2f} \u2192 A={A_after:.2f} V (optimised)"),
+               name=f"μ={mu_opt:.2f} → A={A_after:.2f} V (optimised)"),
     row=1, col=1,
 )
 fig.add_hline(y= A_target, line_dash="dot", line_color="grey", line_width=0.8, row=1, col=1)
@@ -449,11 +447,12 @@ fig.add_trace(
 fig.update_xaxes(title_text="Time (ns)", row=1, col=1)
 fig.update_yaxes(title_text="Voltage (V)", row=1, col=1)
 fig.update_xaxes(title_text="Gradient descent step", row=1, col=2)
-fig.update_yaxes(title_text="Loss (V\u00b2)", type="log", row=1, col=2)
+fig.update_yaxes(title_text="Loss (V²)", type="log", row=1, col=2)
 fig.update_layout(margin=dict(t=80, b=100, l=60, r=60), height=520, legend=dict(orientation="h", y=-0.25, x=0.5, xanchor="center"))
 fig.show()
 
 print(f"Amplitude error after optimisation: {abs(A_after - A_target)*1000:.2f} mV")
+
 
 ```
 
@@ -463,7 +462,7 @@ print(f"Amplitude error after optimisation: {abs(A_after - A_target)*1000:.2f} m
 
 
 
-    Amplitude error after optimisation: 0.23 mV
+    Amplitude error after optimisation: 0.11 mV
 
 
 ## Part 3 — Joint tuning: frequency and amplitude
@@ -479,8 +478,9 @@ get the exact gradient with one HB solve, and Adam navigates directly to the sol
 **Log-space parameterisation** keeps all three parameters positive and balances their
 gradients: a 10% change in L feels the same as a 10% change in μ, regardless of the
 absolute scale. We also pass the resonant frequency (derived from L and C) directly to
-`setup_harmonic_balance` — this ensures the HB discretisation always matches the actual
+`circuit.hb(...)` — this ensures the HB discretisation always matches the actual
 oscillation frequency, which is essential for convergence when L and C are changing.
+
 
 
 ```python
@@ -492,14 +492,12 @@ print(f"Target frequency    : {f_target/1e6:.1f} MHz")
 print(f"Required L*C product: {LC_target:.3e} H·F")
 print(f"Starting L={L_val*1e6:.2f} µH, C={C_val*1e9:.2f} nF  → f0={f0/1e6:.3f} MHz")
 
-# Fixed sinusoidal warm start for the joint optimisation loss — amplitude 2 V at osc_node,
-# all other nodes zero.  This is above the basin-of-attraction saddle (~1.15 V) for all
-# (L, C, mu) values explored during optimisation.  Using a constant here keeps the
-# gradient path free of argmax, so Optimistix's implicit diff works cleanly.
+# Fixed sinusoidal warm start for the joint optimisation loss — amplitude 2 V at osc_idx,
+# all other nodes zero. This is advanced initialization over the flat HB state vector.
 _phase_k = 2.0 * jnp.pi * jnp.arange(K, dtype=jnp.float64) / K
 y_flat_hb_init = (
     jnp.zeros(K * num_vars, dtype=jnp.float64)
-    .at[jnp.arange(K) * num_vars + osc_node].set(3.5 * jnp.sin(_phase_k))
+    .at[jnp.arange(K) * num_vars + osc_idx].set(3.5 * jnp.sin(_phase_k))
 )
 
 
@@ -512,14 +510,15 @@ def loss_joint(log_params: jax.Array) -> jax.Array:
 
     f_resonant = 1.0 / (2.0 * jnp.pi * jnp.sqrt(L * C))
 
-    grps = update_params_dict(groups, "inductor",  "L1", "L", L)
-    grps = update_params_dict(grps,   "capacitor", "C1", "C", C)
-    grps = update_group_params(grps,  "vdp", "mu", mu)
+    _, y_freq_j = circuit.hb(
+        freq=f_resonant,
+        harmonics=N_harm,
+        y0=jnp.zeros(num_vars),
+        params={"L1.L": L, "C1.C": C, "VDP.mu": mu},
+        y_flat_init=y_flat_hb_init,
+    )
 
-    run_hb_j = setup_harmonic_balance(grps, num_vars, freq=f_resonant, num_harmonics=N_harm)
-    _, y_freq_j = run_hb_j(jnp.zeros(num_vars), y_flat_init=y_flat_hb_init)
-
-    A_fund = 2.0 * jnp.abs(y_freq_j[1, osc_node])
+    A_fund = 2.0 * jnp.abs(circuit.port(y_freq_j, "osc")[1])
 
     loss_freq = ((f_resonant - f_target) / f_target) ** 2
     loss_amp  = ((A_fund - A_target_j) / A_target_j) ** 2
@@ -557,6 +556,7 @@ L_opt, C_opt, mu_opt_j = np.exp(np.array(log_params))
 f_opt = 1.0 / (2.0 * np.pi * np.sqrt(L_opt * C_opt))
 print(f"\nFinal: f={f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz),  L={L_opt*1e6:.4f} µH,  C={C_opt*1e9:.4f} nF,  mu={mu_opt_j:.4f}")
 
+
 ```
 
     Target frequency    : 8.0 MHz
@@ -570,21 +570,21 @@ print(f"\nFinal: f={f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz),  L={L_o
     Adam optimisation (200 steps, lr=0.05):
 
 
-      Step   0: loss=3.80059,  f=5.033 MHz,  L=0.951 µH,  C=1.051 nF,  mu=1.902
+      Step   0: loss=3.80062,  f=5.033 MHz,  L=0.951 µH,  C=1.051 nF,  mu=1.902
 
 
-      Step  50: loss=0.08283,  f=8.239 MHz,  L=0.234 µH,  C=1.594 nF,  mu=0.412
+      Step  50: loss=0.08338,  f=8.245 MHz,  L=0.235 µH,  C=1.588 nF,  mu=0.413
 
 
-      Step 100: loss=0.03842,  f=8.014 MHz,  L=0.222 µH,  C=1.777 nF,  mu=0.304
+      Step 100: loss=0.02942,  f=8.013 MHz,  L=0.223 µH,  C=1.769 nF,  mu=0.305
 
 
-      Step 150: loss=0.00066,  f=8.001 MHz,  L=0.220 µH,  C=1.796 nF,  mu=0.269
+      Step 150: loss=0.00059,  f=8.001 MHz,  L=0.221 µH,  C=1.787 nF,  mu=0.268
 
 
-      Step 199: loss=0.00006,  f=8.000 MHz,  L=0.220 µH,  C=1.800 nF,  mu=0.261
+      Step 199: loss=0.00005,  f=8.000 MHz,  L=0.221 µH,  C=1.791 nF,  mu=0.260
 
-    Final: f=7.9998 MHz  (target 8.0 MHz),  L=0.2199 µH,  C=1.7997 nF,  mu=0.2609
+    Final: f=7.9999 MHz  (target 8.0 MHz),  L=0.2209 µH,  C=1.7914 nF,  mu=0.2605
 
 
     Pre-computing 51 HB solutions (stride=4)...
@@ -593,19 +593,19 @@ print(f"\nFinal: f={f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz),  L={L_o
       [  1/51] step   0 — f=5.03 MHz, A=2.914 V, mu=2.000
 
 
-      [ 11/51] step  40 — f=7.65 MHz, A=1.483 V, mu=0.496
+      [ 11/51] step  40 — f=7.66 MHz, A=1.483 V, mu=0.496
 
 
-      [ 21/51] step  80 — f=7.92 MHz, A=1.238 V, mu=0.330
+      [ 21/51] step  80 — f=7.92 MHz, A=1.221 V, mu=0.331
 
 
-      [ 31/51] step 120 — f=8.00 MHz, A=1.161 V, mu=0.285
+      [ 31/51] step 120 — f=8.00 MHz, A=1.165 V, mu=0.287
 
 
-      [ 41/51] step 160 — f=8.00 MHz, A=1.131 V, mu=0.267
+      [ 41/51] step 160 — f=8.00 MHz, A=1.129 V, mu=0.266
 
 
-      [ 51/51] step 200 — f=8.00 MHz, A=1.119 V, mu=0.261
+      [ 51/51] step 200 — f=8.00 MHz, A=1.119 V, mu=0.260
     Done.
 
 
@@ -629,9 +629,9 @@ with no grid sweeps and no manual iteration.
 | Step | Tool | Role |
 |------|------|------|
 | Component definition | `@component` decorator | Generates JAX-traceable Equinox module |
-| Netlist compilation | `compile_circuit` | Runs once; produces vmappable `ComponentGroup` objects |
-| Differentiable parameter update | `update_params_dict` / `update_group_params` | `eqx.tree_at` functional update; no recompilation |
-| Periodic steady state | `setup_harmonic_balance` | Finds limit cycle in ~15 Newton steps; JIT-compatible |
+| Netlist compilation | `compile_circuit` | Runs once; produces a reusable high-level `Circuit` |
+| Differentiable parameter update | `circuit.hb(params={...})` | Functional instance parameter updates; no recompilation |
+| Periodic steady state | `circuit.hb(...)` | Finds limit cycle in ~15 Newton steps; JIT-compatible |
 | Exact gradients | `jax.grad` | Differentiates through the HB Newton solver via implicit differentiation |
 | Optimisation | `optax.adam` | First-order optimiser in log-space; 200 steps to convergence |
 

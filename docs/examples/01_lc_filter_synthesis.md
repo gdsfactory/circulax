@@ -45,9 +45,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import optax
 
-from circulax import compile_circuit, setup_ac_sweep
+from circulax import compile_circuit
 from circulax.components.electronic import Capacitor, Inductor, Resistor
-from circulax.utils import update_params_dict
 
 # Enable 64-bit precision throughout — important for accurate S-parameter
 # gradients, especially at high frequencies where small perturbations matter.
@@ -70,10 +69,10 @@ plt.rcParams.update({
     "savefig.facecolor": "white",
     "savefig.edgecolor": "white",
 })
+
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:33:54,597:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:02:43,120:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## 1. Butterworth analytical targets
@@ -137,10 +136,10 @@ print(f"  L2 = {L2_init*1e9:.1f} nH   ({L2_init/L_target:.1f}× target)")
 #                     GND
 #
 # Port nodes are defined by 1 TΩ probe resistors — negligible effect on the
-# circuit but they register the node in the port_map.  The Z0=50 Ω source and
-# load terminations are injected by setup_ac_sweep, NOT as explicit resistors.
-# Including explicit source/load resistors AND letting setup_ac_sweep add Z0
-# would give 25 Ω effective termination and the wrong Butterworth values.
+# circuit but they register the named AC ports. The Z0=50 Ω source and load
+# terminations are injected by circuit.ac(...), NOT as explicit resistors.
+# Including explicit source/load resistors AND letting AC add Z0 would give
+# 25 Ω effective termination and the wrong Butterworth values.
 
 net_dict = {
     "instances": {
@@ -157,6 +156,7 @@ net_dict = {
         "L1,p2":   ("C1,p1", "L2,p1"),
         "L2,p2":   "Rp2,p1",
     },
+    "ports": {"in": "Rp1,p1", "out": "Rp2,p1"},
 }
 
 models = {
@@ -167,30 +167,18 @@ models = {
 }
 
 circuit = compile_circuit(net_dict, models)
-groups = circuit.groups
-sys_size = circuit.sys_size
-port_map = circuit.port_map
+y_dc = circuit.dc()
 
-print(f"System size: {sys_size} unknowns")
-print(f"Port map: {port_map}")
-print(f"\nComponent groups: {list(groups.keys())}")
-
-y_dc = circuit()
-
-# Port 1 = left terminal (input of filter),  Port 2 = right terminal (output)
-port_nodes = [port_map["Rp1,p1"], port_map["Rp2,p1"]]
-print(f"\nPort node indices: {port_nodes}")
+print(f"System size: {circuit.sys_size} unknowns")
+print(f"Named AC ports: {list(net_dict['ports'])}")
+print(f"\nComponent groups: {list(circuit.groups.keys())}")
 
 ```
 
     System size: 6 unknowns
-    Port map: {'L1,p2': 1, 'C1,p1': 1, 'L2,p1': 1, 'Rp1,p2': 0, 'C1,p2': 0, 'GND,p1': 0, 'Rp2,p2': 0, 'Rp1,p1': 2, 'L1,p1': 2, 'Rp2,p1': 3, 'L2,p2': 3, 'L1,i_L': 4, 'L2,i_L': 5}
+    Named AC ports: ['in', 'out']
 
-    Component groups: ['resistor', 'inductor', 'capacitor']
-
-
-
-    Port node indices: [2, 3]
+    Component groups: ['capacitor', 'inductor', 'resistor']
 
 
 ## 2. Optimisation strategy
@@ -210,7 +198,8 @@ $$\mathcal{L} = \frac{1}{N_f} \sum_{k=1}^{N_f} \left(|S_{21}(f_k)| - |S_{21}^{\t
 
 ### Differentiability
 
-`update_params_dict` uses `equinox.tree_at` to functionally update the batched component arrays — it never modifies in place, so the whole computation is a pure function compatible with `jax.grad`.  `setup_ac_sweep` then assembles the nodal admittance matrix and solves for the S-parameters at each frequency, all inside JAX.
+`circuit.ac(params={...})` functionally updates the compiled component arrays without modifying them in place, then assembles and solves the S-parameter sweep inside JAX. The whole loss remains a pure function compatible with `jax.grad`.
+
 
 
 ```python
@@ -230,18 +219,13 @@ def loss_fn(log_params):
     # Recover physical values from log representation
     L1, C1, L2 = jnp.exp(log_params)
 
-    # Functionally update the compiled groups with the new parameter values.
-    # update_params_dict(groups, group_name, instance_name, param_key, new_value)
-    # uses eqx.tree_at internally — no in-place mutation, fully JAX-traceable.
-    g = update_params_dict(groups, "inductor",  "L1", "L", L1)
-    g = update_params_dict(g,      "capacitor", "C1", "C", C1)
-    g = update_params_dict(g,      "inductor",  "L2", "L", L2)
-
-    # Build and run the AC sweep.  This evaluates F(y) and its Jacobian at
-    # y_dc (trivial for a passive circuit), then solves the nodal
-    # admittance system at each frequency via jax.vmap.
-    run_ac = setup_ac_sweep(g, sys_size, port_nodes, z0=Z0)
-    S = run_ac(y_dc, freqs)   # shape: (N_freqs, 2, 2)
+    S = circuit.ac(
+        params={"L1.L": L1, "C1.C": C1, "L2.L": L2},
+        ports=["in", "out"],
+        freqs=freqs,
+        z0=Z0,
+        y_dc=y_dc,
+    )
 
     # S21 is the (row=1, col=0) entry: response at port 2 due to excitation at port 1
     S21_mag = jnp.abs(S[:, 1, 0])
@@ -252,6 +236,7 @@ def loss_fn(log_params):
 log_params_init = jnp.log(jnp.array([L1_init, C1_init, L2_init]))
 loss_init = loss_fn(log_params_init)
 print(f"Initial loss: {float(loss_init):.6f}")
+
 ```
 
     Initial loss: 0.057315
@@ -302,12 +287,10 @@ L1_opt, C1_opt, L2_opt = np.exp(np.array(log_params))
     Step   1: loss=0.057315  L1=26.28 nH  C1=190.25 pF  L2=26.28 nH
     Step  50: loss=0.000136  L1=90.66 nH  C1=57.51 pF  L2=90.66 nH
     Step 100: loss=0.000002  L1=80.49 nH  C1=63.10 pF  L2=80.49 nH
-
-
     Step 150: loss=0.000000  L1=79.50 nH  C1=63.71 pF  L2=79.50 nH
+
+
     Step 200: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
-
-
     Step 250: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
     Step 300: loss=0.000000  L1=79.58 nH  C1=63.66 pF  L2=79.58 nH
 
@@ -318,11 +301,13 @@ L1_opt, C1_opt, L2_opt = np.exp(np.array(log_params))
 
 def compute_s21(L1, C1, L2):
     """Evaluate |S21| over the frequency sweep for given component values."""
-    g = update_params_dict(groups, "inductor",  "L1", "L", L1)
-    g = update_params_dict(g,      "capacitor", "C1", "C", C1)
-    g = update_params_dict(g,      "inductor",  "L2", "L", L2)
-    run_ac = setup_ac_sweep(g, sys_size, port_nodes, z0=Z0)
-    S = jax.jit(run_ac)(y_dc, freqs)
+    S = jax.jit(lambda l1, c1, l2: circuit.ac(
+        params={"L1.L": l1, "C1.C": c1, "L2.L": l2},
+        ports=["in", "out"],
+        freqs=freqs,
+        z0=Z0,
+        y_dc=y_dc,
+    ))(L1, C1, L2)
     return np.abs(np.array(S[:, 1, 0]))
 
 S21_init = compute_s21(L1_init, C1_init, L2_init)
@@ -351,6 +336,7 @@ ax.set_ylim(-60, 5)
 ax.legend(fontsize=9)
 plt.tight_layout()
 plt.show()
+
 ```
 
 
@@ -405,15 +391,17 @@ print(f"  C1: {C1_opt*1e12:.2f} pF  vs  {C_target*1e12:.2f} pF  "
 print(f"  L2: {L2_opt*1e9:.2f} nH  vs  {L_target*1e9:.2f} nH  "
       f"({abs(L2_opt - L_target)/L_target*100:.1f}% error)")
 
-# Verify passivity of the optimised filter: |S11|² + |S21|² <= 1 at all freqs
-g_opt = update_params_dict(groups, "inductor",  "L1", "L", float(L1_opt))
-g_opt = update_params_dict(g_opt,  "capacitor", "C1", "C", float(C1_opt))
-g_opt = update_params_dict(g_opt,  "inductor",  "L2", "L", float(L2_opt))
-run_ac_opt = setup_ac_sweep(g_opt, sys_size, port_nodes, z0=Z0)
-S_opt = jax.jit(run_ac_opt)(y_dc, freqs)
+S_opt = jax.jit(lambda l1, c1, l2: circuit.ac(
+    params={"L1.L": l1, "C1.C": c1, "L2.L": l2},
+    ports=["in", "out"],
+    freqs=freqs,
+    z0=Z0,
+    y_dc=y_dc,
+))(L1_opt, C1_opt, L2_opt)
 
 power_sum = jnp.abs(S_opt[:, 0, 0])**2 + jnp.abs(S_opt[:, 1, 0])**2
 print(f"\nPassivity check: max(|S11|² + |S21|²) = {float(jnp.max(power_sum)):.6f}  (must be ≤ 1.0)")
+
 ```
 
     Recovered vs Analytical:
@@ -432,9 +420,9 @@ Starting from component values that were roughly **3× away** from the Butterwor
 
 | Step | Tool | Role |
 |------|------|------|
-| Netlist compilation | `compile_circuit` | Runs once; produces JAX-traceable `ComponentGroup` objects |
-| Differentiable parameter update | `update_params_dict` | `eqx.tree_at` functional update; no re-compilation |
-| Differentiable S-parameters | `setup_ac_sweep` | Assembles Y(jω) and solves via `jax.vmap` over frequencies |
+| Netlist compilation | `compile_circuit` | Runs once; produces a reusable high-level `Circuit` |
+| Differentiable parameter update | `circuit.ac(params={...})` | Functional instance parameter updates; no re-compilation |
+| Differentiable S-parameters | `circuit.ac(...)` | Assembles Y(jω) and solves via `jax.vmap` over frequencies |
 | Exact gradients | `jax.grad` | Reverse-mode AD through the entire forward pass |
 | Optimisation | `optax.adam` | Standard first-order optimiser, works in log-space |
 

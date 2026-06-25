@@ -17,6 +17,15 @@ papermill = pytest.importorskip(
     reason="papermill not installed — skipping notebook tests (install circulax[docs])",
 )
 
+try:
+    from bosdi.circulax import osdi_component  # noqa: F401
+
+    _has_osdi = True
+except ImportError:
+    _has_osdi = False
+
+_NEEDS_OSDI = {"ring_oscillator_osdi.ipynb", "05_psp103_ring_param_fitting.ipynb"}
+
 TEST_DIR = Path(__file__).resolve().parent.parent
 NBS_DIR = TEST_DIR / "examples"
 NBS_FAIL_DIR = TEST_DIR / "failed"
@@ -37,6 +46,8 @@ def _find_notebooks(*dir_parts: str) -> Generator[Path, None, None]:
 @pytest.mark.parametrize("path", sorted(_find_notebooks("examples")))
 def test_nbs(path: Path | str) -> None:
     fn = Path(path).name
+    if fn in _NEEDS_OSDI and not _has_osdi:
+        pytest.skip("bosdi.circulax not installed — install circulax[verilog-a]")
     nb = papermill.iorw.load_notebook_node(str(path))
     nb = papermill.engines.papermill_engines.execute_notebook_with_engine(
         engine_name=None,

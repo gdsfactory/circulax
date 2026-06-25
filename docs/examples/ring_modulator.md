@@ -60,13 +60,11 @@ import numpy as np
 from circulax import compile_circuit
 from circulax.components.base_component import PhysicsReturn, Signals, States, component, source
 from circulax.components.electronic import Resistor
-from circulax.solvers import setup_transient
 
 jax.config.update("jax_enable_x64", True)
 ```
 
-    KLUJAX_RS DEBUG MODE.
-    WARNING:2026-04-17 17:32:40,326:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-06-24 18:07:37,862:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Component definitions
@@ -184,6 +182,96 @@ def RingModulator(
     return f, q
 ```
 
+### Pattern: separating round-trip physics from CMT evaluation with `.setup`
+
+For components whose CMT parameters are derived from physical device parameters
+(coupling coefficient κ, effective index n_eff, loss α, length L), the
+`@<Component>.setup` decorator cleanly separates the **round-trip model** from
+the CMT evaluation loop. The setup runs inside the JAX trace so gradients flow
+through it correctly — e.g. `jax.grad(loss, kappa)` traverses the `sqrt(1 - κ²)`
+inside `.setup`.
+
+```python
+@component(ports=("in_", "thru"))
+def RingMod(signals, s, init, kappa=0.3, neff=2.4, alpha=1e-3, L=..., V_pi=2.0, V=0.0):
+    # init["a"], init["t"], init["phi"] were computed by the round-trip model below
+    phi = init["phi"] * (1.0 + V / V_pi)
+    H = (init["t"] - init["a"] * jnp.exp(1j * phi)) / (1 - init["t"] * init["a"] * jnp.exp(1j * phi))
+    ...
+
+@RingMod.setup
+def _round_trip(kappa=0.3, neff=2.4, alpha=1e-3, L=...):
+    """Derives a, t, phi₀ from physical device params."""
+    return {
+        "a":   jnp.exp(-alpha * L / 2.0),   # round-trip amplitude
+        "t":   jnp.sqrt(1.0 - kappa**2),    # through-coupling
+        "phi": 2.0 * jnp.pi * neff * L,     # round-trip phase at resonance
+    }
+```
+
+The full runnable example and gradient tests are in `tests/test_setup_decorator.py`.
+
+
+```python
+# ── Round-trip → CMT RingMod: demonstrating @Component.setup ──────────────────
+# This cell is illustrative. Parts 1–5 below use RingModulator/RingModulatorEO
+# which fold the round-trip computation inline for conciseness.
+
+
+@component(ports=("in_", "thru"))
+def RingModSetup(
+    signals: Signals,
+    s: States,
+    init,
+    kappa: float = 0.3,
+    neff: float = 2.4,
+    alpha: float = 1e-3,
+    L: float = float(2 * jnp.pi * 5e-6),
+    V_pi: float = 2.0,
+    V: float = 0.0,
+) -> PhysicsReturn:
+    """All-pass ring response via CMT, using init coefficients from .setup."""
+    phi = init["phi"] * (1.0 + V / V_pi)
+    ejphi = jnp.exp(1j * phi)
+    H = (init["t"] - init["a"] * ejphi) / (1.0 - init["t"] * init["a"] * ejphi)
+    absorbed = (1.0 - jnp.abs(H) ** 2) * signals.in_
+    return {"in_": absorbed, "thru": signals.thru - H * signals.in_}, {}
+
+
+@RingModSetup.setup
+def _round_trip(
+    kappa: float = 0.3,
+    neff: float = 2.4,
+    alpha: float = 1e-3,
+    L: float = float(2 * jnp.pi * 5e-6),
+) -> dict:
+    """Round-trip model: derive CMT coefficients from physical device parameters."""
+    return {
+        "a": jnp.exp(-alpha * L / 2.0),   # round-trip amplitude (loss)
+        "t": jnp.sqrt(1.0 - kappa**2),    # through-coupling amplitude
+        "phi": 2.0 * jnp.pi * neff * L,   # round-trip phase at reference wavelength
+    }
+
+
+# Functional check: evaluate the component (a lossless all-pass ring has |H|=1 for any phi)
+rm_demo = RingModSetup(kappa=0.3, neff=2.4, alpha=1e-3)
+f_demo, _ = rm_demo(in_=1.0 + 0j, thru=0.0 + 0j)
+print(f"E_thru = {complex(f_demo['thru']):.4f}   |H| = {float(jnp.abs(f_demo['thru'])):.6f}")
+
+# Gradient of the through-field phase w.r.t. kappa flows through the .setup body:
+# kappa → t = sqrt(1-kappa^2) → H  (analytic dφ/dκ = -κ/t)
+grad_kappa = jax.grad(
+    lambda k: jnp.angle(RingModSetup(kappa=k)(in_=1.0 + 0j, thru=0.0 + 0j)[0]["thru"])
+)(0.3)
+print(f"d∠(E_thru)/dκ at κ=0.3 = {float(grad_kappa):.6f} rad  (non-zero gradient through .setup)")
+```
+
+    E_thru = 0.9998+0.0201j   |H| = 0.999999
+
+
+    d∠(E_thru)/dκ at κ=0.3 = -0.140432 rad  (non-zero gradient through .setup)
+
+
 ## Simulation parameters
 
 Parameters are taken from the reference silicon photonics ring modulator
@@ -286,16 +374,18 @@ net_dict = {
         "Src,p1": "Ring,p1",  # source output → ring input
         "Ring,p2": "Load,p1",  # ring output → load
     },
+    "ports": {"in": "Src,p1", "out": "Ring,p2"},
 }
 
 print("Compiling netlist...")
 circuit = compile_circuit(net_dict, models_map, is_complex=True)
-groups = circuit.groups
-sys_size = circuit.sys_size
-port_map = circuit.port_map
+print(f"System size: {circuit.sys_size} real nodes")
 ```
 
     Compiling netlist...
+
+
+    System size: 6 real nodes
 
 
 ## DC operating point
@@ -305,7 +395,8 @@ At $t = 0$ the source is off, so the DC operating point is trivially zero.
 
 ```python
 linear_strat = circuit.solver
-y0 = circuit()
+y0 = circuit.dc()
+
 ```
 
 ## Transient simulation
@@ -331,8 +422,6 @@ accurate and Newton convergence fast.
 t_end = 250e-12  # 250 ps
 num_points = 2500
 
-transient_sim = setup_transient(groups=groups, linear_strategy=linear_strat)
-
 controller = diffrax.PIDController(
     rtol=1e-4,
     atol=1e-6,
@@ -340,7 +429,7 @@ controller = diffrax.PIDController(
 )
 
 print("Running transient simulation...")
-sol = transient_sim(
+sol = circuit.transient(
     t0=0.0,
     t1=t_end,
     dt0=1e-13,
@@ -355,6 +444,7 @@ if sol.result == diffrax.RESULTS.successful:
     print("Simulation successful")
 else:
     print(f"Simulation ended with: {sol.result}")
+
 ```
 
     Running transient simulation...
@@ -365,16 +455,16 @@ else:
 
 ## Results
 
-The ring energy $a(t)$ is read directly from the solution vector via
-`port_map["Ring,a"]`, alongside the input and output fields.
+The input and output fields are read through named top-level ports. The ring energy `Ring,a` is an internal state, so it is inspected by its component-state name.
+
 
 
 ```python
 ts_ps = sol.ts * 1e12
 
-E_in = circuit.get_port_field(sol.ys, "Src,p1")
-E_out = circuit.get_port_field(sol.ys, "Ring,p2")
-a_val = circuit.get_port_field(sol.ys, "Ring,a")
+E_in = circuit.port(sol.ys, "in")
+E_out = circuit.port(sol.ys, "out")
+a_val = circuit.port(sol.ys, "Ring,a")
 
 P_in = jnp.abs(E_in) ** 2
 P_out = jnp.abs(E_out) ** 2
@@ -434,7 +524,7 @@ print(f"Analytic  steady-state |T|: {T_ss:.3f}")
 
 
 
-![png](ring_modulator_files/ring_modulator_13_0.png)
+![png](ring_modulator_files/ring_modulator_15_0.png)
 
 
 
@@ -476,7 +566,6 @@ low-frequency value.
 
 ```python
 from circulax.components.electronic import Capacitor
-from circulax.utils import update_group_params
 
 
 @source(ports=("p1", "p2"), states=("i_src",))
@@ -633,20 +722,17 @@ net_dict_ss = {
         "Vsrc,p1": "Rs,p1",
         "Rs,p2": ("Cj,p1", "Ring,v_e"),  # node_ve: RC junction & ring voltage port
     },
+    "ports": {"in": "Ring,p1", "out": "Ring,p2", "ve": "Ring,v_e"},
 }
 
 print("\nCompiling small-signal netlist...")
 circuit_ss = compile_circuit(net_dict_ss, models_map_ss, is_complex=True)
-groups_ss = circuit_ss.groups
-sys_size_ss = circuit_ss.sys_size
-port_map_ss = circuit_ss.port_map
-linear_strat_ss = circuit_ss.solver
-y0_ss = circuit_ss()
+y0_ss = circuit_ss.dc()
 
 # Report DC state
-V_ve_dc = float(jnp.real(circuit_ss.get_port_field(y0_ss, "Ring,v_e")))
-E_in_dc = circuit_ss.get_port_field(y0_ss, "Ring,p1")
-E_out_dc = circuit_ss.get_port_field(y0_ss, "Ring,p2")
+V_ve_dc = float(jnp.real(circuit_ss.port(y0_ss, "ve")))
+E_in_dc = circuit_ss.port(y0_ss, "in")
+E_out_dc = circuit_ss.port(y0_ss, "out")
 T_dc_sim = float(jnp.abs(E_out_dc) / (jnp.abs(E_in_dc) + 1e-20))
 
 # Analytic DC transmission at the biased detuning
@@ -682,14 +768,9 @@ N_periods = 10.0  # simulate this many AC periods per run
 n_save = 500  # save this many points in the readout window
 amplitudes = []  # will hold max(P_out) - min(P_out) per frequency
 
-transient_sim_ss = setup_transient(groups=groups_ss, linear_strategy=linear_strat_ss)
-E_out_node = port_map_ss["Ring,p2"]
-
 print(f"Running {len(freqs_GHz)}-point frequency sweep …")
 for idx, f_ghz in enumerate(freqs_GHz):
     f_hz = f_ghz * 1e9
-
-    groups_f = update_group_params(groups_ss, "biased_ac", "freq", f_hz)
 
     t_sim = t_ac_start + N_periods / f_hz
     t_read = t_ac_start + (N_periods // 2) / f_hz
@@ -697,7 +778,7 @@ for idx, f_ghz in enumerate(freqs_GHz):
 
     dtmax = 1.0 / (20.0 * f_hz)  # ≥ 20 samples per AC period
 
-    sol = transient_sim_ss(
+    sol = circuit_ss.transient(
         t0=0.0,
         t1=t_sim,
         dt0=min(1e-12, dtmax),
@@ -705,15 +786,14 @@ for idx, f_ghz in enumerate(freqs_GHz):
         saveat=diffrax.SaveAt(ts=ts_save),
         max_steps=2_000_000,
         throw=False,
-        args=(groups_f, sys_size_ss),
+        params={"Vsrc.freq": f_hz},
         stepsize_controller=diffrax.PIDController(rtol=1e-8, atol=1e-8, dtmax=dtmax),
     )
 
     if sol.result != diffrax.RESULTS.successful:
         print(f"  [{idx + 1:2d}/{len(freqs_GHz)}] {f_ghz:5.1f} GHz  WARNING: {sol.result}")
 
-    ys_c = sol.ys[:, :sys_size_ss] + 1j * sol.ys[:, sys_size_ss:]
-    P_out = jnp.abs(ys_c[:, E_out_node]) ** 2
+    P_out = jnp.abs(circuit_ss.port(sol.ys, "out")) ** 2
     P_norm = jnp.min(P_out[: int(-n_save / 2)])
     amplitudes.append(float(jnp.max(P_out[: int(-n_save / 2)]) - P_norm))
 
@@ -721,6 +801,7 @@ for idx, f_ghz in enumerate(freqs_GHz):
         print(f"  {idx + 1}/{len(freqs_GHz)} done")
 
 print("Sweep complete.")
+
 ```
 
     Running 10-point frequency sweep …
@@ -830,45 +911,43 @@ plt.show()
 
 
 
-![png](ring_modulator_files/ring_modulator_18_1.png)
+![png](ring_modulator_files/ring_modulator_20_1.png)
 
 
 
 ---
 ## Part 3: EO Bandwidth via Harmonic Balance
 
-The transient sweep above runs 25 independent simulations — one per frequency.
+The transient sweep above runs independent simulations — one per frequency.
 **Harmonic Balance (HB)** finds the periodic steady state *directly*, without
 time-stepping to steady state, and `jax.vmap` solves all frequencies in a
 single XLA compilation.
 
-The modulation frequency $f_m$ is the HB fundamental.  With $N_h = 5$ harmonics
+The modulation frequency $f_m$ is the HB fundamental. With $N_h = 5$ harmonics
 ($K = 11$ time samples per period) the Newton loop converges in ~20 iterations
 independent of $f_m$.
 
 ### How the sweep works
 
 ```python
-def hb_sweep_point(freq):             # freq is now a JAX argument — vmappable
-    run_hb = setup_harmonic_balance(groups_hb, num_vars_hb,
-                                    freq=freq, num_harmonics=N_harm_hb,
-                                    is_complex=True)   # photonic circuit
-    y_time, _ = run_hb(y_dc_hb)
-    E_out = y_time[:, vout_hb] + 1j * y_time[:, vout_hb + num_vars_hb]
-    P_out = jnp.abs(E_out) ** 2
-    return jnp.max(P_out) - jnp.min(P_out)
+def hb_sweep_point(freq):
+    y_time, _ = circuit_hb.hb(
+        freq=freq,
+        harmonics=N_harm_hb,
+        y0=y_dc_hb,
+        params={"Vsrc.freq": freq},
+    )
+    E_out = circuit_hb.port(y_time, "out")
+    return jnp.max(jnp.abs(E_out) ** 2) - jnp.min(jnp.abs(E_out) ** 2)
 
 amps_hb = jax.jit(jax.vmap(hb_sweep_point))(sweep_freqs)
 ```
 
-`is_complex=True` tells the HB solver to use the unrolled `[re | im]` block
-representation that photonic circuits require.
+`compile_circuit(..., is_complex=True)` configures the photonic circuit; `circuit.hb(...)` handles the complex block representation internally.
+
 
 
 ```python
-from circulax import setup_harmonic_balance
-
-
 @source(ports=("p1", "p2"), states=("i_src",))
 def BiasedSinSource(
     signals: Signals,
@@ -931,17 +1010,15 @@ net_dict_hb = {
         "Vsrc,p1": "Rs,p1",
         "Rs,p2": ("Cj,p1", "Ring,v_e"),
     },
+    "ports": {"in": "Ring,p1", "out": "Ring,p2", "ve": "Ring,v_e"},
 }
 
 print("Compiling HB netlist...")
 circuit_hb = compile_circuit(net_dict_hb, models_map_hb, is_complex=True)
-groups_hb = circuit_hb.groups
-num_vars_hb = circuit_hb.sys_size
-port_map_hb = circuit_hb.port_map
-y_dc_hb = circuit_hb()
+y_dc_hb = circuit_hb.dc()
 
-E_in_dc_hb = circuit_hb.get_port_field(y_dc_hb, "Ring,p1")
-E_out_dc_hb = circuit_hb.get_port_field(y_dc_hb, "Ring,p2")
+E_in_dc_hb = circuit_hb.port(y_dc_hb, "in")
+E_out_dc_hb = circuit_hb.port(y_dc_hb, "out")
 T_dc_hb = float(jnp.abs(E_out_dc_hb) / (jnp.abs(E_in_dc_hb) + 1e-20))
 print(f"\nDC |T| (HB netlist) : {T_dc_hb:.4f}  (transient: {T_dc_sim:.4f})")
 ```
@@ -959,19 +1036,19 @@ N_harm_hb = 5  # 5 harmonics → K = 11 time samples per period
 K_hb = 2 * N_harm_hb + 1
 f_demo = 1e9  # 1 GHz single-point demo
 
-groups_hb_demo = update_group_params(groups_hb, "biased_sin", "freq", f_demo)
-
-run_hb_demo = setup_harmonic_balance(groups_hb_demo, num_vars_hb, freq=f_demo, num_harmonics=N_harm_hb, is_complex=True)
-y_time_demo, _ = run_hb_demo(y_dc_hb)
+y_time_demo, _ = circuit_hb.hb(
+    freq=f_demo,
+    harmonics=N_harm_hb,
+    y0=y_dc_hb,
+    params={"Vsrc.freq": f_demo},
+)
 print(f"HB converged at {f_demo / 1e9:.0f} GHz.  y_time shape: {y_time_demo.shape}")
 
-vout_hb = port_map_hb["Ring,p2"]
-vin_hb = port_map_hb["Ring,p1"]
 T_period_demo = 1.0 / f_demo
 t_hb_demo = np.linspace(0, T_period_demo * 1e9, K_hb, endpoint=False)  # ns
 
-E_in_demo = circuit_hb.get_port_field(y_time_demo, "Ring,p1")
-E_out_demo = circuit_hb.get_port_field(y_time_demo, "Ring,p2")
+E_in_demo = circuit_hb.port(y_time_demo, "in")
+E_out_demo = circuit_hb.port(y_time_demo, "out")
 P_in_demo = jnp.abs(E_in_demo) ** 2
 P_out_demo = jnp.abs(E_out_demo) ** 2
 
@@ -988,6 +1065,7 @@ plt.show()
 
 amp_demo = float(jnp.max(P_out_demo) - jnp.min(P_out_demo))
 print(f"P_out oscillation amplitude: {amp_demo:.4e} W  (peak-to-peak power modulation)")
+
 ```
 
     HB converged at 1 GHz.  y_time shape: (11, 18)
@@ -995,7 +1073,7 @@ print(f"P_out oscillation amplitude: {amp_demo:.4e} W  (peak-to-peak power modul
 
 
 
-![png](ring_modulator_files/ring_modulator_21_1.png)
+![png](ring_modulator_files/ring_modulator_23_1.png)
 
 
 
@@ -1006,12 +1084,13 @@ print(f"P_out oscillation amplitude: {amp_demo:.4e} W  (peak-to-peak power modul
 ```python
 def hb_sweep_point(freq):
     """HB solve at one modulation frequency — vmappable over freq."""
-    g_f = update_group_params(groups_hb, "biased_sin", "freq", freq)
-
-    run_hb = setup_harmonic_balance(g_f, num_vars_hb, freq=freq, num_harmonics=N_harm_hb, is_complex=True)
-    y_time, _ = run_hb(y_dc_hb)
-
-    E_out = circuit_hb.get_port_field(y_time, "Ring,p2")
+    y_time, _ = circuit_hb.hb(
+        freq=freq,
+        harmonics=N_harm_hb,
+        y0=y_dc_hb,
+        params={"Vsrc.freq": freq},
+    )
+    E_out = circuit_hb.port(y_time, "out")
     P_out = jnp.abs(E_out) ** 2
     return jnp.max(P_out) - jnp.min(P_out)
 
@@ -1077,6 +1156,7 @@ print("\nFreq (GHz)  | Transient (dB) | HB vmap (dB) | Analytic (dB)")
 print("-" * 60)
 for f, a_tr, a_hb, a_an in zip(freqs_GHz[::5], amps_dB[::5], amps_hb_dB[::5], H_dB[::5]):
     print(f"  {f:5.1f}       |   {a_tr:+6.2f}        |  {a_hb:+6.2f}       | {a_an:+6.2f}")
+
 ```
 
     Running vmapped HB sweep over 10 frequencies (1–50 GHz)...
@@ -1087,7 +1167,7 @@ for f, a_tr, a_hb, a_an in zip(freqs_GHz[::5], amps_dB[::5], amps_hb_dB[::5], H_
 
 
 
-![png](ring_modulator_files/ring_modulator_22_2.png)
+![png](ring_modulator_files/ring_modulator_24_2.png)
 
 
 
@@ -1264,21 +1344,18 @@ net_dict_eye = {
         "Vsrc,p1": "Rs,p1",
         "Rs,p2": ("Cj,p1", "Ring,v_e"),
     },
+    "ports": {"in": "Ring,p1", "out": "Ring,p2", "ve": "Ring,v_e"},
 }
 
 print("\nCompiling NRZ netlist...")
 circuit_eye = compile_circuit(net_dict_eye, models_map_eye, is_complex=True)
-groups_eye = circuit_eye.groups
-sys_size_eye = circuit_eye.sys_size
-port_map_eye = circuit_eye.port_map
-linear_strat_eye = circuit_eye.solver
 
 # DC at t=0: NRZSource outputs V_low (all sigmoids ≈ 0, since t_start = T_bit >> rise)
-y0_nrz = circuit_eye()
-V_ve0 = float(jnp.real(circuit_eye.get_port_field(y0_nrz, "Ring,v_e")))
+y0_nrz = circuit_eye.dc()
+V_ve0 = float(jnp.real(circuit_eye.port(y0_nrz, "ve")))
 T_dc_eye = float(
-    jnp.abs(circuit_eye.get_port_field(y0_nrz, "Ring,p2"))
-    / (jnp.abs(circuit_eye.get_port_field(y0_nrz, "Ring,p1")) + 1e-20)
+    jnp.abs(circuit_eye.port(y0_nrz, "out"))
+    / (jnp.abs(circuit_eye.port(y0_nrz, "in")) + 1e-20)
 )
 print(f"DC: V_ve = {V_ve0:.3f} V  (expected {V_low_nrz:.1f} V),  |T| = {T_dc_eye:.4f}")
 ```
@@ -1298,8 +1375,6 @@ print(f"DC: V_ve = {V_ve0:.3f} V  (expected {V_low_nrz:.1f} V),  |T| = {T_dc_eye
 
 
 ```python
-transient_sim_nrz = setup_transient(groups=groups_eye, linear_strategy=linear_strat_eye)
-
 controller_nrz = diffrax.PIDController(
     rtol=1e-6,
     atol=1e-8,
@@ -1307,7 +1382,7 @@ controller_nrz = diffrax.PIDController(
 )
 
 print(f"Running NRZ transient simulation ({N_bits_nrz} bits at 56 GBaud, t_end = {t_end_nrz * 1e12:.0f} ps)…")
-sol_nrz = transient_sim_nrz(
+sol_nrz = circuit_eye.transient(
     t0=0.0,
     t1=t_end_nrz,
     dt0=1e-13,
@@ -1324,6 +1399,7 @@ else:
     print(f"Simulation ended with: {sol_nrz.result}")
 
 ts_ps_nrz = sol_nrz.ts * 1e12
+
 ```
 
     Running NRZ transient simulation (128 bits at 56 GBaud, t_end = 2304 ps)…
@@ -1355,8 +1431,8 @@ def fold_eye(P_out, ts, t_start, T_bit, N_skip=8):
     return t3, P3, T_ps
 
 
-V_ve_nrz = jnp.real(circuit_eye.get_port_field(sol_nrz.ys, "Ring,v_e"))
-E_out_nrz = circuit_eye.get_port_field(sol_nrz.ys, "Ring,p2")
+V_ve_nrz = jnp.real(circuit_eye.port(sol_nrz.ys, "ve"))
+E_out_nrz = circuit_eye.port(sol_nrz.ys, "out")
 P_out_nrz = jnp.abs(E_out_nrz) ** 2
 
 t_plot_end_ps = 1000.0
@@ -1418,40 +1494,53 @@ plt.show()
 
 
 
-![png](ring_modulator_files/ring_modulator_26_0.png)
+![png](ring_modulator_files/ring_modulator_28_0.png)
 
 
 
 
 
-![png](ring_modulator_files/ring_modulator_26_1.png)
+![png](ring_modulator_files/ring_modulator_28_1.png)
 
 
 
 ---
-## Part 5: V_bias Sweep via `jax.vmap`
+## Part 5: Advanced V_bias Sweep via `jax.vmap`
 
 With `jax.vmap`, we can run eye diagram simulations for multiple bias voltages in **a single JIT-compiled XLA call** — analogous to the HB frequency sweep in Part 3.
 
 Each sweep point updates the NRZ voltage levels and ring resonance frequency (to keep $\Delta\omega\cdot\tau = 1$ at the new bias), then runs the full transient simulation. The DC initial conditions are pre-computed in a Python loop.
+
+This section is intentionally more advanced than the first-contact examples: it builds a custom compiled transient sweep, but still passes instance parameter updates through `circuit.dc(...)` and `circuit.transient(...)`.
 
 The four panels below show how the eye diagram changes as $V_\text{bias}$ shifts the operating point along the ring Lorentzian:
 - **Less negative** bias → ring further from resonance → higher mean transmission, wider eye
 - **More negative** bias → ring closer to resonance → deeper modulation, stronger nonlinear ISI
 
 
+
 ```python
 # Pre-compute DC initial conditions for each V_bias (one Newton solve per point). This is cheap
 V_bias_sweep = jnp.array([-1.75, -2.0, -2.25, -2.5])
 
+
+def _eye_params(V_bias_val):
+    return {
+        "Vsrc.V_low": V_bias_val - 0.5 * V_pp,
+        "Vsrc.V_high": V_bias_val + 0.5 * V_pp,
+        "Ring.f_resonance": f_operating,
+    }
+
+
 y0_sweep = []
 for Vb in V_bias_sweep:
-    Vb = float(Vb)
-    g = update_group_params(groups_eye, "nrz_src", "V_low", Vb - 0.5 * V_pp)
-    g = update_group_params(g, "nrz_src", "V_high", Vb + 0.5 * V_pp)
-    g = update_group_params(g, "ring_eo", "f_resonance", f_operating)
-    y0_sweep.append(circuit_eye.solver.solve_dc(g, jnp.zeros(sys_size_eye * 2, dtype=jnp.float64)))
-y0_sweep = jnp.stack(y0_sweep)  # shape (4, sys_size_eye * 2)
+    y0_sweep.append(
+        circuit_eye.dc(
+            params=_eye_params(float(Vb)),
+            y_guess=jnp.zeros(circuit_eye.sys_size * 2, dtype=jnp.float64),
+        )
+    )
+y0_sweep = jnp.stack(y0_sweep)  # shape (4, circuit_eye.sys_size * 2)
 
 N_bits_vmap = 32  # 32 bits keeps per-sweep memory small
 t_end_vmap = t_start_nrz + N_bits_vmap * T_bit_nrz  # ≈ 589 ps (vs 2.3 ns for Part 4)
@@ -1460,14 +1549,7 @@ ts_save_vmap = jnp.linspace(0.0, t_end_vmap, 4000)
 
 def run_eye_for_vbias(V_bias_val, y0):
     """Single transient eye-diagram run, parameterised by V_bias — vmappable."""
-    V_low_val = V_bias_val - 0.5 * V_pp
-    V_high_val = V_bias_val + 0.5 * V_pp
-    g = update_group_params(groups_eye, "nrz_src", "V_low", V_low_val)
-    g = update_group_params(g, "nrz_src", "V_high", V_high_val)
-    g = update_group_params(g, "ring_eo", "f_resonance", f_operating)
-
-    sim = setup_transient(groups=g, linear_strategy=circuit_eye.solver)
-    sol = sim(
+    sol = circuit_eye.transient(
         t0=0.0,
         t1=t_end_vmap,
         dt0=1e-13,
@@ -1475,14 +1557,16 @@ def run_eye_for_vbias(V_bias_val, y0):
         saveat=diffrax.SaveAt(ts=ts_save_vmap),
         max_steps=8_000_000,
         throw=False,
+        params=_eye_params(V_bias_val),
         stepsize_controller=diffrax.PIDController(rtol=1e-6, atol=1e-8, dtmax=rise_nrz / 2),
     )
-    return jnp.abs(circuit_eye.get_port_field(sol.ys, "Ring,p2")) ** 2
+    return jnp.abs(circuit_eye.port(sol.ys, "out")) ** 2
 
 
 print(f"Running jax.vmap over {len(V_bias_sweep)} V_bias values: {V_bias_sweep.tolist()} V")
 P_out_sweep = jax.jit(jax.vmap(run_eye_for_vbias))(V_bias_sweep, y0_sweep)
-print(f"Done.  Output shape: {P_out_sweep.shape}  ({P_out_sweep.shape[0]} sweeps \u00d7 {P_out_sweep.shape[1]} time points)")
+print(f"Done.  Output shape: {P_out_sweep.shape}  ({P_out_sweep.shape[0]} sweeps × {P_out_sweep.shape[1]} time points)")
+
 ```
 
     Running jax.vmap over 4 V_bias values: [-1.75, -2.0, -2.25, -2.5] V
@@ -1521,4 +1605,4 @@ plt.show()
 
 
 
-![png](ring_modulator_files/ring_modulator_29_0.png)
+![png](ring_modulator_files/ring_modulator_31_0.png)
