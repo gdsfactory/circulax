@@ -130,15 +130,31 @@ tqdm = ">=4.67.1,<5"
 
 # Test feature — lean CI environment (no docs, no dev tooling)
 # Used for the non-default Python matrix (py312).
+# bosdi (verilog-a extra) has no Windows wheels, so Windows uses base deps only.
 [tool.pixi.feature.test.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["verilog-a"] }
 pytest = ">=8"
 pytest-xdist = "*"
 
+[tool.pixi.feature.test.target.linux-64.pypi-dependencies]
+circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+
+[tool.pixi.feature.test.target.osx-arm64.pypi-dependencies]
+circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+
+[tool.pixi.feature.test.target.win-64.pypi-dependencies]
+circulax = { path = ".", editable = true }
+
 # Dev tooling feature — full local development environment
 # Includes git-cliff (changelog), uv (build), and the docs/papermill extras.
-[tool.pixi.feature.dev.pypi-dependencies]
+# bosdi (verilog-a) has no Windows wheels, so Windows installs docs-only extras.
+[tool.pixi.feature.dev.target.linux-64.pypi-dependencies]
 circulax = { path = ".", editable = true, extras = ["dev"] }
+
+[tool.pixi.feature.dev.target.osx-arm64.pypi-dependencies]
+circulax = { path = ".", editable = true, extras = ["dev"] }
+
+[tool.pixi.feature.dev.target.win-64.pypi-dependencies]
+circulax = { path = ".", editable = true, extras = ["docs"] }
 
 [tool.pixi.feature.dev.dependencies]
 tqdm = ">=4.67.1,<5"
