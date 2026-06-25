@@ -146,15 +146,8 @@ circulax = { path = ".", editable = true }
 
 # Dev tooling feature — full local development environment
 # Includes git-cliff (changelog), uv (build), and the docs/papermill extras.
-# bosdi (verilog-a) has no Windows wheels, so Windows installs docs-only extras.
-[tool.pixi.feature.dev.target.linux-64.pypi-dependencies]
+[tool.pixi.feature.dev.pypi-dependencies]
 circulax = { path = ".", editable = true, extras = ["dev"] }
-
-[tool.pixi.feature.dev.target.osx-arm64.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["dev"] }
-
-[tool.pixi.feature.dev.target.win-64.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["docs"] }
 
 [tool.pixi.feature.dev.dependencies]
 tqdm = ">=4.67.1,<5"
