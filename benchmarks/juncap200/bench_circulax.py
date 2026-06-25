@@ -36,12 +36,10 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-# Resolve repo + IHP source paths.
+# Resolve repo + VA source paths.
 _REPO = Path(__file__).resolve().parents[2]
-_IHP_PSP = Path(
-    "/home/cdaunt/code/gdsfactory/pdks/IHP-Open-PDK/ihp-sg13g2/libs.tech/verilog-a/psp103"
-)
-_VA_SOURCE = _IHP_PSP / "juncap200.va"
+_BENCH_DIR = Path(__file__).resolve().parent
+_VA_SOURCE = _BENCH_DIR / "va_source" / "juncap200.va"
 
 # OSDI binary lives next to other compiled models in circulax/components/osdi/compiled/.
 # Compiled lazily on first run if missing — needs openvaf-r in PATH.
@@ -60,7 +58,7 @@ def _ensure_osdi_compiled() -> Path:
     subprocess.run(
         ["openvaf-r", str(_VA_SOURCE), "-o", str(_OSDI_PATH)],
         check=True,
-        cwd=_IHP_PSP,
+        cwd=str(_BENCH_DIR / "va_source"),
         capture_output=True,
         text=True,
     )
@@ -108,7 +106,7 @@ def _build_va_descriptor():
 
     cwd = os.getcwd()
     try:
-        os.chdir(_IHP_PSP)  # `include directives are resolved from cwd
+        os.chdir(_BENCH_DIR / "va_source")  # `include directives are resolved from cwd
         dump = compile_va_unopt(str(_VA_SOURCE.name))
     finally:
         os.chdir(cwd)

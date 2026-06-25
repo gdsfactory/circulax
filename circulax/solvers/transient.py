@@ -85,6 +85,7 @@ class VectorizedTransientSolver(AbstractSolver):
     linear_solver: CircuitLinearSolver
     newton_rtol: float = 1e-5
     newton_atol: float = 1e-5
+    newton_max_steps: int = 20
 
     term_structure = diffrax.AbstractTerm
     interpolation_cls = diffrax.LocalLinearInterpolation
@@ -108,7 +109,7 @@ class VectorizedTransientSolver(AbstractSolver):
         y_c = y0[:num_vars] + 1j * y0[num_vars:] if is_complex else y0
         q_prev = _compute_history(component_groups, y_c, t0, num_vars)
 
-        def newton_update_step(y, _) -> float:
+        def newton_update_step(y, _) -> jax.Array:
             if is_complex:
                 total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, dt)
                 ground_indices = [0, num_vars]
@@ -127,7 +128,7 @@ class VectorizedTransientSolver(AbstractSolver):
             return y + delta * damping
 
         solver = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, solver, y_pred, max_steps=20, throw=False)
+        sol = optx.fixed_point(newton_update_step, solver, y_pred, max_steps=self.newton_max_steps, throw=False)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -418,7 +419,7 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
 
         y_pred, alpha, make_residual, new_state = _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex)
 
-        def newton_update_step(y, _) -> float:
+        def newton_update_step(y, _) -> jax.Array:
             if is_complex:
                 total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha)
                 ground_indices = [0, num_vars]
@@ -437,7 +438,7 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
             return y + delta * damping
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=20, throw=False)
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -647,7 +648,7 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
         ground_indices = [0, num_vars] if is_complex else [0]
 
         def _run_stage(y_init, q_hist, t_stage):
-            def newton_update_step(y, _) -> float:
+            def newton_update_step(y, _) -> jax.Array:
                 if is_complex:
                     total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t_stage, h_n, alpha=alpha)
                 else:
@@ -662,7 +663,7 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
                 return y + delta * damping
 
             fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=20, throw=False)
+            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
             return stage_sol.value, stage_sol.result
 
         # Stage 1 — t_s1 = t0 + γ·h
@@ -944,7 +945,7 @@ class TrapVectorizedTransientSolver(VectorizedTransientSolver):
             y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
         )
 
-        def newton_update_step(y, _) -> float:
+        def newton_update_step(y, _) -> jax.Array:
             if is_complex:
                 total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha)
                 ground_indices = [0, num_vars]
@@ -963,7 +964,7 @@ class TrapVectorizedTransientSolver(VectorizedTransientSolver):
             return y + delta * damping
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=20, throw=False)
+        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
 
         y_next = sol.value
         y_error = y_next - y_pred

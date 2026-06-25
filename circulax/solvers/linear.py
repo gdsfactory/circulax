@@ -339,6 +339,9 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             Converged solution vector at full source amplitude.
 
         """
+        if scale_start <= 0.0:
+            msg = "scale_start must be strictly positive for logarithmic spacing."
+            raise ValueError(msg)
         scales = jnp.logspace(jnp.log10(scale_start), 0.0, n_steps)
 
         def step(y: jax.Array, scale: jax.Array) -> tuple[jax.Array, None]:

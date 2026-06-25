@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "development"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "development"]
 
 jobs:
   # lint:
@@ -33,7 +33,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        env: [py311, py312, py313]
+        env: [py312, py313]
+        exclude:
+          # py313 uses the dev feature which includes bosdi (no Windows wheels)
+          - os: windows-latest
+            env: py313
 
     steps:
       - uses: actions/checkout@v4
