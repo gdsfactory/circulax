@@ -54,21 +54,44 @@ jobs:
           environments: ${{ matrix.env }}
           cache: false
 
-      - name: Cache openvaf-r
+      # ---- Linux: download pre-built binary ----
+
+      - name: Cache openvaf-r (Linux)
         if: runner.os == 'Linux'
-        id: cache-openvaf
+        id: cache-openvaf-linux
         uses: actions/cache@v4
         with:
           path: /usr/local/bin/openvaf-r
           key: ${{ env.OPENVAF_VERSION }}-linux_x64
 
-      - name: Install openvaf-r (Linux only)
-        if: runner.os == 'Linux' && steps.cache-openvaf.outputs.cache-hit != 'true'
+      - name: Install openvaf-r (Linux, cache miss)
+        if: runner.os == 'Linux' && steps.cache-openvaf-linux.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
 
-      - name: Compile OSDI test fixtures (Linux only)
-        if: runner.os == 'Linux'
+      # ---- macOS: build from source ----
+
+      - name: Cache openvaf-r (macOS)
+        if: runner.os == 'macOS'
+        id: cache-openvaf-mac
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/openvaf-r
+          key: ${{ env.OPENVAF_VERSION }}-macos_arm64
+
+      - name: Build openvaf-r from source (macOS, cache miss)
+        if: runner.os == 'macOS' && steps.cache-openvaf-mac.outputs.cache-hit != 'true'
+        run: |
+          brew install llvm@18
+          git clone --depth=1 https://github.com/arpadbuermen/OpenVAF /tmp/openvaf-src
+          cd /tmp/openvaf-src
+          LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18) cargo build --release
+          sudo cp target/release/openvaf-r /usr/local/bin/
+
+      # ---- Compile VA → OSDI (Linux and macOS) ----
+
+      - name: Compile OSDI test fixtures
+        if: runner.os != 'Windows'
         run: pixi run -e ${{ matrix.env }} compile_osdi
 
       - name: Run fast tests
@@ -100,7 +123,7 @@ jobs:
           path: /usr/local/bin/openvaf-r
           key: ${{ env.OPENVAF_VERSION }}-linux_x64
 
-      - name: Install openvaf-r
+      - name: Install openvaf-r (cache miss)
         if: steps.cache-openvaf.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
