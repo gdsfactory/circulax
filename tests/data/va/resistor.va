@@ -1,20 +1,19 @@
 `include "constants.vams"
 `include "disciplines.vams"
 
-module resistor(A,B);
-	inout A, B;
-	electrical A, B;
+module resistor(A, B);
+    inout A, B;
+    electrical A, B;
+    branch (A, B) br;
 
-	branch (A,B) br;
+    (*desc = "Resistance at tnom", units = "Ohm", type = "instance"*)
+      parameter real R = 1000.0 from (0:inf];
+    (*desc = "Temperature coefficient of resistance", units = "1/K"*)
+      parameter real zeta = 0.0;
+    (*desc = "Nominal temperature", units = "K"*)
+      parameter real tnom = 300.15 from (0:inf];
 
-	(*desc= "Resistance", type="instance", units = "Ohm"*) parameter real r = 1 from [0:inf];
-    (*desc= "Noise switch", type="instance", units = ""*)  parameter integer noisy = 1;
-	(*desc= "Current", units ="A" *) real i;
-
-	analog begin
-        I(br) <+ V(br)/r;
-        i = V(br) / r;
-        if (noisy)
-            I(br) <+ white_noise(4*`P_K*$temperature/r, "thermal");
-	end
+    analog begin
+        I(br) <+ V(br) / (R * (1.0 + zeta * ($temperature - tnom)));
+    end
 endmodule
