@@ -88,10 +88,31 @@ jobs:
           LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18) cargo build --release
           sudo cp target/release/openvaf-r /usr/local/bin/
 
-      # ---- Compile VA → OSDI (Linux and macOS) ----
+      # ---- Windows: download pre-built binary ----
+
+      - name: Cache openvaf-r (Windows)
+        if: runner.os == 'Windows'
+        id: cache-openvaf-win
+        uses: actions/cache@v4
+        with:
+          path: C:\tools\openvaf-r
+          key: ${{ env.OPENVAF_VERSION }}-win_x64
+
+      - name: Install openvaf-r (Windows, cache miss)
+        if: runner.os == 'Windows' && steps.cache-openvaf-win.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-win_x64.zip" -OutFile openvaf.zip
+          Expand-Archive openvaf.zip -DestinationPath C:\tools\openvaf-r\
+
+      - name: Add openvaf-r to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: echo "C:\tools\openvaf-r" >> $env:GITHUB_PATH
+
+      # ---- Compile VA → OSDI (all platforms) ----
 
       - name: Compile OSDI test fixtures
-        if: runner.os != 'Windows'
         run: pixi run -e ${{ matrix.env }} compile_osdi
 
       - name: Run fast tests
