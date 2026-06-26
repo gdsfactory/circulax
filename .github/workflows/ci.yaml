@@ -52,6 +52,8 @@ jobs:
           cache: false
 
       - name: Run fast tests
+        env:
+          JAX_PLATFORMS: cpu
         run: pixi run -e ${{ matrix.env }} pytest_run
 
   test_long:
@@ -72,4 +74,6 @@ jobs:
           cache: false
 
       - name: Run all tests including @pytest.mark.long (notebooks)
+        env:
+          JAX_PLATFORMS: cpu
         run: pixi run -e py313 pytest_all
