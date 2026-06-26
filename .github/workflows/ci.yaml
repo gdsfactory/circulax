@@ -83,9 +83,10 @@ jobs:
         if: runner.os == 'macOS' && steps.cache-openvaf-mac.outputs.cache-hit != 'true'
         run: |
           brew install llvm@18
+          LLVM_PREFIX=$(brew --prefix llvm@18)
           git clone --depth=1 https://github.com/arpadbuermen/OpenVAF /tmp/openvaf-src
           cd /tmp/openvaf-src
-          LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18) cargo build --release
+          LLVM_SYS_180_PREFIX=$LLVM_PREFIX PATH="$LLVM_PREFIX/bin:$PATH" cargo build --release
           sudo cp target/release/openvaf-r /usr/local/bin/
 
       # ---- Windows: download pre-built binary ----

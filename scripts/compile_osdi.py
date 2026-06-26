@@ -24,7 +24,7 @@ for va in VA_FILES:
     osdi = va.with_suffix(".osdi")
     print(f"  {va.name} -> {osdi.name}")
     result = subprocess.run(
-        ["openvaf-r", "--target-cpu", "generic", str(va), "-o", str(osdi)],
+        ["openvaf-r", "--target_cpu", "generic", str(va), "-o", str(osdi)],
         capture_output=True,
         text=True,
     )
