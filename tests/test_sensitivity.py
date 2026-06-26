@@ -26,8 +26,10 @@ def _bosdi_available() -> bool:
     try:
         from bosdi.circulax import OsdiComponentGroup  # noqa: F401
         from osdi_jax import osdi_residual_eval  # noqa: F401
+        from osdi_loader import load_osdi_model
+        load_osdi_model(RESISTOR_OSDI)  # fails on macOS/Windows with Linux ELF binaries
         return True
-    except ImportError:
+    except (ImportError, RuntimeError, OSError):
         return False
 
 
