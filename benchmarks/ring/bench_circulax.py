@@ -163,13 +163,13 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
                       static_params=static_p,
                       differentiable_params=diff_params,
                       class_name=f"PSP103P{suffix}")
-        tmp = tempfile.mkdtemp()
         mod_name = "psp103_va_static_bench" if variant == "va_static" else "psp103_va_bench"
-        out = Path(tmp) / f"{mod_name}.py"
-        out.write_text(emit_source([dev_n, dev_p]))
-        spec = importlib.util.spec_from_file_location(mod_name, out)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / f"{mod_name}.py"
+            out.write_text(emit_source([dev_n, dev_p]))
+            spec = importlib.util.spec_from_file_location(mod_name, out)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
         cls_n = getattr(mod, f"PSP103N{suffix}")
         cls_p = getattr(mod, f"PSP103P{suffix}")
 

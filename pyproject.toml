@@ -180,6 +180,7 @@ nbrun            = { cmd = ["python", "scripts/run_notebooks.py"], depends-on = 
 nbdocs           = { cmd = ["python", "scripts/build_docs.py"],    depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
 docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
+compile_osdi     = { cmd = ["python", "scripts/compile_osdi.py"], description = "Compile VA test fixtures to OSDI using openvaf-r (--target-cpu generic)" }
 pytest_run       = { cmd = ["pytest", "tests", "-m", "not long"], description = "Fast tests only — skips @pytest.mark.long (notebook execution)" }
 pytest_all       = { cmd = ["pytest", "tests", "-m", "long or not long"], depends-on = ["install_ipkernel"], description = "All tests including @pytest.mark.long (notebook execution)" }
 lint_format      = "ruff format"

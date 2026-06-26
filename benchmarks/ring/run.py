@@ -28,7 +28,13 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, "/home/cdaunt/code/vacask/VACASK/python")
+sys.path.insert(0, str(HERE.parent))
+from _paths import vacask_bin as _vacask_bin, vacask_repo as _vacask_repo  # noqa: E402
+
+try:
+    sys.path.insert(0, str(_vacask_repo() / "python"))
+except OSError:
+    pass
 
 
 def _freq_from_crossings(t: np.ndarray, x: np.ndarray) -> float | None:
@@ -66,8 +72,12 @@ def _vacask_freq(raw_path: Path, ignore_before_s: float = 100e-9) -> float | Non
         return None
     return _freq_from_crossings(t[mask], v1[mask])
 
-VACASK_UPSTREAM = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask")
-NGSPICE_UPSTREAM = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/ngspice")
+try:
+    _VREPO = _vacask_repo()
+except OSError:
+    _VREPO = None
+VACASK_UPSTREAM = _VREPO / "benchmark" / "ring" / "vacask" if _VREPO else None
+NGSPICE_UPSTREAM = _VREPO / "benchmark" / "ring" / "ngspice" if _VREPO else None
 CSV_PATH = HERE / "results.csv"
 README = HERE / "README.md"
 
@@ -96,8 +106,9 @@ def _ngspice_runme(n: int) -> Path:
 
 
 def run_vacask(n: int) -> dict:
-    vacask = shutil.which("vacask") or "/home/cdaunt/opt/vacask/bin/vacask"
-    if not Path(vacask).exists():
+    try:
+        vacask = _vacask_bin()
+    except OSError:
         return {"simulator": "vacask", "n_stages": n, "status": "not_installed"}
     runme = _vacask_runme(n)
     if not runme.exists():
@@ -151,7 +162,10 @@ def _ensure_psp103_osdi(work_dir: Path) -> bool:
     openvaf = shutil.which("openvaf-r") or shutil.which("openvaf")
     if openvaf is None:
         return False
-    va = Path("/home/cdaunt/code/vacask/VACASK/devices/psp103v4/psp103.va")
+    try:
+        va = _vacask_repo() / "devices" / "psp103v4" / "psp103.va"
+    except OSError:
+        return False
     if not va.exists():
         return False
     proc = subprocess.run(

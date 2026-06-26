@@ -35,9 +35,11 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 _REPO = Path(__file__).resolve().parents[2]
-_IHP_MOSVAR = Path(
-    "/home/cdaunt/code/gdsfactory/pdks/IHP-Open-PDK/ihp-sg13g2/libs.tech/verilog-a/mosvar"
-)
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent))
+from _paths import ihp_pdk_va  # noqa: E402
+
+_IHP_MOSVAR = ihp_pdk_va() / "mosvar"
 _VA_SOURCE = _IHP_MOSVAR / "mosvar.va"
 _OSDI_DIR = _REPO / "circulax" / "components" / "osdi" / "compiled"
 _OSDI_PATH = _OSDI_DIR / "mosvar_ihp.osdi"
@@ -95,12 +97,12 @@ def _build_va_descriptor():
         static_params=int_static,
         class_name="MOSVAR",
     )
-    tmpd = Path(tempfile.mkdtemp(prefix="mosvar_va_"))
-    src = tmpd / "mosvar.py"
-    src.write_text(emit_source([dev]))
-    spec = importlib.util.spec_from_file_location("mosvar_va_mod", src)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    with tempfile.TemporaryDirectory(prefix="mosvar_va_") as tmpd:
+        src = Path(tmpd) / "mosvar.py"
+        src.write_text(emit_source([dev]))
+        spec = importlib.util.spec_from_file_location("mosvar_va_mod", src)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
     return mod.MOSVAR, defs
 
 

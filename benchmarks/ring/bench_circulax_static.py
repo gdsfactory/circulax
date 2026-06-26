@@ -82,10 +82,12 @@ def main():
     dev_p = lower(mod, va_defaults=defs, collapse_nodes=True,
                   static_params=sp, class_name="PSP103P")
     src = emit_source([dev_n, dev_p])
-    out = Path(tempfile.mkdtemp()) / "psp_static.py"
-    out.write_text(src)
-    spec = importlib.util.spec_from_file_location("psp_static", out)
-    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "psp_static.py"
+        out.write_text(src)
+        spec = importlib.util.spec_from_file_location("psp_static", out)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
     print(f"emit/lower: {time.perf_counter()-t0:.1f}s, {len(src.splitlines())} lines", flush=True)
 
     def _fields(cls):

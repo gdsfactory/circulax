@@ -51,6 +51,15 @@ jobs:
           environments: ${{ matrix.env }}
           cache: false
 
+      - name: Install openvaf-r (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/openvaf-reloaded-20260616-2-gc592eed6-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
+
+      - name: Compile OSDI test fixtures (Linux only)
+        if: runner.os == 'Linux'
+        run: pixi run -e ${{ matrix.env }} compile_osdi
+
       - name: Run fast tests
         env:
           JAX_PLATFORMS: cpu
@@ -72,6 +81,13 @@ jobs:
           pixi-version: latest
           environments: py313
           cache: false
+
+      - name: Install openvaf-r
+        run: |
+          curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/openvaf-reloaded-20260616-2-gc592eed6-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
+
+      - name: Compile OSDI test fixtures
+        run: pixi run -e py313 compile_osdi
 
       - name: Run all tests including @pytest.mark.long (notebooks)
         env:

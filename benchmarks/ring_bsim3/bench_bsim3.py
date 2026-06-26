@@ -19,8 +19,13 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 _REPO = Path(__file__).resolve().parents[2]
-_VA   = Path("/home/cdaunt/code/vacask/VACASK/devices/bsim3v3.va")
-_OSDI = "/home/cdaunt/code/vacask/VACASK/build/devices/bsim3v3.osdi"
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent))
+from _paths import vacask_repo  # noqa: E402
+
+_VREPO = vacask_repo()
+_VA   = _VREPO / "devices" / "bsim3v3.va"
+_OSDI = str(_VREPO / "build" / "devices" / "bsim3v3.osdi")
 
 sys.path.insert(0, str(_REPO / "tests"))
 
@@ -126,11 +131,12 @@ def _make_va_classes():
                                               if isinstance(_MC_P[k], float)),
                   class_name="BSIM3P")
 
-    tmp = tempfile.mkdtemp()
-    out = Path(tmp) / "bsim3_va.py"
-    out.write_text(emit_source([dev_n, dev_p]))
-    spec = importlib.util.spec_from_file_location("bsim3_va", out)
-    mod  = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "bsim3_va.py"
+        out.write_text(emit_source([dev_n, dev_p]))
+        spec = importlib.util.spec_from_file_location("bsim3_va", out)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
 
     def _params(cls, mc, defs_map):
         fn = {f.name for f in dataclasses.fields(cls) if f._field_type.name == "_FIELD"}

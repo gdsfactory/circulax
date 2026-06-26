@@ -28,7 +28,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
-- Added annimations to start of examples([`75828a4`](https://github.com/gdsfactory/circulax/commit/75828a4c9aab88d01fdfd16797ee1c6d1fbd8633))
+- Added animations to start of examples([`75828a4`](https://github.com/gdsfactory/circulax/commit/75828a4c9aab88d01fdfd16797ee1c6d1fbd8633))
 ## [0.1.4] - 2026-04-17
 
 ### Added
@@ -40,7 +40,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Add osc_node multi-start to setup_harmonic_balance([`5fc15ee`](https://github.com/gdsfactory/circulax/commit/5fc15ee71fc85213564ebdce57eb2b6be3a70e29))
 - **demos**: Rewrite photonic demux demo with MZI topology and length parameterisation([`aa2b119`](https://github.com/gdsfactory/circulax/commit/aa2b119f577a6958eb96fce08bb845f4190206b1))
 - **demos**: Adds lattice filter demo([`6873441`](https://github.com/gdsfactory/circulax/commit/6873441e6ad55817c4ea65ee1e5fa6cee2ca3e11))
-- **demos**: Added hemt_pa_optoimization([`355b954`](https://github.com/gdsfactory/circulax/commit/355b9542a4a43ec9612fb0b2dc4941a8a1fb7dcc))
+- **demos**: Added hemt_pa_optimization([`355b954`](https://github.com/gdsfactory/circulax/commit/355b9542a4a43ec9612fb0b2dc4941a8a1fb7dcc))
 
 ### Changed
 
@@ -136,7 +136,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
-- Moded writing components.md([`9e1b187`](https://github.com/gdsfactory/circulax/commit/9e1b18759089733825ef0c505a2f46e2856ef893))
+- Modified writing components.md([`9e1b187`](https://github.com/gdsfactory/circulax/commit/9e1b18759089733825ef0c505a2f46e2856ef893))
 - Updated readme([`8e58ceb`](https://github.com/gdsfactory/circulax/commit/8e58cebd004b15270d84a102a2ff0cc7ce5a8b2c))
 - Removed link to favicon in mkdocs.yaml([`da8b803`](https://github.com/gdsfactory/circulax/commit/da8b803397e1a0b7fd51e50d6e33a6d7f20de22e))
 - Cleaned index([`791e10e`](https://github.com/gdsfactory/circulax/commit/791e10e4ee5abd0ad6eb123c2e84097e243c5e87))

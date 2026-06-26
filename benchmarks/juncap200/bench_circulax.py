@@ -119,12 +119,12 @@ def _build_va_descriptor():
         static_params=int_static,
         class_name="JUNCAP200",
     )
-    tmpd = Path(tempfile.mkdtemp(prefix="juncap200_va_"))
-    src = tmpd / "juncap200.py"
-    src.write_text(emit_source([dev]))
-    spec = importlib.util.spec_from_file_location("juncap200_va_mod", src)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    with tempfile.TemporaryDirectory(prefix="juncap200_va_") as tmpd:
+        src = Path(tmpd) / "juncap200.py"
+        src.write_text(emit_source([dev]))
+        spec = importlib.util.spec_from_file_location("juncap200_va_mod", src)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
     return mod.JUNCAP200, defs
 
 

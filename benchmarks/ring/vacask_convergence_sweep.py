@@ -15,7 +15,6 @@ Usage:
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -24,9 +23,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent))
+from _paths import vacask_bin, vacask_repo  # noqa: E402
 
-VACASK = shutil.which("vacask") or "/home/cdaunt/opt/vacask/bin/vacask"
-VACASK_DIR = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask")
+VACASK = vacask_bin()
+VACASK_DIR = vacask_repo() / "benchmark" / "ring" / "vacask"
 
 
 def _run(sim_path: Path, timeout: int = 300) -> tuple[bool, str, float]:

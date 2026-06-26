@@ -1,7 +1,7 @@
 """Circulax version of the VACASK mul benchmark.
 
 4-stage diode voltage multiplier driven by 50 V / 100 kHz sine.  Same
-circuit as /home/cdaunt/code/vacask/VACASK/benchmark/mul/*/runme.sim.
+circuit as $VACASK_REPO/benchmark/mul/*/runme.sim.
 
 Diode: D1N4007 (IS=76.9p, N=1.45, RS=42mΩ, CJO=26.5p, M=0.333).  We
 build a local @component for it that includes the junction capacitance,

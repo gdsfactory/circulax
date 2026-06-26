@@ -1,0 +1,24 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module capacitor(A,B);
+	inout A, B;
+	electrical A, B;
+
+	branch (A,B) br;
+
+	(*desc= "Capacitance", type="instance", units = "F"*) parameter real c = 1e-12 from [0:inf];
+	(*desc= "Charge", units ="As" *) real q;
+
+	real Q;
+
+	analog begin
+                Q = c * V(br);
+                I(br) <+ ddt(Q);
+                q = Q;
+                // $display("V         %.12e", V(br));
+                // $display("Q         %.12e", Q);
+                // $display("ddt(Q)         %.12e", ddt(Q));
+                // i = i_;
+	end
+endmodule
