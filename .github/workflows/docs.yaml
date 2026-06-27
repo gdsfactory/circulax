@@ -5,6 +5,9 @@ on:
     branches: ["main"]
   workflow_dispatch:  # allows manual trigger from GitHub UI
 
+env:
+  OPENVAF_VERSION: openvaf-reloaded-20260616-2-gc592eed6
+
 permissions:
   contents: write   # needed to push to gh-pages branch
 
@@ -23,6 +26,21 @@ jobs:
           pixi-version: latest
           environments: default
           cache: true
+
+      - name: Cache openvaf-r
+        id: cache-openvaf
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/openvaf-r
+          key: ${{ env.OPENVAF_VERSION }}-linux_x64
+
+      - name: Install openvaf-r (cache miss)
+        if: steps.cache-openvaf.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
+
+      - name: Compile OSDI files
+        run: pixi run compile_osdi
 
       - name: Execute example notebooks
         run: pixi run nbrun
