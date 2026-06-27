@@ -14,7 +14,7 @@ Backends compared:
                        fill-order from previous step as warm start).  Faster
                        for mildly nonlinear circuits.
   klu_rs_linear      — same as klu_split_linear but routing through klujax_rs
-                       (Rust/Rayon backend at /home/cdaunt/code/klujax_rs-static).
+                       (Rust/Rayon backend, set $KLUJAX_RS_PATH).
                        klujax_rs parallelises the vmap batch dimension (N device
                        instances per group) using a Rayon thread pool.  Break-even
                        vs klujax is n_lhs ≈ 32 for solve; below that klujax is
@@ -31,7 +31,6 @@ Usage:
 from __future__ import annotations
 
 import csv
-import os
 import re
 import sys
 import time
@@ -59,15 +58,23 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, "/home/cdaunt/code/vacask/VACASK/python")
+sys.path.insert(0, str(HERE.parent))
+from _paths import klujax_rs_path as _klujax_rs_path, vacask_repo as _vacask_repo  # noqa: E402
+
+try:
+    sys.path.insert(0, str(_vacask_repo() / "python"))
+except OSError:
+    pass
 
 RESULTS_PATH = HERE / "backend_results.csv"
 README = HERE / "README.md"
 
 # Location of the klujax_rs Rayon-backed build.  Override via env var when
 # the build lives somewhere other than the default local dev path.
-_RS_DEFAULT = Path("/home/cdaunt/code/klujax_rs-static")
-KLUJAX_RS_PATH = Path(os.environ.get("KLUJAX_RS_PATH", _RS_DEFAULT))
+try:
+    KLUJAX_RS_PATH = _klujax_rs_path()
+except OSError:
+    KLUJAX_RS_PATH = None
 
 DEFAULT_N = [3, 9, 15, 21, 27, 33]
 
@@ -86,7 +93,7 @@ def _activate_klujax_rs() -> bool:
     Falls back gracefully: regular klujax stays if the RS build is missing
     or KLUJAX_RS_PATH env var / default path doesn't exist.
     """
-    if not KLUJAX_RS_PATH.exists():
+    if KLUJAX_RS_PATH is None or not KLUJAX_RS_PATH.exists():
         return False
     rs_str = str(KLUJAX_RS_PATH)
     if rs_str not in sys.path:

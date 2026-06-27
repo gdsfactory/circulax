@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ["main", "development"]
 
+env:
+  OPENVAF_VERSION: openvaf-reloaded-20260616-2-gc592eed6
+
 jobs:
   # lint:
   #   name: "lint / ruff"
@@ -51,7 +54,80 @@ jobs:
           environments: ${{ matrix.env }}
           cache: false
 
+      # ---- Linux: download pre-built binary ----
+
+      - name: Cache openvaf-r (Linux)
+        if: runner.os == 'Linux'
+        id: cache-openvaf-linux
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/openvaf-r
+          key: ${{ env.OPENVAF_VERSION }}-linux_x64
+
+      - name: Install openvaf-r (Linux, cache miss)
+        if: runner.os == 'Linux' && steps.cache-openvaf-linux.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
+
+      # ---- macOS: build from source ----
+      # llvm@18 must be installed even on cache hit: the cached openvaf-r binary
+      # links dynamically against libLLVM.dylib from Homebrew, which is absent on
+      # a fresh runner without an explicit brew install.
+
+      - name: Install LLVM@18 (macOS)
+        if: runner.os == 'macOS'
+        run: brew install llvm@18
+
+      - name: Cache openvaf-r (macOS)
+        if: runner.os == 'macOS'
+        id: cache-openvaf-mac
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/openvaf-r
+          key: ${{ env.OPENVAF_VERSION }}-macos_arm64
+
+      - name: Build openvaf-r from source (macOS, cache miss)
+        if: runner.os == 'macOS' && steps.cache-openvaf-mac.outputs.cache-hit != 'true'
+        run: |
+          export LLVM_PREFIX="$(brew --prefix llvm@18)"
+          export LLVM_SYS_181_PREFIX="$LLVM_PREFIX"
+          export LLVM_CONFIG="$LLVM_PREFIX/bin/llvm-config"
+          export PATH="$LLVM_PREFIX/bin:$PATH"
+          git clone --depth=1 https://github.com/arpadbuermen/OpenVAF /tmp/openvaf-src
+          cd /tmp/openvaf-src
+          cargo build --release -p openvaf-driver --features llvm18
+          sudo cp target/release/openvaf-r /usr/local/bin/
+
+      # ---- Windows: download pre-built binary ----
+
+      - name: Cache openvaf-r (Windows)
+        if: runner.os == 'Windows'
+        id: cache-openvaf-win
+        uses: actions/cache@v4
+        with:
+          path: C:\tools\openvaf-r
+          key: ${{ env.OPENVAF_VERSION }}-win_x64
+
+      - name: Install openvaf-r (Windows, cache miss)
+        if: runner.os == 'Windows' && steps.cache-openvaf-win.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-win_x64.zip" -OutFile openvaf.zip
+          Expand-Archive openvaf.zip -DestinationPath C:\tools\openvaf-r\
+
+      - name: Add openvaf-r to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: echo "C:\tools\openvaf-r" >> $env:GITHUB_PATH
+
+      # ---- Compile VA → OSDI (all platforms) ----
+
+      - name: Compile OSDI test fixtures
+        run: pixi run -e ${{ matrix.env }} compile_osdi
+
       - name: Run fast tests
+        env:
+          JAX_PLATFORMS: cpu
         run: pixi run -e ${{ matrix.env }} pytest_run
 
   test_long:
@@ -71,5 +147,22 @@ jobs:
           environments: py313
           cache: false
 
+      - name: Cache openvaf-r
+        id: cache-openvaf
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/openvaf-r
+          key: ${{ env.OPENVAF_VERSION }}-linux_x64
+
+      - name: Install openvaf-r (cache miss)
+        if: steps.cache-openvaf.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
+
+      - name: Compile OSDI test fixtures
+        run: pixi run -e py313 compile_osdi
+
       - name: Run all tests including @pytest.mark.long (notebooks)
+        env:
+          JAX_PLATFORMS: cpu
         run: pixi run -e py313 pytest_all

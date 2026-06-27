@@ -22,7 +22,11 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
-REPO = Path("/home/cdaunt/code/circulax/circulax-va")
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent))
+from _paths import circulax_va_repo  # noqa: E402
+
+REPO = circulax_va_repo()
 sys.path.insert(0, str(REPO / "tests"))
 sys.path.insert(0, str(REPO / "scripts"))
 

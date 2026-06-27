@@ -16,11 +16,21 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, "/home/cdaunt/code/vacask/VACASK/python")
+sys.path.insert(0, str(HERE.parent))
+from _paths import ihp_pdk_va as _ihp_pdk_va, vacask_bin as _vacask_bin  # noqa: E402
+
+try:
+    from _paths import vacask_repo as _vacask_repo
+    sys.path.insert(0, str(_vacask_repo() / "python"))
+except OSError:
+    pass
 
 import bench_circulax as cx  # noqa: E402
 
-VACASK_BIN = "/home/cdaunt/opt/vacask/bin/vacask"
+try:
+    VACASK_BIN = _vacask_bin()
+except OSError:
+    VACASK_BIN = None
 VACASK_DIR = HERE / "vacask"
 RAW_FILE = VACASK_DIR / "dcsweep.raw"
 CSV_PATH = HERE / "results.csv"
@@ -30,10 +40,7 @@ def _ensure_vacask_osdi() -> None:
     target = VACASK_DIR / "mosvar.osdi"
     if target.exists():
         return
-    src_va = (
-        "/home/cdaunt/code/gdsfactory/pdks/IHP-Open-PDK/ihp-sg13g2/"
-        "libs.tech/verilog-a/mosvar/mosvar.va"
-    )
+    src_va = str(_ihp_pdk_va() / "mosvar" / "mosvar.va")
     subprocess.run(
         ["openvaf-r", src_va, "-o", str(target)],
         cwd=Path(src_va).parent, check=True, capture_output=True, text=True,
@@ -41,7 +48,7 @@ def _ensure_vacask_osdi() -> None:
 
 
 def run_vacask() -> dict[float, float] | dict:
-    if not Path(VACASK_BIN).exists():
+    if VACASK_BIN is None or not Path(VACASK_BIN).exists():
         return {"status": "vacask_not_installed"}
     _ensure_vacask_osdi()
     t0 = time.perf_counter()

@@ -22,7 +22,7 @@ jobs:
         uses: taiki-e/install-action@git-cliff
 
       - name: Generate release notes for this tag
-        run: git cliff --current --strip header > RELEASE_NOTES.md
+        run: git cliff --latest --strip header > RELEASE_NOTES.md
 
       - name: Create or update GitHub Release
         env:

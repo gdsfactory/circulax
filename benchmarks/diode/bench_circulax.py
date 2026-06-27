@@ -68,12 +68,12 @@ def _build_circuit(variant: str):
         dump = compile_va(str(_DIODE_VA))
         defaults = parse_va_defaults_expanded(_DIODE_VA)
         dev = lower(dump.modules[0], va_defaults=defaults, class_name="Diode")
-        tmp = tempfile.mkdtemp()
-        out = Path(tmp) / "diode_va_bench.py"
-        out.write_text(emit_source([dev]))
-        spec = importlib.util.spec_from_file_location("diode_va_bench", out)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "diode_va_bench.py"
+            out.write_text(emit_source([dev]))
+            spec = importlib.util.spec_from_file_location("diode_va_bench", out)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
         diode_cls = mod.Diode
 
         # Read defaults from the .va so we can pass concrete values. The

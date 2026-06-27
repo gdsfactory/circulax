@@ -23,11 +23,15 @@ RESISTOR_OSDI = str(_DATA_DIR / "resistor.osdi")
 
 
 def _bosdi_available() -> bool:
+    if not Path(RESISTOR_OSDI).exists():
+        return False  # run `pixi run compile_osdi` to enable these tests
     try:
         from bosdi.circulax import OsdiComponentGroup  # noqa: F401
         from osdi_jax import osdi_residual_eval  # noqa: F401
+        from osdi_loader import load_osdi_model
+        load_osdi_model(RESISTOR_OSDI)
         return True
-    except ImportError:
+    except (ImportError, RuntimeError, OSError):
         return False
 
 

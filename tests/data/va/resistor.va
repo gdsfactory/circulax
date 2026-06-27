@@ -1,0 +1,19 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module resistor(A, B);
+    inout A, B;
+    electrical A, B;
+    branch (A, B) br;
+
+    (*desc = "Resistance at tnom", units = "Ohm", type = "instance"*)
+      parameter real R = 1000.0 from (0:inf];
+    (*desc = "Temperature coefficient of resistance", units = "1/K"*)
+      parameter real zeta = 0.0;
+    (*desc = "Nominal temperature", units = "K"*)
+      parameter real tnom = 300.15 from (0:inf];
+
+    analog begin
+        I(br) <+ V(br) / (R * (1.0 + zeta * ($temperature - tnom)));
+    end
+endmodule

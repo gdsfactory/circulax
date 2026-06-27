@@ -2,7 +2,7 @@
 
 Writes alongside the upstream N=9 template so the generated file can
 reuse the same ``models.inc`` and the ``psp103v4.osdi`` symlink already
-present in ``/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/``.
+present in ``$VACASK_REPO/benchmark/ring/vacask/``.
 
 Usage:
     pixi run python benchmarks/ring/vacask_gen.py 33
@@ -13,7 +13,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-VACASK_DIR = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask")
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+from _paths import vacask_repo  # noqa: E402
+
+VACASK_DIR = vacask_repo() / "benchmark" / "ring" / "vacask"
 
 
 def emit(

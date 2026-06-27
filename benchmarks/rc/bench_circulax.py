@@ -1,6 +1,6 @@
 """Circulax version of the VACASK rc benchmark.
 
-Same circuit as /home/cdaunt/code/vacask/VACASK/benchmark/rc/*/runme.sim:
+Same circuit as $VACASK_REPO/benchmark/rc/*/runme.sim:
 
     Vpulse(0→1V, rise=1µs, fall=1µs, width=1ms, period=2ms)
          │

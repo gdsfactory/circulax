@@ -13,7 +13,6 @@ Outputs:
 from __future__ import annotations
 
 import csv
-import os
 import subprocess
 import sys
 import time
@@ -25,11 +24,21 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, os.environ.get("VACASK_PYTHON", str(Path.home() / "code/vacask/VACASK/python")))
+sys.path.insert(0, str(HERE.parent))
+from _paths import vacask_bin as _vacask_bin  # noqa: E402
+
+try:
+    from _paths import vacask_repo as _vacask_repo
+    sys.path.insert(0, str(_vacask_repo() / "python"))
+except OSError:
+    pass
 
 import bench_circulax as cx  # noqa: E402
 
-VACASK_BIN = os.environ.get("VACASK_BIN", str(Path.home() / "opt/vacask/bin/vacask"))
+try:
+    VACASK_BIN = _vacask_bin()
+except OSError:
+    VACASK_BIN = None
 VACASK_DIR = HERE / "vacask"
 RAW_FILE = VACASK_DIR / "dcsweep.raw"
 CSV_PATH = HERE / "results.csv"
@@ -49,7 +58,7 @@ def _ensure_vacask_osdi() -> None:
 
 def run_vacask() -> dict[float, float] | dict:
     """Run VACASK deck, parse dcsweep.raw, return {V_AK: I_A}."""
-    if not Path(VACASK_BIN).exists():
+    if VACASK_BIN is None or not Path(VACASK_BIN).exists():
         return {"status": "vacask_not_installed"}
     _ensure_vacask_osdi()
     t0 = time.perf_counter()

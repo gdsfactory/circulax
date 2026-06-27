@@ -1,0 +1,170 @@
+`include "constants.vams"
+`include "disciplines.vams"
+
+module diode(A,C);
+    // Simplified SPICE diode
+
+    // Terminals and internal nodes
+    inout A, C;
+    electrical A,C,CI;
+
+    // Branches
+    branch (A,CI) br_a_ci;
+    branch (CI,C) br_ci_c;
+
+    // Model parameters
+    (*desc = "Saturation current", units = "A"*)
+      parameter real Is = 1e-14 from [0:inf];
+    (*desc = "Emission coefficient", units = ""*)
+      parameter real N = 1 from [0:inf];
+    (*desc = "Ohmic resistance", units = "Ohm" *)
+      parameter real Rs = 0.0 from [0:inf];
+
+    (*desc = "Reverse breakdown voltage", units = "V" *)
+      parameter real BV = 1e20 from [0:inf];
+    (*desc = "Reverse breakdown current", units = "A" *)
+      parameter real IBV = 1e-10 from (0:inf];
+
+    (*desc = "Saturation current temperature exponent", units = "" *)
+      parameter real XTI = 3.0 from (0:inf];
+    (*desc = "Activation energy", units = "eV" *)
+      parameter real EG = 1.12 from [0.1:inf];
+    (*desc = "Parameter extraction temperature", units = "C" *)
+      parameter real Tnom = 27 from [-273.15:inf];
+
+    (*desc = "Zero-bias junction capacitance", units = "F"*)
+      parameter real Cjo = 0.0 from [0:inf];
+    (*desc = "Junction potential", units = "V" *)
+      parameter real Vj = 1.0 from [0.01:inf];
+    (*desc = "Grading coefficient", units = "" *)
+      parameter real M = 0.5 from (0:0.9);
+    (*desc = "Forward bias junction fit parameter", units = "" *)
+      parameter real FC = 0.5 from [0:0.95);
+    (*desc = "Transit time", units ="s" *)
+      parameter real TT = 0.0 from [0:inf);
+
+    // Instance parameters
+    (*desc = "Device area factor", type = "instance", units = "" *)
+      parameter real area = 1.0 from (0:inf);
+
+    // Output variables
+    (*desc= "Diode voltage", units ="V" *) real Vd;
+    (*desc= "Diode ohmic current", units ="A" *) real Id;
+    (*desc= "Diode charge", units ="As" *) real Qd;
+    (*desc= "Differential conductance", units ="A/V" *) real gd;
+    (*desc= "Differential capacitance", units ="F" *) real cd;
+
+    // Adjustablje limited exponential
+    analog function real lexp;
+        input x, ylim;
+        real x, ylim;
+        real xlim;
+        begin
+            xlim = ln(ylim);
+            if (x < xlim) begin
+                lexp = exp(x);
+            end else begin
+                lexp = ylim*(x-xlim+1);
+            end
+        end
+    endfunction
+
+    // Variables
+    real Vfu, Vf, Vres, VT, Q;
+    real expmaxf, expmaxr;
+    real Tdev, Tnomk, EGTnom, EGT;
+    real Vjeff, Cjoeff, F1, F2, F3;
+    real Iseff, IBVeff, If, Ib;
+
+    analog function real spicepnjlim;
+        input vnew, vold, vt, vcrit;
+        real vnew, vold, vt, vcrit, vlimit, arg;
+        begin
+            vlimit=vnew;
+            if ((vnew > vcrit) && (abs(vnew-vold) > (vt+vt))) begin
+                if (vold > 0) begin
+                    arg = 1 + (vnew-vold) / vt;
+                    if (arg > 0)
+                        vlimit = vold + vt * ln(arg);
+                    else
+                        vlimit = vcrit;
+                end else
+                    vlimit = vt * ln(vnew/vt);
+                    $discontinuity(-1);
+                end
+                spicepnjlim = vlimit;
+            end
+        endfunction
+
+    analog begin
+        // Device temperature and parameter measurement temperature (in K)
+        Tdev = $temperature;
+        Tnomk = Tnom + 273.15;
+
+        // Thermal voltage
+        VT = `P_K*Tdev/`P_Q;
+
+        // Branch voltages
+        Vf = V(br_a_ci);
+        Vres = V(br_ci_c);
+
+        // Temperature and area adjusted saturation current
+        Iseff = area * Is * pow(Tdev/Tnomk, XTI/N) * exp((Tdev/Tnomk-1)*EG/(N*VT));
+
+        // Forward exponential function limiting (at gd = 100/Rs)
+        if (Rs>1e-3)
+            expmaxf = 100/Rs*N*VT/Iseff;
+        else
+            expmaxf = 100/1e-3*N*VT/Iseff;
+
+        // Ohmic current of diode branch
+        If = Iseff * (lexp(Vf/(N*VT), expmaxf)-1);
+
+        // Area adjusted breakdown current
+        IBVeff = area * IBV;
+
+        // Reverese exponential function limiting (at gd = 100/Rs)
+        if (Rs>1e-3)
+            expmaxr = 100/Rs*N*VT/IBVeff;
+        else
+            expmaxr = 100/1e-3*N*VT/IBVeff;
+
+        // Breakdown current (at Vf=-BV the current Ib should be IBV)
+        if ($param_given(BV)) begin
+            Ib = IBVeff * lexp((-Vf-BV)/(N*VT), expmaxr);
+        end else
+            Ib = 0;
+
+        // Junction charge
+        EGTnom = 1.16-(7.02e-4*pow(Tnomk, 2))/(Tnomk+1108);
+        EGT = 1.16-(7.02e-4*pow(Tdev, 2))/(Tdev+1108);
+        Vjeff = Vj*(Tdev/Tnomk) - 3*VT*ln(Tdev/Tnomk) - (Tdev/Tnomk)*EGTnom + EGT;
+        Cjoeff = area * Cjo * (1+M*(400e-6*(Tdev-Tnomk)-(Vjeff-Vj)/Vj));
+        if (Vf<FC*Vjeff) begin
+            Q = If*TT + Cjoeff * Vjeff * (1-pow(1-Vf/Vjeff, 1-M))/(1-M);
+        end else begin
+            F1 = Vjeff * (1-pow(1-FC, 1-M))/(1-M);
+            F2 = pow(1-FC, 1+M);
+            F3 = 1 - FC*(1+M);
+            Q = If*TT + Cjoeff *
+                   (F1 + (F3*(Vf-FC*Vjeff)+(M/(2*Vjeff)*(pow(Vf, 2)-pow(FC*Vjeff, 2))))/F2);
+        end
+
+        // Output variables (ddx(.,V(A))=ddx(.,V(br_a_ci)))
+        Vd = Vf;
+        Id = If - Ib;
+        Qd = Q;
+        gd = ddx(Id, V(A));
+        cd = ddx(Q, V(A));
+
+        // Diode branch current, add a small conductance gmin (for convergence)
+        I(br_a_ci) <+ If - Ib + ddt(Q) + $simparam("gmin")*V(br_a_ci);
+
+        // Resistor branch
+        if (Rs <= 0)
+            // Collapse CI and C if Rs is 0
+            V(CI,C) <+ 0;
+        else
+            I(CI,C) <+ Vres / (Rs/area);
+    end
+endmodule

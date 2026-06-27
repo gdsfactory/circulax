@@ -12,7 +12,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-NGSPICE_DIR = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/ngspice")
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))
+from _paths import vacask_repo  # noqa: E402
+
+NGSPICE_DIR = vacask_repo() / "benchmark" / "ring" / "ngspice"
 
 
 def emit(n_stages: int) -> Path:
