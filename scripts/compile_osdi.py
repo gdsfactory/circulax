@@ -25,11 +25,18 @@ VA_DIR = ROOT / "tests" / "data" / "va"
 for va in sorted(VA_DIR.glob("*.va")):
     TARGETS.append((va, va.with_suffix(".osdi")))
 
-# PSP103 component used by notebooks / ring-oscillator examples
+# PSP103 component used by notebooks / ring-oscillator examples.
+# Two output locations:
+#   1. tests/data/va/psp103v4/psp103.osdi  — loaded by ring_oscillator_osdi.ipynb and
+#      05_psp103_ring_param_fitting.ipynb (both binaries are also committed to git as
+#      pre-compiled AVX2 builds; we overwrite them with generic here so CI doesn't SIGILL).
+#   2. circulax/components/osdi/compiled/psp103v4_psp103.osdi — loaded by PSP103 component.
 PSP103_VA = ROOT / "circulax" / "components" / "osdi" / "psp103v4" / "psp103.va"
-PSP103_OSDI = ROOT / "circulax" / "components" / "osdi" / "compiled" / "psp103v4_psp103.osdi"
 if PSP103_VA.exists():
-    TARGETS.append((PSP103_VA, PSP103_OSDI))
+    PSP103_OSDI_NB = ROOT / "tests" / "data" / "va" / "psp103v4" / "psp103.osdi"
+    PSP103_OSDI_COMP = ROOT / "circulax" / "components" / "osdi" / "compiled" / "psp103v4_psp103.osdi"
+    TARGETS.append((PSP103_VA, PSP103_OSDI_NB))
+    TARGETS.append((PSP103_VA, PSP103_OSDI_COMP))
 
 if not TARGETS:
     print("No .va files found to compile.")
