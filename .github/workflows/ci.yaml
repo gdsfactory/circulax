@@ -70,6 +70,13 @@ jobs:
           curl -fsSL https://fides.fe.uni-lj.si/openvaf/download/${{ env.OPENVAF_VERSION }}-linux_x64.tar.gz | tar xzf - -C /usr/local/bin/
 
       # ---- macOS: build from source ----
+      # llvm@18 must be installed even on cache hit: the cached openvaf-r binary
+      # links dynamically against libLLVM.dylib from Homebrew, which is absent on
+      # a fresh runner without an explicit brew install.
+
+      - name: Install LLVM@18 (macOS)
+        if: runner.os == 'macOS'
+        run: brew install llvm@18
 
       - name: Cache openvaf-r (macOS)
         if: runner.os == 'macOS'
@@ -82,7 +89,6 @@ jobs:
       - name: Build openvaf-r from source (macOS, cache miss)
         if: runner.os == 'macOS' && steps.cache-openvaf-mac.outputs.cache-hit != 'true'
         run: |
-          brew install llvm@18
           export LLVM_PREFIX="$(brew --prefix llvm@18)"
           export LLVM_SYS_181_PREFIX="$LLVM_PREFIX"
           export LLVM_CONFIG="$LLVM_PREFIX/bin/llvm-config"
