@@ -44,10 +44,6 @@ circulaxNetlist = Annotated[
 
 Netlist = circulaxNetlist
 
-# Monkeypatch sax.Netlist to be circulaxNetlist so that all functions using sax.Netlist
-# May need to make this explicit in the future
-sax_netlist.Netlist = circulaxNetlist  # type: ignore[assignment]
-
 
 # ---------------------------------------------------------------------------
 # kfnetlist-native node mapping
