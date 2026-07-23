@@ -19,8 +19,11 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
-    "jax>=0.7.1,<0.8",
-    "jaxlib>=0.7.1,<0.8",
+    # Core supports jax>=0.7.2,<0.10.0. Lower bound 0.7.2 because equinox/optimistix
+    # exclude 0.7.0/0.7.1; upper bound from sax (<0.10.0). The old <0.8 cap was a
+    # leftover from klujax 0.4.x (which used jax.pmap); klujax 0.5.0 dropped pmap.
+    "jax>=0.7.2,<0.10.0",
+    "jaxlib>=0.7.2,<0.10.0",
     "diffrax>=0.7.0,<0.8",
     "sax>=0.15.15",
     "matplotlib",
@@ -31,6 +34,9 @@ dependencies = [
     "kfnetlist>=0.1.4"]
 
 [project.optional-dependencies]
+# bosdi caps jax<0.8, so the verilog-a extra constrains the core down from
+# jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
+# so it stays on jax 0.7.2 until bosdi widens its compatibility.
 verilog-a = [
     "bosdi>=0.1.3",
 ]
