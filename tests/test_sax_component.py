@@ -71,7 +71,16 @@ def test_sax_component_signature_is_well_formed(sax_straight_cls: type[CircuitCo
 
 
 def test_sax_component_physics_matches_s_to_y(sax_straight_cls: type[CircuitComponent]) -> None:
-    """The component's port currents must equal ``Y @ V`` with ``Y`` derived from the underlying SAX model."""
+    """A converged wave-stamp evaluation must equal ``Y @ V`` with ``Y`` derived from the underlying SAX model.
+
+    ``sax.models.straight`` defaults to ``loss_dB_cm=0.0`` (lossless), so the
+    dry-run conditioning check in ``sax_component`` flags this type for the
+    wave-stamp path regardless of the loss used at instantiation here. That
+    path carries auxiliary ``wave_<port>`` states satisfying
+    ``(I + S) @ a = V``; only once ``a`` is at that fixed point do the port
+    currents equal the direct ``Y @ V`` result (algebraic equivalence, see
+    ``sax_component``'s docstring).
+    """
     from sax import sdense
 
     params = {"wl": 1.55, "wl0": 1.55, "neff": 2.34, "ng": 3.4, "length": 25.0, "loss_dB_cm": 0.5}
@@ -86,10 +95,15 @@ def test_sax_component_physics_matches_s_to_y(sax_straight_cls: type[CircuitComp
     i_ref = y_ref @ v_vec
     expected = {p: i_ref[k] for k, p in enumerate(port_order)}
 
-    f_dict, q_dict = inst(**v_by_port)
+    n = len(port_order)
+    eye = jnp.eye(n, dtype=jnp.complex128)
+    a_vec = jnp.linalg.solve(eye + s_matrix.astype(jnp.complex128), v_vec)
+    wave_kwargs = {f"wave_{p}": a_vec[k] for k, p in enumerate(port_order)}
+
+    f_dict, q_dict = inst(**v_by_port, **wave_kwargs)
     assert q_dict == {}
     for p in port_order:
-        assert jnp.allclose(f_dict[p], expected[p], atol=1e-10)
+        assert jnp.allclose(f_dict[p], expected[p], atol=1e-8)
 
 
 def test_sax_component_handles_param_without_default() -> None:
@@ -168,8 +182,9 @@ def test_sax_component_numeric_port_names_are_sanitized() -> None:
 
     inst = cls(length=5.0)
     f_dict, q_dict = inst(p1=1.0 + 0j, p2=0.0 + 0j)
-    # Returned current dict keys are sanitized port names.
-    assert set(f_dict) == {"p1", "p2"}
+    # Returned current dict keys are sanitized port names, plus the
+    # auxiliary wave-stamp states this lossless (phase-only) model trips.
+    assert set(f_dict) == {"p1", "p2", "wave_p1", "wave_p2"}
     assert q_dict == {}
 
 
@@ -310,6 +325,37 @@ def test_normalize_model_rejects_invalid() -> None:
 
     with pytest.raises(TypeError, match="CircuitComponent subclass or a SAX model"):
         _normalize_model(not_sax, name="bad")
+
+
+def test_needs_wave_stamp_ignores_realistically_lossy_mmi1x2() -> None:
+    """Thresholds are tuned to trip only on genuine (or near-exact) singularity.
+
+    ``sax.models.mmi1x2`` at its default 0.3 dB loss has ``sv_min(I+S) ~
+    0.034`` — ill-conditioned enough to amplify an unrelated bug (circulax
+    issue #31), but not itself singular. It must stay on the cheaper
+    ``s_to_y`` path; only the ideal (0 dB loss, exactly singular) variant
+    should trip the wave-stamp.
+    """
+    from sax import sdense
+    from sax.models import mmi1x2, mmi1x2_ideal
+
+    from circulax.s_transforms import _needs_wave_stamp
+
+    lossy_matrix, _ = sdense(mmi1x2())
+    assert not _needs_wave_stamp(lossy_matrix)
+
+    ideal_matrix, _ = sdense(mmi1x2_ideal())
+    assert _needs_wave_stamp(ideal_matrix)
+
+
+def test_sax_component_wraps_ideal_mmi1x2_with_wave_stamp() -> None:
+    """End-to-end: sax_component must pick the wave-stamp path for the exactly-singular ideal splitter."""
+    from sax.models import mmi1x2_ideal
+
+    from circulax.s_transforms import sax_component
+
+    cls = sax_component(mmi1x2_ideal)
+    assert set(cls.states) == {"wave_in0", "wave_out0", "wave_out1"}
 
 
 def test_sax_component_respects_sdense_port_order() -> None:
