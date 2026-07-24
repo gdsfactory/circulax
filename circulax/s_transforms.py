@@ -44,6 +44,60 @@ def _sanitize_port(name: str) -> str:
     return s
 
 
+_WAVE_STAMP_CONDITIONING_THRESHOLD = 0.02
+_WAVE_STAMP_TRANSMISSION_THRESHOLD = 0.999
+
+
+def _needs_wave_stamp(
+    s_matrix: jax.Array,
+    conditioning_threshold: float = _WAVE_STAMP_CONDITIONING_THRESHOLD,
+    transmission_threshold: float = _WAVE_STAMP_TRANSMISSION_THRESHOLD,
+) -> bool:
+    """Return True if this S-matrix is a candidate for `s_to_y`'s (I+S)^-1 going ill-conditioned.
+
+    Two independent, phase-invariant checks on the dry-run S-matrix; either
+    is sufficient to flag the component. Both thresholds are deliberately
+    tight — tripped only by matrices that are genuinely (at, or extremely
+    close to) singular, e.g. ideal/lossless models, not merely "somewhat
+    ill-conditioned" real components with finite loss:
+
+    1. **Structural**: smallest singular value of ``(I + S)`` below
+       ``conditioning_threshold``. This is the quantity that actually governs
+       ``s_to_y``'s conditioning (``Y = (I-S)(I+S)^-1``) — it catches a
+       near-degenerate *combination* of couplings even when no single
+       S-matrix entry is close to unity magnitude (e.g. an ideal, lossless
+       N-port splitter has ``sv_min(I+S) = 0`` exactly). A realistically lossy
+       instance of the same topology (e.g. ``sax.models.mmi1x2`` at 0.3 dB
+       loss, ``sv_min ~ 0.034``) sits above this threshold and stays on the
+       cheaper ``s_to_y`` path.
+    2. **Propagation/phase-rotation risk**: any single transmission magnitude
+       above ``transmission_threshold``. Loss varies smoothly with a model's
+       swept parameter (wavelength, length, ...), but phase from a
+       ``exp(i*beta*length)``-type term does not — it can rotate through a
+       full cycle for a tiny parameter change. So a *currently*
+       well-conditioned propagation path can still cross the ``(I+S)``
+       singularity at another wavelength/length/tuning value if its
+       transmission magnitude is genuinely ~1 (e.g. a lossless
+       ``sax.models.straight`` at its default). Magnitude is ~invariant to
+       that phase, so checking it here is a reliable, sample-free proxy —
+       cheaper and more robust than sampling the sweep directly, which can
+       straddle a narrow near-singular dip and miss it.
+
+    Components that trip either check are stamped with reflection-free wave
+    variables instead (see ``sax_component``) so no matrix inverse is ever
+    taken for them.
+    """
+    n = s_matrix.shape[-1]
+    if n < 2:
+        return False
+    eye = jnp.eye(n, dtype=jnp.complex128)
+    m = eye + s_matrix.astype(jnp.complex128)
+    sv_min = jnp.min(jnp.linalg.svd(m, compute_uv=False))
+    off_diag = jnp.abs(s_matrix)[~jnp.eye(n, dtype=bool)]
+    max_transmission = jnp.max(off_diag)
+    return bool(sv_min < conditioning_threshold) or bool(max_transmission > transmission_threshold)
+
+
 @jax.jit
 def s_to_y(S: jax.Array, z0: complex = 1.0 + 1e-12j) -> jax.Array:
     """Convert an S-parameter matrix to an admittance (Y) matrix.
@@ -72,14 +126,24 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
 
     1. **Discovery** — ``fn`` is called once with its default (or dummy)
        parameter values and :func:`sax.get_ports` extracts the sorted port
-       names from the resulting S-parameter dict.
-    2. **Physics wrapper** — a closure is built that calls ``fn`` at runtime,
-       converts the S-dict to a dense matrix via :func:`sax.sdense`, converts
-       it to an admittance matrix via :func:`s_to_y`, and returns
-       ``I = Y @ V`` as a port current dict.
+       names from the resulting S-parameter dict. The same dry-run matrix is
+       checked via :func:`_needs_wave_stamp` to decide, once per wrapped
+       model, which physics stamp this component type gets.
+    2. **Physics wrapper** — a closure is built that calls ``fn`` at runtime
+       and converts the S-dict to a dense matrix via :func:`sax.sdense`.
+       Components that passed the dry-run conditioning check use
+       :func:`s_to_y` directly and return ``I = Y @ V``. Components flagged
+       as near-lossless instead get one auxiliary "incident wave" state per
+       port (``wave_<port>``) and are stamped with ``b = S @ a``,
+       ``I = a - b``, ``a + b - V = 0`` — algebraically equivalent to the
+       Y-matrix form (for z0=1, solving the constraint recovers
+       ``I = (I-S)(I+S)^-1 V``) but never inverts ``S`` directly, so the
+       ill-conditioning is resolved by the global sparse solve instead of a
+       local matrix inverse.
     3. **Component registration** — the wrapper is passed to
        :func:`~circulax.components.base_component.component` with the
-       discovered ports, producing a :class:`~circulax.components.base_component.CircuitComponent`
+       discovered ports (and, for wave-stamped components, the auxiliary
+       states), producing a :class:`~circulax.components.base_component.CircuitComponent`
        subclass.
 
     ``fn`` may be a plain function or a :class:`functools.partial` wrapping
@@ -117,9 +181,12 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
     try:
         dummy_s_dict = fn(**defaults)
         detected_ports = get_ports(dummy_s_dict)
+        dummy_s_matrix, _ = sdense(dummy_s_dict)
     except Exception as exc:
         msg = f"Failed to dry-run SAX component '{cls_name}': {exc}"
         raise RuntimeError(msg) from exc
+
+    use_wave_stamp = _needs_wave_stamp(dummy_s_matrix)
 
     # base_component builds a namedtuple over the port tuple, which requires
     # every port name to be a valid Python identifier. Some SAX PDKs label
@@ -130,6 +197,7 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
     for raw, sanitized in raw_to_sanitized.items():
         sanitized_to_raw.setdefault(sanitized, []).append(raw)
     port_names = tuple(raw_to_sanitized[str(p)] for p in detected_ports)
+    aux_state_names = tuple(f"wave_{p}" for p in port_names) if use_wave_stamp else ()
 
     def physics_wrapper(signals: Signals, s: States, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
         s_dict = fn(**kwargs)
@@ -137,13 +205,23 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
         # order (dict[raw_port, matrix_row_index]). `get_ports` returns ports
         # sorted alphabetically — the two can differ (e.g. an MMI2x2 SDict
         # built {(o1,o1):…,(o3,o3):…,(o4,o4):…,(o2,o2):…}). We must use the
-        # port_map to line up v_vec with the rows/cols of y_matrix; using the
+        # port_map to line up v_vec with the rows/cols of the matrix; using the
         # sorted order silently scrambles coupling between non-adjacent rows.
         s_matrix, port_map = sdense(s_dict)
-        y_matrix = s_to_y(s_matrix)
         matrix_order = sorted(port_map, key=port_map.get)  # raw names, matrix-row order
         sanitized_in_order = [_sanitize_port(p) for p in matrix_order]
         v_vec = jnp.array([getattr(signals, p) for p in sanitized_in_order], dtype=jnp.complex128)
+
+        if use_wave_stamp:
+            a_vec = jnp.array([getattr(s, f"wave_{p}") for p in sanitized_in_order], dtype=jnp.complex128)
+            b_vec = s_matrix.astype(jnp.complex128) @ a_vec
+            i_vec = a_vec - b_vec
+            constraints = a_vec + b_vec - v_vec
+            f_dict = {p: i_vec[k] for k, p in enumerate(sanitized_in_order)}
+            f_dict.update({f"wave_{p}": constraints[k] for k, p in enumerate(sanitized_in_order)})
+            return f_dict, {}
+
+        y_matrix = s_to_y(s_matrix)
         i_vec = y_matrix @ v_vec
         return {p: i_vec[k] for k, p in enumerate(sanitized_in_order)}, {}
 
@@ -171,7 +249,7 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
         ]
     )
 
-    cls = component(ports=port_names)(physics_wrapper)
+    cls = component(ports=port_names, states=aux_state_names)(physics_wrapper)
     cls._raw_to_sanitized_ports = raw_to_sanitized
     cls._sanitized_to_raw_ports = {sanitized: tuple(raws) for sanitized, raws in sanitized_to_raw.items()}
     return cls
