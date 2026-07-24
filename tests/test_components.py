@@ -1,7 +1,8 @@
 import jax
 import jax.numpy as jnp
+import pytest
 
-from circulax.components.base_component import CircuitComponent, PhysicsReturn, Signals, States
+from circulax.components.base_component import CircuitComponent, PhysicsReturn, Signals, States, component
 
 # Import components to be tested
 from circulax.components.electronic import (
@@ -244,3 +245,27 @@ def test_subclass_init_creates_namedtuples() -> None:
 
     s = MyComp._VarsType_S(10)  # noqa: SLF001
     assert s.s1 == 10
+
+
+# --- port_aliases (gdsfactory/circulax#30) ---
+
+
+def test_component_port_aliases_sets_raw_port_map() -> None:
+    assert Resistor._sanitized_to_raw_ports == {"p1": ("P",), "p2": ("N",)}  # noqa: SLF001
+
+
+def test_component_port_aliases_accepts_tuple_of_aliases() -> None:
+    @component(ports=("p1", "p2"), port_aliases={"p1": ("P", "A")})
+    def Foo(signals: Signals, s: States, R: float = 1.0) -> PhysicsReturn:
+        i = (signals.p1 - signals.p2) / R
+        return {"p1": i, "p2": -i}, {}
+
+    assert Foo._sanitized_to_raw_ports == {"p1": ("P", "A")}  # noqa: SLF001
+
+
+def test_component_port_aliases_rejects_unknown_canonical_name() -> None:
+    with pytest.raises(ValueError, match="port_aliases"):
+
+        @component(ports=("p1", "p2"), port_aliases={"p3": "P"})
+        def Bad(signals: Signals, s: States, R: float = 1.0) -> PhysicsReturn:
+            return {"p1": 0.0, "p2": 0.0}, {}

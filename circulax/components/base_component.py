@@ -254,6 +254,7 @@ def _build_component(  # noqa: C901
     amplitude_param: str = "",
     setup_fn: Any = None,
     differentiable_params: "tuple[str, ...] | None" = None,
+    port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
 ) -> type[CircuitComponent]:
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
@@ -276,6 +277,12 @@ def _build_component(  # noqa: C901
             physics function accepts a time argument ``t``.
         amplitude_param: Name of the parameter representing the source
             amplitude for DC homotopy stepping.  Empty string for passives.
+        port_aliases: Optional mapping from a canonical port name (must be a
+            member of ``ports``) to one or more alternate port names that may
+            appear in a netlist instead (e.g. ``{"p1": "P", "p2": "N"}``).
+            Consumed by ``compiler.py``'s ``_resolve_port_index`` so callers
+            can wire up a netlist using either name without duplicating the
+            physics.
 
     Returns:
         A new :class:`CircuitComponent` subclass named after ``fn``.
@@ -285,6 +292,8 @@ def _build_component(  # noqa: C901
             reserved arguments, if any parameter lacks a default value, if a
             non-source component declares a ``t`` parameter, or if the dry-run
             raises an exception.
+        ValueError: If ``port_aliases`` references a canonical name that is
+            not in ``ports``.
 
     """
     reserved = ("signals", "s", "t") if uses_time else ("signals", "s")
@@ -538,6 +547,16 @@ def _build_component(  # noqa: C901
 
     cls = type(fn.__name__, (CircuitComponent,), namespace)
     cls.__doc__ = fn.__doc__
+
+    if port_aliases:
+        normalized_aliases: dict[str, tuple[str, ...]] = {}
+        for canonical, raw in port_aliases.items():
+            if canonical not in ports:
+                msg = f"{fn.__name__}: port_aliases key {canonical!r} is not in ports {ports}"
+                raise ValueError(msg)
+            normalized_aliases[canonical] = (raw,) if isinstance(raw, str) else tuple(raw)
+        cls._sanitized_to_raw_ports = normalized_aliases
+
     return cls
 
 
@@ -545,6 +564,7 @@ def component(
     ports: tuple[str, ...] = (),
     states: tuple[str, ...] = (),
     amplitude_param: str = "",
+    port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
 ) -> Any:
     """Decorator for defining a time-independent circuit component.
 
@@ -563,6 +583,11 @@ def component(
             amplitude (e.g. ``"I"`` for a current source). When non-empty,
             DC homotopy solvers will scale this parameter during stepping.
             Leave empty (default) for passive components.
+        port_aliases: Optional mapping from a canonical port name to one or
+            more alternate names a netlist may use instead, e.g.
+            ``{"p1": "P", "p2": "N"}``. Lets integrators (e.g. Mosaic/kfnetlist)
+            reuse this component's physics under their own port-naming
+            convention without redefining it.
 
     Returns:
         A decorator that accepts a physics function and returns a
@@ -576,13 +601,16 @@ def component(
             return {"p1": i, "p2": -i}, {}
 
     """
-    return lambda fn: _build_component(fn, ports, states, uses_time=False, amplitude_param=amplitude_param)
+    return lambda fn: _build_component(
+        fn, ports, states, uses_time=False, amplitude_param=amplitude_param, port_aliases=port_aliases
+    )
 
 
 def source(
     ports: tuple[str, ...] = (),
     states: tuple[str, ...] = (),
     amplitude_param: str = "",
+    port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
 ) -> Any:
     """Decorator for defining a time-dependent circuit component.
 
@@ -599,6 +627,9 @@ def source(
             DC homotopy solvers will scale this parameter during stepping.
             Leave empty (default) for time-dependent components that are not
             primary excitation sources.
+        port_aliases: Optional mapping from a canonical port name to one or
+            more alternate names a netlist may use instead. See
+            :func:`component`.
 
     Returns:
         A decorator that accepts a physics function and returns a
@@ -612,4 +643,6 @@ def source(
             return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
 
     """
-    return lambda fn: _build_component(fn, ports, states, uses_time=True, amplitude_param=amplitude_param)
+    return lambda fn: _build_component(
+        fn, ports, states, uses_time=True, amplitude_param=amplitude_param, port_aliases=port_aliases
+    )

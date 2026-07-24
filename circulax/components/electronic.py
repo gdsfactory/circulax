@@ -11,15 +11,17 @@ from circulax.components.base_component import (
     source,
 )
 
+_PN_ALIASES = {"p1": "P", "p2": "N"}
 
-@component(ports=("p1", "p2"))
+
+@component(ports=("p1", "p2"), port_aliases=_PN_ALIASES)
 def Resistor(signals: Signals, s: States, R: float = 1e3) -> PhysicsReturn:
     """Ohm's Law: I = V/R."""
     i = (signals.p1 - signals.p2) / (R + 1e-12)
     return {"p1": i, "p2": -i}, {}
 
 
-@component(ports=("p1", "p2"))
+@component(ports=("p1", "p2"), port_aliases=_PN_ALIASES)
 def Capacitor(signals: Signals, s: States, C: float = 1e-12) -> PhysicsReturn:
     """Q = C * V.
     Returns Charge (q) so the solver computes I = dq/dt.
@@ -29,7 +31,7 @@ def Capacitor(signals: Signals, s: States, C: float = 1e-12) -> PhysicsReturn:
     return {}, {"p1": q_val, "p2": -q_val}
 
 
-@component(ports=("p1", "p2"), states=("i_L",))
+@component(ports=("p1", "p2"), states=("i_L",), port_aliases=_PN_ALIASES)
 def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
     """V = L * di/dt formulated via flux: f['i_L'] = V, q['i_L'] = -L*i_L."""
     v_drop = signals.p1 - signals.p2
