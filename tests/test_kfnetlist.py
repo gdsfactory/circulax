@@ -153,6 +153,53 @@ def test_compile_netlist_accepts_kfnetlist(simple_lrc_kfnetlist):
         assert g.var_indices.shape[0] > 0
 
 
+def test_compile_netlist_resolves_mosaic_pn_port_aliases():
+    """Mosaic emits built-in R/L/C parts wired via 'P'/'N' port names, while
+    circulax's canonical Resistor/Capacitor declare 'p1'/'p2'. compile_netlist
+    should resolve these via the component's port_aliases without requiring a
+    netlist rewrite or a duplicate component definition (gdsfactory/circulax#30).
+    """
+    from circulax.components.electronic import Capacitor, Resistor
+
+    models_map = {"resistor": Resistor, "capacitor": Capacitor, "ground": lambda: 0}
+
+    nl = kfnl.Netlist()
+    nl.create_inst(name="GND", kcl="", component="ground")
+    nl.create_inst(name="R1", kcl="", component="resistor", settings={"R": 100.0})
+    nl.create_inst(name="C1", kcl="", component="capacitor", settings={"C": 1e-9})
+
+    gnd = kfnl.PortRef(instance="GND", port="p1")
+    nl.create_net(gnd, kfnl.PortRef(instance="R1", port="N"))
+    nl.create_net(kfnl.PortRef(instance="R1", port="P"), kfnl.PortRef(instance="C1", port="P"))
+    nl.create_net(kfnl.PortRef(instance="C1", port="N"), gnd)
+
+    groups, _sys_size, pmap = compile_netlist(nl, models_map)
+
+    assert "resistor" in groups
+    assert "capacitor" in groups
+
+    # Canonical p1/p2 keys are back-filled even though the netlist wired via P/N.
+    assert pmap["R1,p2"] == 0
+    assert pmap["C1,p2"] == 0
+    assert pmap["R1,p1"] == pmap["C1,p1"]
+    assert pmap["R1,p1"] > 0
+
+
+def test_compile_netlist_missing_port_reports_alias_in_error():
+    from circulax.components.electronic import Resistor
+
+    models_map = {"resistor": Resistor, "ground": lambda: 0}
+
+    nl = kfnl.Netlist()
+    nl.create_inst(name="GND", kcl="", component="ground")
+    nl.create_inst(name="R1", kcl="", component="resistor", settings={"R": 100.0})
+    nl.create_net(kfnl.PortRef(instance="GND", port="p1"), kfnl.PortRef(instance="R1", port="N"))
+    # R1's other terminal (p1/P) is left unconnected.
+
+    with pytest.raises(ValueError, match="aliases: R1,P"):
+        compile_netlist(nl, models_map)
+
+
 def test_compile_netlist_kfnetlist_dc_solve():
     """Full DC solve with kfnetlist-constructed netlist (no delay on source)."""
     from circulax.components.electronic import Capacitor, Inductor, Resistor, VoltageSource
