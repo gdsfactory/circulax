@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy",
+    "scipy>=1.12",
     # Core supports jax>=0.7.2,<0.10.0. Lower bound 0.7.2 because equinox/optimistix
     # exclude 0.7.0/0.7.1; upper bound from sax (<0.10.0). The old <0.8 cap was a
     # leftover from klujax 0.4.x (which used jax.pmap); klujax 0.5.0 dropped pmap.
@@ -42,6 +43,7 @@ verilog-a = [
 ]
 docs = [
     "ipykernel>=6.29.5",
+    "scikit-rf>=1.8,<2",
     "nbconvert",
     "papermill",
     "hippogriffe==0.2.2",
@@ -289,6 +291,21 @@ ignore = [
 select = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
+"circulax/fitting/*.py" = [
+    # The fitting code retains the established numerical API and implementation
+    # while moving in-tree. Refactoring these separately avoids changing its
+    # well-tested numerical behaviour as part of the package migration.
+    "ANN001", "ANN202", "ARG001", "B007", "B905", "C901", "D104", "E402",
+    "EM101", "EM102", "F401", "F841", "FBT001", "FBT002", "FBT003", "N802",
+    "N815", "PERF401", "PLR0912", "PLR0915", "RUF003", "RUF005", "RUF059",
+    "SIM108", "T201",
+]
+"circulax/fitting/passivity/*.py" = [
+    "ANN001", "ANN202", "ARG001", "B007", "B905", "C901", "D104", "E402",
+    "EM101", "EM102", "F401", "F841", "FBT001", "FBT002", "FBT003", "N802",
+    "N815", "PERF401", "PLR0912", "PLR0915", "RUF003", "RUF005", "RUF059",
+    "SIM108", "T201",
+]
 "*.ipynb" = [
     "ANN",      # flake8-annotations
     "ARG001",   # unused-function-argument
@@ -313,6 +330,19 @@ select = ["ALL"]
     "D",        # pydocstyle
     "INP001",   # implicit-namespace-package
     "PT011",    # pytest-raises-too-broad
+    "S101",     # assert
+    "T201",     # print
+]
+"tests/fitting/*.py" = [
+    "ANN",      # flake8-annotations
+    "B905",     # strict zip mode is immaterial in fixed test fixtures
+    "C408",     # dict calls make the synthetic fixtures easier to scan
+    "D",        # pydocstyle
+    "E702",     # compact fixture construction inherited from fitting tests
+    "INP001",   # implicit-namespace-package
+    "N802",     # mathematical test helper names
+    "RUF001",   # intentional mathematical unicode in test comments
+    "RUF059",   # deliberately ignored tuple members in assertions
     "S101",     # assert
     "T201",     # print
 ]

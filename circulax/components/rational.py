@@ -1,4 +1,4 @@
-"""Factory functions for creating circulax components from vfitax SSModel."""
+"""Factory functions for creating Circulax components from rational fitting models."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def rational_component(
     z0: complex = 50.0,
     holomorphic: bool = True,
 ) -> type[CircuitComponent]:
-    """Create a time-domain component from a vfitax SSModel.
+    """Create a time-domain component from a rational-fitting SSModel.
 
     Maps the state-space transfer function H(s) = C diag(1/(s-A)) B + D + s E
     onto circulax's DAE formulation F(y) + dQ/dt = 0:
@@ -32,7 +32,7 @@ def rational_component(
     fields, enabling differentiation through the model.
 
     Args:
-        ss: SSModel from vfitax (A, B, C, D, E arrays).
+        ss: :class:`circulax.fitting.SSModel` (A, B, C, D, E arrays).
         name: Class name for the generated component.
         z0: Reference impedance (stored for documentation; not used in stamp).
         holomorphic: Whether to use the fast N×N Wirtinger AC path.
@@ -155,13 +155,13 @@ def rational_fdomain_component(
     ss: Any,
     name: str = "RationalFdomainModel",
 ) -> type[CircuitComponent]:
-    """Create a frequency-domain oracle component from a vfitax SSModel.
+    """Create a frequency-domain oracle component from a rational-fitting SSModel.
 
     Evaluates H(j2*pi*f) directly. Works in AC sweep and harmonic balance
     but not transient. Used as a test reference for rational_component.
 
     Args:
-        ss: SSModel from vfitax.
+        ss: :class:`circulax.fitting.SSModel`.
         name: Class name for the generated component.
 
     Returns:
@@ -238,7 +238,7 @@ def rational_delay_component(
     delay elements separately.
 
     Args:
-        ss: SSModel from vfitax (A, B, C, D, E arrays).
+        ss: :class:`circulax.fitting.SSModel` (A, B, C, D, E arrays).
         tau: Per-port group delay in seconds, shape ``(Nc,)``.
         name: Class name for the generated component.
         z0: Reference impedance for S/Y conversion.

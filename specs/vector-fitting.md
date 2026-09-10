@@ -120,6 +120,35 @@ from fitting only the de-embedded response. The line uses delayed wave-state
 constraints, so an ideal lossless through path never needs a singular S-to-Y
 conversion.
 
+### Active and nonreciprocal networks
+
+Use `reciprocal=False`, `enforce_passive=False` for active devices. The default
+`delay_mode="auto"` disables reference-plane delay extraction in this case,
+because one per-port factor imposes the same transmission delay in both
+directions. Request `delay_mode="port"` only when that physical assumption is
+appropriate.
+
+Validation must set `expected_reciprocal=False, expected_passive=False` for
+such models. This permits intentional gain and directionality, but still
+requires bounded fit and holdout error, stable poles, non-negative delay,
+finite evaluation, and coverage of the requested simulation band. Inspect
+each ordered S-parameter independently so forward gain cannot hide a poor
+reverse fit.
+
+The 190 GHz transmitter benchmark uses `fit_domain="s"`: AAA initializes the
+topology, the strongest conjugate pole pairs are refined against every ordered
+S response, and an exact state-space S-to-Y transformation produces the
+simulation model. With `max_poles=20`, the benchmark reaches 1.26% normalized
+complex error without requiring scikit-rf at runtime.
+
+### Vmapped pole-count screening
+
+`pole_count_candidates=(...)` retains a fixed AAA pole shape and zeroes
+coefficient columns for excluded real poles or complete conjugate pairs.
+Nested `vmap` operations refit every ordered S response for every mask, then
+reconstruct and score fixed-shape S-to-Y realizations. Shortlisted candidates
+must still be compacted, refined, and fully validated.
+
 ### Real-pair block form (future)
 
 `_ss_to_real_pairs` would convert conjugate pole pairs to 2×2 real blocks,
@@ -132,8 +161,8 @@ pay 2× via `is_complex=True`. Documented as a future optimization.
 
 | File | Repo | Action |
 |------|------|--------|
-| `vfitax/sparam.py` | vfitax | New — delay de-embedding and S-parameter fit pipeline |
-| `vfitax/tests/unit/test_sparam.py` | vfitax | New — round-trip, pole reduction, tripwire tests |
+| `circulax/fitting/sparam.py` | circulax | Delay de-embedding and S-parameter fit pipeline |
+| `tests/fitting/test_sparam.py` | circulax | Round-trip, pole reduction, tripwire tests |
 | `circulax/components/rational.py` | circulax | New — SSModel → component factories |
 | `tests/test_delay_contract.py` | circulax | New — analysis-independent fixed-delay contract tests |
 | `tests/test_rational.py` | circulax | Updated — includes exact-line/reduced-core equivalence |
@@ -145,10 +174,8 @@ pay 2× via `is_complex=True`. Documented as a future optimization.
 ## Verification
 
 ```bash
-# vfitax (scipy-aaa branch)
-pytest vfitax/tests/ -v   # 95 passed
-
-# circulax (feat-time-delay worktree)
+# fitting and time-delay integration
+pytest tests/fitting -v
 pytest tests/test_delay_contract.py -v
 pytest tests/test_delay.py -v
 pytest tests/test_fdomain.py tests/test_rational.py -v
