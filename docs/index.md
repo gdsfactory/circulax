@@ -64,7 +64,7 @@ Common analyses use the same compiled object:
 ```python
 op = circuit.dc()
 op_sweep = circuit.dc(params={"R1.R": 20.0, "wavelength_nm": 1310.0})
-S = circuit.sp(ports=["C1,p1"], freqs=jnp.logspace(6, 10, 101), y_dc=op)
+S = circuit.ac(ports=["C1,p1"], freqs=jnp.logspace(6, 10, 101), y_dc=op)
 y_time, y_freq = circuit.hb(freq=1e6, harmonics=5, y0=op)
 v_out = circuit.port(op, "C1,p1")
 ```

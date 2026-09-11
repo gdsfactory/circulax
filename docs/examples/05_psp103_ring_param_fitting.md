@@ -55,7 +55,7 @@ from circulax.solvers.sensitivity import _resolve_param_cols
 jax.config.update("jax_enable_x64", True)
 ```
 
-    WARNING:2026-06-24 18:07:10,085:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-07-31 10:00:43,775:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## 1. Load the PSP103 OSDI Model
@@ -207,7 +207,7 @@ print(f"DC sweep ({len(VGS_SWEEP)} points, vmapped): {t_sweep:.2f} s")
 print(f"Id range: {id_ref.min() * 1e3:.3f} mA to {id_ref.max() * 1e3:.3f} mA")
 ```
 
-    DC sweep (25 points, vmapped): 0.39 s
+    DC sweep (25 points, vmapped): 0.29 s
     Id range: -1.867 mA to -0.000 mA
 
 
@@ -378,7 +378,7 @@ t_opt = time.time() - t_opt_start
 
 best_idx = int(jnp.argmin(all_losses[:, -1]))
 print(f"Total time: {t_opt:.1f} s ({K_STARTS} starts, {N_OPT} steps each)")
-print(f"\nFinal losses per start:")
+print("\nFinal losses per start:")
 for k in range(K_STARTS):
     marker = " <-- best" if k == best_idx else ""
     print(f"  Start {k}: {float(all_losses[k, -1]):.4e}{marker}")
@@ -387,7 +387,7 @@ for k in range(K_STARTS):
     Compiling and running 8 parallel optimisations...
 
 
-    Total time: 6.9 s (8 starts, 40 steps each)
+    Total time: 5.4 s (8 starts, 40 steps each)
 
     Final losses per start:
       Start 0: 1.1542e-08 <-- best
@@ -452,7 +452,7 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 for k in range(K_STARTS):
     alpha = 1.0 if k == best_idx else 0.2
     color = "C0" if k == best_idx else "grey"
-    label = f"Start {k} (best)" if k == best_idx else (f"Others" if k == 0 else None)
+    label = f"Start {k} (best)" if k == best_idx else ("Others" if k == 0 else None)
     ax1.semilogy(np.array(all_losses[k]), color=color, alpha=alpha, lw=1.5, label=label)
 ax1.set_xlabel("Optimisation step")
 ax1.set_ylabel("MSE loss (sum over bias points)")
