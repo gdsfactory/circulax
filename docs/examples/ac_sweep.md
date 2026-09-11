@@ -8,9 +8,9 @@ This notebook demonstrates `circuit.sp(...)` on three circuits:
 
 AC analysis linearises the circuit DAE at the DC operating point and sweeps a range of frequencies:
 
-$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial yig|_{y_	ext{dc}}, \quad C = \partial Q/\partial yig|_{y_	ext{dc}}$$
+$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial y\big|_{y_\text{dc}}, \quad C = \partial Q/\partial y\big|_{y_\text{dc}}$$
 
-With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N	imes N$ S-matrix at once.
+With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N\times N$ S-matrix at once.
 
 
 
