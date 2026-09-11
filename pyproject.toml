@@ -190,6 +190,7 @@ docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["cop
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
 compile_osdi     = { cmd = ["python", "scripts/compile_osdi.py"], description = "Compile VA test fixtures to OSDI using openvaf-r (--target-cpu generic). Manual/LGPL-gated: never a dependency of build/build-conda." }
 pytest_run       = { cmd = ["pytest", "tests", "-m", "not long"], description = "Fast tests only — skips @pytest.mark.long (notebook execution)" }
+pytest_run_local = { cmd = ["bash", "-c", "set -a; source .env; set +a; pytest tests -m 'not long'"], description = "Fast tests only — skips @pytest.mark.long" }
 pytest_all       = { cmd = ["pytest", "tests", "-m", "long or not long"], depends-on = ["install_ipkernel", "compile_osdi"], description = "All tests including @pytest.mark.long (notebook execution)" }
 lint_format      = "ruff format"
 lint_check       = "ruff -v check"
