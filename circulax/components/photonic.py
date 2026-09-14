@@ -93,11 +93,9 @@ def OpticalDelayLine(
     See ``circulax.solvers.assembly`` for how ``hist`` (the delayed local
     state) is computed -- a fixed-size accepted-step history buffer read via
     ``jnp.interp``, vmapped per-instance since ``tau`` may vary across
-    instances of different length. Adaptive step-size controllers (e.g.
-    ``PIDController``) are supported (see gdsfactory/circulax#2): the
-    proposed step is automatically clamped to the smallest active ``tau``
-    across the circuit. ``ConstantStepSize`` remains unclamped -- an
-    explicit ``dt0`` larger than ``tau`` still raises.
+    instances of different length. Adaptive and fixed step-size controllers
+    may take steps longer than ``tau``; interpolation against the current
+    Newton trial supplies the required delay Jacobian in that regime.
 
     Args:
         signals: Field amplitudes at input (``p1``) and output (``p2``).
@@ -254,10 +252,7 @@ def DirectionalCoupler(
 
     S-matrix::
 
-        S = [[0,    0,    t,    jk  ],
-             [0,    0,    jk,   t   ],
-             [t,    jk,   0,    0   ],
-             [jk,   t,    0,    0   ]]
+        S = [[0, 0, t, jk], [0, 0, jk, t], [t, jk, 0, 0], [jk, t, 0, 0]]
 
     where t = sqrt(1 - coupling), k = sqrt(coupling).
 
@@ -279,10 +274,10 @@ def DirectionalCoupler(
 
     S = jnp.array(
         [
-            [0.0,   0.0,   t,      1j * k],
-            [0.0,   0.0,   1j * k, t     ],
-            [t,     1j * k, 0.0,   0.0   ],
-            [1j * k, t,    0.0,    0.0   ],
+            [0.0, 0.0, t, 1j * k],
+            [0.0, 0.0, 1j * k, t],
+            [t, 1j * k, 0.0, 0.0],
+            [1j * k, t, 0.0, 0.0],
         ],
         dtype=jnp.complex128,
     )
@@ -403,10 +398,10 @@ def TunableBeamSplitter(
     eq_bot = signals.p4 - js * signals.p1 - c * signals.p2
 
     return {
-        "p1": 0.0,        # no self-stamp on input ports
+        "p1": 0.0,  # no self-stamp on input ports
         "p2": 0.0,
-        "p3": s.i_top,    # VCVS branch current injected at output p3
-        "p4": s.i_bot,    # VCVS branch current injected at output p4
+        "p3": s.i_top,  # VCVS branch current injected at output p3
+        "p4": s.i_bot,  # VCVS branch current injected at output p4
         "i_top": eq_top,  # constraint: E_p3 = cos(θ)·E_p1 + j·sin(θ)·E_p2
         "i_bot": eq_bot,  # constraint: E_p4 = j·sin(θ)·E_p1 + cos(θ)·E_p2
     }, {}

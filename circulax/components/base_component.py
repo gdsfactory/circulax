@@ -185,11 +185,11 @@ class CircuitComponent(eqx.Module):
                 ``{"R": 100.0}`` or an object (e.g. the component instance
                 itself) whose attributes match the parameter names. Must not
                 be a raw scalar.
-            hist: Delayed port-voltage vector of shape ``(n_ports,)``, i.e.
-                this instance's own ports evaluated at ``t - tau`` rather than
-                ``t``. Only consumed by components declaring a ``hist``
-                argument (see :func:`component`/:func:`source`); ``None``
-                otherwise.
+            hist: Delayed local-variable vector of shape
+                ``(n_ports + n_states,)``, i.e. this instance's ports followed
+                by its internal states, evaluated at ``t - tau``. Only
+                consumed by components declaring a ``hist`` argument (see
+                :func:`component`/:func:`source`); ``None`` otherwise.
 
         Returns:
             A two-tuple ``(f_vec, q_vec)`` of JAX arrays, each of shape
@@ -225,8 +225,9 @@ class CircuitComponent(eqx.Module):
             s: Namedtuple of state variable values.
             t: Current simulation time.
             params: Parameter container (instance or dict).
-            hist: Delayed port-voltage namedtuple/tuple, or ``None``. Only
-                consumed by components declaring a ``hist`` argument.
+            hist: Delayed local-variable namedtuple/tuple (ports followed by
+                internal states), or ``None``. Only consumed by components
+                declaring a ``hist`` argument.
 
         Returns:
             A two-tuple ``(f, q)`` of physics dicts.
@@ -364,9 +365,9 @@ def _build_component(  # noqa: C901
 
     # Optional delay-history slot. When the physics function declares ``hist``
     # as the next non-reserved positional argument (after ``init``, if
-    # present), the framework injects the component's own port voltages
-    # evaluated at ``t - tau`` instead of ``t``, where ``tau`` is computed by
-    # a ``@<Component>.delay``-registered function. Requires ``ports`` to be
+    # present), the framework injects the component's own local variables
+    # (ports followed by states) evaluated at ``t - tau``, where ``tau`` is
+    # computed by a ``@<Component>.delay``-registered function. Requires ``ports`` to be
     # non-empty. See ``circulax.solvers.assembly`` for how the delayed read
     # is computed (a fixed-size accepted-step history buffer + ``jnp.interp``,
     # vmapped per-instance since ``tau`` may vary across instances).
@@ -388,8 +389,11 @@ def _build_component(  # noqa: C901
             msg = f"Parameter '{p.name}' must have a default."
             raise TypeError(msg)
 
+    n_p = len(ports)
+    full_keys = ports + states
     _dummy_P = namedtuple("Ports", ports)(*([0.0] * len(ports))) if ports else ()  # noqa: PYI024
     _dummy_S = namedtuple("States", states)(*([0.0] * len(states))) if states else ()  # noqa: PYI024
+    _dummy_H = namedtuple("History", full_keys)(*([0.0] * len(full_keys)))  # noqa: PYI024
     _defaults = {p.name: p.default for p in param_specs}
 
     # Dry-run only validates non-injected args; ``init``/``hist`` will be
@@ -401,7 +405,7 @@ def _build_component(  # noqa: C901
     if has_init_arg:
         _dry_positional.append({})
     if has_hist_arg:
-        _dry_positional.append(_dummy_P)
+        _dry_positional.append(_dummy_H)
 
     try:
         fn(*_dry_positional, **_defaults)
@@ -414,12 +418,11 @@ def _build_component(  # noqa: C901
         if not (has_init_arg and isinstance(exc, (KeyError, IndexError, AttributeError, TypeError))):
             raise TypeError(f"Dry-run failed: {exc}") from exc
 
-    n_p = len(ports)
-    full_keys = ports + states
     _param_names = tuple(p.name for p in param_specs)
     _user_fn = fn
     _PortsType = namedtuple("Ports", ports) if ports else None  # noqa: PYI024
     _StatesType = namedtuple("States", states) if states else None  # noqa: PYI024
+    _HistoryType = namedtuple("History", full_keys)  # noqa: PYI024
 
     # Mutable cell for the analog-init function — populated by the
     # ``@<Component>.setup`` classmethod after class construction. The
@@ -448,10 +451,7 @@ def _build_component(  # noqa: C901
         # setup wrapper uses **kwargs (e.g. emitted _register_setup), pass
         # everything so the inner function receives the actual param values.
         setup_sig = inspect.signature(setup_fn)
-        has_var_kw = any(
-            p.kind == inspect.Parameter.VAR_KEYWORD
-            for p in setup_sig.parameters.values()
-        )
+        has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in setup_sig.parameters.values())
         if has_var_kw:
             return setup_fn(**kw)
         accepts = {p.name for p in setup_sig.parameters.values()}
@@ -474,10 +474,7 @@ def _build_component(  # noqa: C901
             )
             raise RuntimeError(msg)
         tau_sig = inspect.signature(tau_fn)
-        has_var_kw = any(
-            p.kind == inspect.Parameter.VAR_KEYWORD
-            for p in tau_sig.parameters.values()
-        )
+        has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in tau_sig.parameters.values())
         if has_var_kw:
             return tau_fn(**kw)
         accepts = {p.name for p in tau_sig.parameters.values()}
@@ -512,11 +509,7 @@ def _build_component(  # noqa: C901
             # operating-point solve in circulax.solvers.linear, which has no
             # history buffer yet) -- default to zero so those callers don't
             # need to know about delayed components at all.
-            hist_signals = (
-                _PortsType(*(hist[:n_p] if hist is not None else jnp.zeros_like(vars_vec[:n_p])))
-                if has_hist_arg
-                else None
-            )
+            hist_signals = _HistoryType(*(hist if hist is not None else jnp.zeros_like(vars_vec))) if has_hist_arg else None
             positional = _build_positional(signals, s, t, init_value, hist_signals)
             f_dict, q_dict = _user_fn(*positional, **kw)
             f_vals = [f_dict.get(k, 0.0) for k in full_keys]
@@ -535,7 +528,7 @@ def _build_component(  # noqa: C901
         ) -> tuple[dict, dict]:
             kw = {name: _extract_param(params, name) for name in _param_names}
             init_value = _resolve_init(kw) if has_init_arg else None
-            hist_signals = _PortsType(*(hist if hist is not None else [0.0] * n_p)) if has_hist_arg else None
+            hist_signals = _HistoryType(*(hist if hist is not None else [0.0] * len(full_keys))) if has_hist_arg else None
             positional = _build_positional(signals, s, t, init_value, hist_signals)
             return _user_fn(*positional, **kw)
     else:
@@ -550,7 +543,7 @@ def _build_component(  # noqa: C901
         ) -> tuple[dict, dict]:
             kw = {name: _extract_param(params, name) for name in _param_names}
             init_value = _resolve_init(kw) if has_init_arg else None
-            hist_signals = _PortsType(*(hist if hist is not None else [0.0] * n_p)) if has_hist_arg else None
+            hist_signals = _HistoryType(*(hist if hist is not None else [0.0] * len(full_keys))) if has_hist_arg else None
             positional = _build_positional(signals, s, t, init_value, hist_signals)
             return _user_fn(*positional, **kw)
 
@@ -650,10 +643,7 @@ def _build_component(  # noqa: C901
             )
             raise TypeError(msg)
         if _tau_cell[0] is not None:
-            msg = (
-                f"@{fn.__name__}.delay is already registered. Re-register "
-                f"is intentionally rejected to catch typos."
-            )
+            msg = f"@{fn.__name__}.delay is already registered. Re-register is intentionally rejected to catch typos."
             raise RuntimeError(msg)
         if not callable(tau_fn):
             msg = f"@{fn.__name__}.delay expects a callable; got {type(tau_fn).__name__}"

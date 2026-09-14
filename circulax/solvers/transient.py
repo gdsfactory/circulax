@@ -7,7 +7,7 @@ import diffrax
 import jax
 import jax.numpy as jnp
 import optimistix as optx
-from diffrax import AbstractAdaptiveStepSizeController, AbstractSolver, ConstantStepSize
+from diffrax import AbstractSolver, ConstantStepSize
 from jax.typing import ArrayLike
 
 from circulax.solvers.circuit_diffeq import circuit_diffeqsolve
@@ -37,7 +37,6 @@ from circulax.solvers.assembly import (
     assemble_residual_only_real,
     assemble_system_complex,
     assemble_system_real,
-    min_active_tau,
 )
 from circulax.solvers.linear import (
     DAMPING_EPS,
@@ -76,7 +75,11 @@ def _compute_history(component_groups, y_c, t, num_vars) -> ArrayLike:
     for group in component_groups.values():
         if _is_osdi(group):
             _, q_l, _ = _assemble_osdi_group(
-                y_c, group, alpha=1.0, dt=1.0, residual_only=True,
+                y_c,
+                group,
+                alpha=1.0,
+                dt=1.0,
+                residual_only=True,
             )
         else:
             v_locs = y_c[group.var_indices]
@@ -438,10 +441,14 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
 
         def newton_update_step(y, _) -> jax.Array:
             if is_complex:
-                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_complex(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
                 ground_indices = [0, num_vars]
             else:
-                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_real(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
                 ground_indices = [0]
 
             residual = make_residual(total_f, total_q)
@@ -494,10 +501,14 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
         y_pred, alpha, make_residual, new_state = _bdf2_preamble(y0, t0, h_n, solver_state, component_groups, num_vars, is_complex)
 
         if is_complex:
-            _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+            _, _, frozen_jac_vals = assemble_system_complex(
+                y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+            )
             ground_indices = [0, num_vars]
         else:
-            _, _, frozen_jac_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+            _, _, frozen_jac_vals = assemble_system_real(
+                y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+            )
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
@@ -568,9 +579,13 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
 
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
             if is_complex:
-                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_complex(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
             else:
-                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_real(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
 
             residual = make_residual(total_f, total_q)
             for idx in ground_indices:
@@ -667,9 +682,13 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
         def _run_stage(y_init, q_hist, t_stage):
             def newton_update_step(y, _) -> jax.Array:
                 if is_complex:
-                    total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                    total_f, total_q, all_vals = assemble_system_complex(
+                        y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                    )
                 else:
-                    total_f, total_q, all_vals = assemble_system_real(y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                    total_f, total_q, all_vals = assemble_system_real(
+                        y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                    )
                 residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
                 for idx in ground_indices:
                     residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
@@ -738,10 +757,14 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
 
         # Factor J_eff ONCE at predictor — reused for all stages and iterations
         if is_complex:
-            _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+            _, _, frozen_jac_vals = assemble_system_complex(
+                y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+            )
             ground_indices = [0, num_vars]
         else:
-            _, _, frozen_jac_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+            _, _, frozen_jac_vals = assemble_system_real(
+                y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+            )
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
@@ -831,9 +854,13 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
         def _run_stage(y_init, q_hist, t_stage):
             def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
                 if is_complex:
-                    total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                    total_f, total_q, all_vals = assemble_system_complex(
+                        y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                    )
                 else:
-                    total_f, total_q, all_vals = assemble_system_real(y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                    total_f, total_q, all_vals = assemble_system_real(
+                        y, component_groups, t_stage, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                    )
                 residual = total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
                 for idx in ground_indices:
                     residual = residual.at[idx].add(GROUND_STIFFNESS * y[idx])
@@ -897,11 +924,8 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
 def _compute_history_fq(component_groups, y_flat, t, num_vars, is_complex, dt=0.0, hist_t=None, hist_y=None):
     """Compute the (F, Q) residual pair at a given flat state vector — used by trap.
 
-    ``dt`` here is only used by delayed components to guard ``tau >= dt``
-    (see ``circulax.solvers.assembly``); it plays no role in the F/Q
-    computation itself, unlike the ``dt`` accepted by ``assemble_system_*``.
-    Callers with no real step size available (e.g. ``_trap_init``, evaluated
-    at ``t0`` before any step) pass ``0.0``, which makes the guard trivial.
+    ``dt`` is forwarded for signature consistency with the full assembly
+    functions. It does not scale the returned F/Q pair.
     """
     if is_complex:
         total_f, total_q = assemble_residual_only_complex(y_flat, component_groups, t, dt, hist_t=hist_t, hist_y=hist_y)
@@ -966,15 +990,25 @@ class TrapVectorizedTransientSolver(VectorizedTransientSolver):
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
         y_pred, alpha, make_residual = _trap_preamble(
-            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
+            y0,
+            t0,
+            h_n,
+            solver_state,
+            component_groups,
+            num_vars,
+            is_complex,
         )
 
         def newton_update_step(y, _) -> jax.Array:
             if is_complex:
-                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_complex(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
                 ground_indices = [0, num_vars]
             else:
-                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_real(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
                 ground_indices = [0]
 
             residual = make_residual(total_f, total_q)
@@ -1027,14 +1061,24 @@ class TrapFactorizedTransientSolver(FactorizedTransientSolver):
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
         y_pred, alpha, make_residual = _trap_preamble(
-            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
+            y0,
+            t0,
+            h_n,
+            solver_state,
+            component_groups,
+            num_vars,
+            is_complex,
         )
 
         if is_complex:
-            _, _, frozen_jac_vals = assemble_system_complex(y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+            _, _, frozen_jac_vals = assemble_system_complex(
+                y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+            )
             ground_indices = [0, num_vars]
         else:
-            _, _, frozen_jac_vals = assemble_system_real(y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+            _, _, frozen_jac_vals = assemble_system_real(
+                y_pred, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+            )
             ground_indices = [0]
 
         numeric_handle = self.linear_solver.factor_jacobian(frozen_jac_vals)
@@ -1096,7 +1140,13 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
         is_complex = getattr(self.linear_solver, "is_complex", False)
 
         y_pred, alpha, make_residual = _trap_preamble(
-            y0, t0, h_n, solver_state, component_groups, num_vars, is_complex,
+            y0,
+            t0,
+            h_n,
+            solver_state,
+            component_groups,
+            num_vars,
+            is_complex,
         )
 
         if is_complex:
@@ -1110,9 +1160,13 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
 
         def newton_update_step(y: jax.Array, _: Any) -> jax.Array:
             if is_complex:
-                total_f, total_q, all_vals = assemble_system_complex(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_complex(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
             else:
-                total_f, total_q, all_vals = assemble_system_real(y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y)
+                total_f, total_q, all_vals = assemble_system_real(
+                    y, component_groups, t1, h_n, alpha=alpha, hist_t=hist_t, hist_y=hist_y
+                )
 
             residual = make_residual(total_f, total_q)
             for idx in ground_indices:
@@ -1182,14 +1236,9 @@ def setup_transient(
                 Defaults to a zero-value ODETerm.
             stepsize_controller (diffrax.AbstractStepSizeController, optional):
                 The step size controller. Defaults to `ConstantStepSize()`.
-                For circuits with delayed components, an adaptive controller
-                (e.g. `PIDController`) is automatically clamped so the
-                proposed step never exceeds the smallest active delay `tau`;
-                `ConstantStepSize` is left unclamped (an explicit
-                `dt0 > tau` still raises). Adaptive+delay circuits may need
-                a larger `max_steps` budget than constant-step ones, sized
-                against `(t1 - t0) / tau_min` as a floor, since the clamp
-                can force more steps than accuracy alone would require.
+                Delays shorter than an accepted step are interpolated against
+                the current Newton trial with the corresponding Jacobian, so
+                adaptive controllers do not need a delay-based step cap.
             **kwargs: Additional keyword arguments to pass directly to
                 `diffrax.diffeqsolve`.
 
@@ -1206,12 +1255,9 @@ def setup_transient(
 
     # Fixed time-delay support: gate the delay-history buffer behind whether
     # any group actually has a delayed component, so undelayed circuits pay
-    # no cost. Adaptive step-size controllers are supported (circulax GitHub
-    # issue #2, follow-up): the proposed step is proactively clamped to the
-    # smallest active tau (see `min_active_tau`/`min_tau` below) so
-    # assembly.py's `tau >= dt` guard stays a pure safety net rather than
-    # something adaptive stepping can trip mid-run. `ConstantStepSize`
-    # behavior is unchanged -- an explicit `dt0 > tau` still raises.
+    # no cost. Delayed reads inside the current step retain their dependence
+    # on the Newton trial, so neither fixed nor adaptive stepping needs to be
+    # artificially capped by the smallest delay.
     has_delay = any(getattr(g, "has_delay", False) for g in groups.values())
 
     if transient_solver is None:
@@ -1228,6 +1274,7 @@ def setup_transient(
             transient_solver = TrapVectorizedTransientSolver
 
     import inspect
+
     tsolver = transient_solver(linear_solver=linear_strategy) if inspect.isclass(transient_solver) else transient_solver
 
     sys_size = linear_strategy.sys_size // 2 if linear_strategy.is_complex else linear_strategy.sys_size
@@ -1250,13 +1297,6 @@ def setup_transient(
         stepsize_controller = kwargs.pop("stepsize_controller", ConstantStepSize())
         checkpoints = kwargs.pop("checkpoints", None)
 
-        # Derive min_tau from the per-call component groups (args[0]), not the
-        # `groups` closed over above -- callers (e.g. gradient checks) may
-        # override `args` with perturbed params, and min_tau must track
-        # whatever is actually being simulated.
-        is_adaptive = isinstance(stepsize_controller, AbstractAdaptiveStepSizeController)
-        min_tau = min_active_tau(args[0]) if (has_delay and is_adaptive) else None
-
         sol = circuit_diffeqsolve(
             terms=term,
             solver=solver,
@@ -1271,7 +1311,6 @@ def setup_transient(
             stepsize_controller=stepsize_controller,
             checkpoints=checkpoints,
             record_history=has_delay,
-            min_tau=min_tau,
         )
 
         return sol

@@ -7,13 +7,10 @@ Verifies:
     group, exercising the per-instance-varying-tau vmap path.
   - Gradients w.r.t. a delay-driving parameter (``length_um``) match finite
     differences through the checkpointed adjoint.
-  - The ``tau >= dt`` guard rejects delays shorter than the step size.
-  - Adaptive step-size controllers (e.g. ``PIDController``) are supported for
-    delayed circuits: the proposed step is proactively clamped to the
-    smallest active ``tau``, matching the analytic shift and a
-    ``ConstantStepSize`` run, with gradients still matching finite
-    differences. ``ConstantStepSize`` itself remains unclamped -- an
-    explicit ``dt0 > tau`` still raises.
+  - Delays shorter than a timestep include the current-trial interpolation
+    derivative in the Newton Jacobian.
+  - Adaptive and fixed step-size controllers both match the analytic shift
+    without a delay-based step cap, with gradients matching finite differences.
 """
 
 import diffrax
@@ -99,7 +96,13 @@ def test_delay_line_matches_analytic_shift(two_delay_lines_netlist):
     t0, t1, dt0 = 0.0, 10e-12, 1e-14
     ts = jnp.linspace(t0, t1, 400)
     sol = run_transient(
-        t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=diffrax.SaveAt(ts=ts), max_steps=2000, throw=True,
+        t0=t0,
+        t1=t1,
+        dt0=dt0,
+        y0=y0,
+        saveat=diffrax.SaveAt(ts=ts),
+        max_steps=2000,
+        throw=True,
     )
 
     def complex_at(idx):
@@ -168,7 +171,13 @@ def test_delay_line_gradient_matches_fd():
         new_groups["delay"] = new_group
 
         sol = run_transient(
-            t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=diffrax.SaveAt(ts=ts), max_steps=2000, throw=True,
+            t0=t0,
+            t1=t1,
+            dt0=dt0,
+            y0=y0,
+            saveat=diffrax.SaveAt(ts=ts),
+            max_steps=2000,
+            throw=True,
             args=(new_groups, sys_size),
         )
         v_out = sol.ys[0, idx_out] + 1j * sol.ys[0, idx_out + sys_size]
@@ -182,8 +191,8 @@ def test_delay_line_gradient_matches_fd():
     assert grad_val == pytest.approx(fd, rel=0.1)
 
 
-def test_delay_shorter_than_dt_raises():
-    """tau < dt must be rejected -- the history buffer can't resolve it."""
+def test_delay_shorter_than_dt_is_supported():
+    """A sub-step delay uses the current trial value and its Jacobian."""
     models_map = {
         "source": OpticalSourcePulse,
         "delay": OpticalDelayLine,
@@ -209,21 +218,24 @@ def test_delay_shorter_than_dt_raises():
     y0 = linear_strat.solve_dc(groups, jnp.zeros(sys_size * 2, dtype=jnp.float64))
     run_transient = setup_transient(groups, linear_strat)
 
-    with pytest.raises(Exception, match="tau < dt"):
-        run_transient(
-            t0=0.0, t1=5e-12, dt0=1e-14, y0=y0,
-            saveat=diffrax.SaveAt(ts=jnp.array([4e-12])), max_steps=1000, throw=True,
-        )
+    sol = run_transient(
+        t0=0.0,
+        t1=5e-12,
+        dt0=1e-14,
+        y0=y0,
+        saveat=diffrax.SaveAt(ts=jnp.array([4e-12])),
+        max_steps=1000,
+        throw=True,
+    )
+    assert sol.result == diffrax.RESULTS.successful
+    assert jnp.all(jnp.isfinite(sol.ys))
 
 
 def test_delay_line_adaptive_matches_analytic_shift(two_delay_lines_netlist):
     """PIDController + delay must match the same analytic shift as ConstantStepSize.
 
-    The proposed step is proactively clamped to the smallest active tau (here
-    tau1=1e-12), so ``num_accepted_steps`` should be well above the bare
-    minimum ``(t1 - t0) / max(tau1, tau2)`` -- confirming the clamp is
-    actually exercised rather than PIDController's own tolerances happening
-    to already keep dt below tau everywhere.
+    The controller is free to take steps longer than the smallest delay;
+    current-step interpolation and its Jacobian must retain accuracy.
     """
     net_dict, models_map, tau1, tau2, length1, length2 = two_delay_lines_netlist
 
@@ -235,12 +247,16 @@ def test_delay_line_adaptive_matches_analytic_shift(two_delay_lines_netlist):
     t0, t1 = 0.0, 10e-12
     ts = jnp.linspace(t0, t1, 400)
     sol = run_transient(
-        t0=t0, t1=t1, dt0=1e-14, y0=y0, saveat=diffrax.SaveAt(ts=ts),
+        t0=t0,
+        t1=t1,
+        dt0=1e-14,
+        y0=y0,
+        saveat=diffrax.SaveAt(ts=ts),
         stepsize_controller=diffrax.PIDController(rtol=1e-4, atol=1e-6),
-        max_steps=20000, throw=True,
+        max_steps=20000,
+        throw=True,
     )
     assert sol.result == diffrax.RESULTS.successful
-    assert sol.stats["num_accepted_steps"] > (t1 - t0) / max(tau1, tau2)
 
     def complex_at(idx):
         return sol.ys[:, idx] + 1j * sol.ys[:, idx + sys_size]
@@ -275,13 +291,23 @@ def test_delay_line_adaptive_matches_constant_step(two_delay_lines_netlist):
     ts = jnp.linspace(t0, t1, 400)
 
     sol_adaptive = run_transient(
-        t0=t0, t1=t1, dt0=1e-14, y0=y0, saveat=diffrax.SaveAt(ts=ts),
+        t0=t0,
+        t1=t1,
+        dt0=1e-14,
+        y0=y0,
+        saveat=diffrax.SaveAt(ts=ts),
         stepsize_controller=diffrax.PIDController(rtol=1e-4, atol=1e-6),
-        max_steps=20000, throw=True,
+        max_steps=20000,
+        throw=True,
     )
     sol_constant = run_transient(
-        t0=t0, t1=t1, dt0=1e-14, y0=y0, saveat=diffrax.SaveAt(ts=ts),
-        max_steps=2000, throw=True,
+        t0=t0,
+        t1=t1,
+        dt0=1e-14,
+        y0=y0,
+        saveat=diffrax.SaveAt(ts=ts),
+        max_steps=2000,
+        throw=True,
     )
 
     assert jnp.max(jnp.abs(sol_adaptive.ys - sol_constant.ys)) < 5e-4
@@ -341,8 +367,15 @@ def test_delay_line_gradient_matches_fd_adaptive():
         new_groups["delay"] = new_group
 
         sol = run_transient(
-            t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=diffrax.SaveAt(ts=ts), max_steps=5000, throw=True,
-            args=(new_groups, sys_size), stepsize_controller=controller,
+            t0=t0,
+            t1=t1,
+            dt0=dt0,
+            y0=y0,
+            saveat=diffrax.SaveAt(ts=ts),
+            max_steps=5000,
+            throw=True,
+            args=(new_groups, sys_size),
+            stepsize_controller=controller,
         )
         v_out = sol.ys[0, idx_out] + 1j * sol.ys[0, idx_out + sys_size]
         return jnp.abs(v_out) ** 2
@@ -366,8 +399,13 @@ def test_undelayed_circuit_unaffected(simple_lrc_netlist):
     run_transient = setup_transient(groups, linear_strat)
 
     sol = run_transient(
-        t0=0.0, t1=1e-8, dt0=1e-10, y0=y0, saveat=diffrax.SaveAt(ts=jnp.linspace(0, 1e-8, 20)),
-        max_steps=5000, throw=True,
+        t0=0.0,
+        t1=1e-8,
+        dt0=1e-10,
+        y0=y0,
+        saveat=diffrax.SaveAt(ts=jnp.linspace(0, 1e-8, 20)),
+        max_steps=5000,
+        throw=True,
     )
     assert jnp.all(jnp.isfinite(sol.ys))
 
@@ -435,6 +473,4 @@ def test_delay_line_fdomain_ac_sweep():
         f"Magnitude error: {jnp.max(jnp.abs(jnp.abs(S21) - jnp.abs(S21_analytic))):.2e}"
     )
     phase_err = jnp.angle(S21 * jnp.conj(S21_analytic))
-    assert jnp.max(jnp.abs(phase_err)) < 1e-6, (
-        f"Phase error: {jnp.max(jnp.abs(phase_err)):.2e} rad"
-    )
+    assert jnp.max(jnp.abs(phase_err)) < 1e-6, f"Phase error: {jnp.max(jnp.abs(phase_err)):.2e} rad"

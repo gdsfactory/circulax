@@ -64,6 +64,7 @@ consumes the fitted `SSModel` to create simulation-ready components.
 | `rational_component` | Time-domain DAE component from SSModel | circulax | S-param pipeline |
 | `rational_fdomain_component` | Fdomain oracle from SSModel (test reference) | circulax | — |
 | `rational_delay_component` | Fdomain composite: delay + rational cascade | circulax | `rational_component` |
+| `TransmissionLine` | Exact solver-independent reference-plane delay | circulax | fixed-delay solver contract |
 
 ---
 
@@ -109,6 +110,16 @@ remainder approximates `exp(+jωδ)` — a non-causal advance. AAA fits this wit
 RHP poles, and `_collect_poles` flips them to LHP, destroying the fit. The
 `fit_with_delay` metadata includes `pole_flips` count as a tripwire.
 
+### Solver-independent delay realization
+
+`rational_delay_component` remains the direct AC/HB oracle. For DC, transient,
+AC, and HB agreement, place a matched `TransmissionLine(tau=tau_i/2)` between
+each external port and port `i` of `rational_component`. This realizes
+`S_full = P @ S_reduced @ P` exactly while retaining the pole-count reduction
+from fitting only the de-embedded response. The line uses delayed wave-state
+constraints, so an ideal lossless through path never needs a singular S-to-Y
+conversion.
+
 ### Real-pair block form (future)
 
 `_ss_to_real_pairs` would convert conjugate pole pairs to 2×2 real blocks,
@@ -124,7 +135,8 @@ pay 2× via `is_complex=True`. Documented as a future optimization.
 | `vfitax/sparam.py` | vfitax | New — delay de-embedding and S-parameter fit pipeline |
 | `vfitax/tests/unit/test_sparam.py` | vfitax | New — round-trip, pole reduction, tripwire tests |
 | `circulax/components/rational.py` | circulax | New — SSModel → component factories |
-| `tests/test_rational.py` | circulax | New — 15 tests (oracle, DC, transient, delay phase-slope) |
+| `tests/test_delay_contract.py` | circulax | New — analysis-independent fixed-delay contract tests |
+| `tests/test_rational.py` | circulax | Updated — includes exact-line/reduced-core equivalence |
 | `circulax/components/__init__.py` | circulax | Updated exports |
 | `circulax/__init__.py` | circulax | Updated imports |
 
@@ -137,6 +149,7 @@ pay 2× via `is_complex=True`. Documented as a future optimization.
 pytest vfitax/tests/ -v   # 95 passed
 
 # circulax (feat-time-delay worktree)
-pytest tests/test_rational.py -v   # 15 passed
-pytest tests/ -v                   # 291 passed, 16 skipped, 0 failures
+pytest tests/test_delay_contract.py -v
+pytest tests/test_delay.py -v
+pytest tests/test_fdomain.py tests/test_rational.py -v
 ```

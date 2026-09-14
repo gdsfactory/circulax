@@ -1,4 +1,5 @@
 """Tests for rational component factory: SSModel → circulax @component."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ import numpy as np
 import pytest
 
 from circulax.compiler import compile_netlist
+from circulax.components.electronic import TransmissionLine
 from circulax.components.rational import rational_component, rational_delay_component, rational_fdomain_component
 from circulax.solvers import analyze_circuit, setup_ac_sweep, setup_transient
 
@@ -109,11 +111,9 @@ class TestRationalComponent:
         y = jnp.concatenate([v, x])
 
         f_vec, _ = Comp.solver_call(0.0, y, Comp())
-        np.testing.assert_allclose(np.asarray(f_vec[n_p:]), 0.0, atol=1e-6,
-                                   err_msg="State equations not zero at consistent point")
+        np.testing.assert_allclose(np.asarray(f_vec[n_p:]), 0.0, atol=1e-6, err_msg="State equations not zero at consistent point")
         i_expected = H0 @ np.asarray(v)
-        np.testing.assert_allclose(np.asarray(f_vec[:n_p]), i_expected, rtol=1e-8,
-                                   err_msg="Port current != H(0) @ v")
+        np.testing.assert_allclose(np.asarray(f_vec[:n_p]), i_expected, rtol=1e-8, err_msg="Port current != H(0) @ v")
 
     def test_origin_pole_raises(self):
         bad_ss = SimpleNamespace(
@@ -158,6 +158,7 @@ class TestFourWayAgreement:
     @pytest.fixture
     def setup(self):
         from circulax.components.electronic import Resistor
+
         ss = _make_test_ss()
         z0 = 50.0
 
@@ -211,8 +212,9 @@ class TestFourWayAgreement:
         S_td = run_ac_td(y_dc_td, freqs)
         S_fd = run_ac_fd(y_dc_fd, freqs)
 
-        np.testing.assert_allclose(np.asarray(S_td), np.asarray(S_fd), atol=1e-8,
-                                   err_msg="Time-domain vs fdomain component disagree")
+        np.testing.assert_allclose(
+            np.asarray(S_td), np.asarray(S_fd), atol=1e-8, err_msg="Time-domain vs fdomain component disagree"
+        )
 
     def test_ac_sweep_matches_pole_residue_oracle(self, setup):
         """S-params from AC sweep recover the original Y data after de-embedding port termination."""
@@ -229,8 +231,7 @@ class TestFourWayAgreement:
         for k in range(len(freqs)):
             Y_circuit = np.asarray(s_to_y(jnp.array(S_td[k]), z0=z0))
             Y_dut = Y_circuit - np.eye(2) / z0
-            np.testing.assert_allclose(Y_dut, Y_ref[k], rtol=1e-6,
-                                       err_msg=f"Y mismatch at f={float(freqs[k]):.2e}")
+            np.testing.assert_allclose(Y_dut, Y_ref[k], rtol=1e-6, err_msg=f"Y mismatch at f={float(freqs[k]):.2e}")
 
     def test_ac_sweep_finite(self, setup):
         ss, run_ac_td, y_dc_td, run_ac_fd, y_dc_fd = setup
@@ -294,8 +295,7 @@ class TestTransientStability:
 
         dut_p1_node = pmap["DUT,p1"]
         v1_sim = float(sol.ys[0, dut_p1_node])
-        np.testing.assert_allclose(v1_sim, v1_expected, rtol=0.01,
-                                   err_msg="Transient did not hold at DC divider value")
+        np.testing.assert_allclose(v1_sim, v1_expected, rtol=0.01, err_msg="Transient did not hold at DC divider value")
 
 
 def _measure_s_matrix(Comp, freqs, z0=50.0):
@@ -346,8 +346,7 @@ class TestRationalDelayComponent:
         gd_nodelay = _group_delay_from_s(S_nodelay[:, 0, 1], freqs)
         excess = np.median(gd_delay - gd_nodelay)
 
-        np.testing.assert_allclose(excess, tau_val, rtol=0.03,
-                                   err_msg=f"S21 excess group delay {excess:.3e} != tau {tau_val:.3e}")
+        np.testing.assert_allclose(excess, tau_val, rtol=0.03, err_msg=f"S21 excess group delay {excess:.3e} != tau {tau_val:.3e}")
 
     def test_zero_delay_matches_rational_only(self):
         """With tau=0, the composite should match rational_fdomain_component."""
@@ -380,17 +379,78 @@ class TestRationalDelayComponent:
         gd_s11 = _group_delay_from_s(S_delay[:, 0, 0], freqs)
         gd_s11_ref = _group_delay_from_s(S_nodelay[:, 0, 0], freqs)
         excess_s11 = np.median(gd_s11 - gd_s11_ref)
-        np.testing.assert_allclose(excess_s11, tau1, rtol=0.05,
-                                   err_msg=f"S11 excess GD {excess_s11:.3e} != tau1 {tau1:.3e}")
+        np.testing.assert_allclose(excess_s11, tau1, rtol=0.05, err_msg=f"S11 excess GD {excess_s11:.3e} != tau1 {tau1:.3e}")
 
         gd_s22 = _group_delay_from_s(S_delay[:, 1, 1], freqs)
         gd_s22_ref = _group_delay_from_s(S_nodelay[:, 1, 1], freqs)
         excess_s22 = np.median(gd_s22 - gd_s22_ref)
-        np.testing.assert_allclose(excess_s22, tau2, rtol=0.05,
-                                   err_msg=f"S22 excess GD {excess_s22:.3e} != tau2 {tau2:.3e}")
+        np.testing.assert_allclose(excess_s22, tau2, rtol=0.05, err_msg=f"S22 excess GD {excess_s22:.3e} != tau2 {tau2:.3e}")
 
         gd_s21 = _group_delay_from_s(S_delay[:, 0, 1], freqs)
         gd_s21_ref = _group_delay_from_s(S_nodelay[:, 0, 1], freqs)
         excess_s21 = np.median(gd_s21 - gd_s21_ref)
-        np.testing.assert_allclose(excess_s21, (tau1 + tau2) / 2, rtol=0.05,
-                                   err_msg=f"S21 excess GD {excess_s21:.3e} != (tau1+tau2)/2")
+        np.testing.assert_allclose(
+            excess_s21, (tau1 + tau2) / 2, rtol=0.05, err_msg=f"S21 excess GD {excess_s21:.3e} != (tau1+tau2)/2"
+        )
+
+    def test_exact_lines_plus_reduced_model_match_fdomain_embedding(self):
+        """External exact delay lines preserve the low-pole model's terminal S matrix.
+
+        ``rational_delay_component`` is the direct frequency-domain oracle.
+        The expanded circuit puts a bidirectional line of delay ``tau_i/2``
+        between each external reference plane and the same rational model.
+        Agreement proves that delay de-embedding can reduce the pole count
+        without giving up a solver-independent exact delay representation.
+        """
+        ss = _make_test_ss()
+        z0 = 50.0
+        tau = np.array([0.4e-9, 0.7e-9])
+        reduced = rational_component(ss, name="ReducedCore", z0=z0)
+        embedded = rational_delay_component(ss, tau, name="EmbeddedOracle", z0=z0)
+
+        expanded_net = {
+            "instances": {
+                "CORE": {"component": "core", "settings": {}},
+                "L1": {"component": "line", "settings": {"tau": tau[0] / 2, "z0": z0}},
+                "L2": {"component": "line", "settings": {"tau": tau[1] / 2, "z0": z0}},
+            },
+            "connections": {
+                "L1,p2": "CORE,p1",
+                "L2,p2": "CORE,p2",
+            },
+            "ports": {"p1": "L1,p1", "p2": "L2,p1"},
+        }
+        groups_x, size_x, ports_x = compile_netlist(expanded_net, {"core": reduced, "line": TransmissionLine})
+        solver_x = analyze_circuit(groups_x, size_x, backend="dense", is_complex=True)
+        dc_x = solver_x.solve_dc(groups_x, jnp.zeros(2 * size_x))
+        ac_x = setup_ac_sweep(
+            groups_x,
+            size_x,
+            [ports_x["L1,p1"], ports_x["L2,p1"]],
+            z0=z0,
+            is_complex=True,
+        )
+
+        oracle_net = {
+            "instances": {"DUT": {"component": "dut", "settings": {}}},
+            "connections": {},
+            "ports": {"p1": "DUT,p1", "p2": "DUT,p2"},
+        }
+        groups_o, size_o, ports_o = compile_netlist(oracle_net, {"dut": embedded})
+        solver_o = analyze_circuit(groups_o, size_o, backend="dense", is_complex=True)
+        dc_o = solver_o.solve_dc(groups_o, jnp.zeros(2 * size_o))
+        ac_o = setup_ac_sweep(
+            groups_o,
+            size_o,
+            [ports_o["DUT,p1"], ports_o["DUT,p2"]],
+            z0=z0,
+            is_complex=True,
+        )
+
+        freqs = jnp.array([1e7, 3e8, 1e9, 4e9])
+        np.testing.assert_allclose(
+            np.asarray(ac_x(dc_x, freqs)),
+            np.asarray(ac_o(dc_o, freqs)),
+            rtol=2e-8,
+            atol=2e-8,
+        )

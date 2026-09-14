@@ -138,7 +138,6 @@ def _circuit_loop(
     init_state: CircuitState,
     inner_while_loop,
     outer_while_loop,
-    min_tau: FloatScalarLike | None = None,
 ) -> CircuitState:
     """Core integration loop (no events, no dense output, no progress meter)."""
     # Pre-compute t1 - 100 ULPs for step clipping
@@ -168,7 +167,10 @@ def _circuit_loop(
         hist_t0 = init_state.hist_t.at[0].set(t0)
         hist_y0 = init_state.hist_y.at[0].set(init_state.y)
         init_state = eqx.tree_at(
-            lambda s: (s.hist_t, s.hist_y), init_state, (hist_t0, hist_y0), is_leaf=_is_none,
+            lambda s: (s.hist_t, s.hist_y),
+            init_state,
+            (hist_t0, hist_y0),
+            is_leaf=_is_none,
         )
 
     # ------------------------------------------------------------------
@@ -231,9 +233,6 @@ def _circuit_loop(
 
         tprev = jnp.minimum(tprev, t1)
         tnext = _clip_to_end(tprev, tnext, t1, t1_clip_floor, keep_step)
-        if min_tau is not None:
-            tnext = jnp.minimum(tnext, tprev + min_tau)
-
         keep = lambda a, b: jnp.where(keep_step, a, b)
         y = jtu.tree_map(keep, y, state.y)
         solver_state = jtu.tree_map(keep, solver_state, state.solver_state)
@@ -381,7 +380,6 @@ def circuit_diffeqsolve(
     throw: bool = True,
     checkpoints: int | None = None,
     record_history: bool = False,
-    min_tau: RealScalarLike | None = None,
 ) -> Solution:
     """Stripped-down :func:`diffrax.diffeqsolve` for circuit simulation.
 
@@ -403,17 +401,6 @@ def circuit_diffeqsolve(
     ``hist_t``/``hist_y`` parameters). No-op cost when ``False`` — the
     circuit has no delayed components.
 
-    ``min_tau``, when given, is a hard cap on the proposed step size
-    (``tnext - tprev``) at every iteration, so an adaptive
-    ``stepsize_controller`` can never propose ``dt`` larger than the smallest
-    active delay across the circuit's delayed components — mirroring how
-    ``t1`` is already clamped. This is a proactive optimization so
-    ``assembly.py``'s ``tau >= dt`` guard (the actually-enforced invariant)
-    should essentially never fire under adaptive control; it is a no-op when
-    ``None``. Gradient is intentionally stopped through ``min_tau`` itself
-    (it controls the step schedule, not a physical quantity feeding the
-    loss) — the delayed values read from the history buffer remain fully
-    differentiable.
     """
     # ------------------------------------------------------------------
     # dtype promotion for times (same logic as diffrax)
@@ -427,15 +414,6 @@ def circuit_diffeqsolve(
     t0 = jnp.asarray(t0, dtype=time_dtype)
     t1 = jnp.asarray(t1, dtype=time_dtype)
     dt0 = jnp.asarray(dt0, dtype=time_dtype)
-
-    if min_tau is not None:
-        # Schedule control, not a physical quantity feeding the loss -- stop
-        # gradient here, same convention diffrax's own PIDController uses for
-        # its step-size-control inputs (e.g. dt0). Shrink by a small relative
-        # margin so a reconstructed `tnext - tprev` can't round up past
-        # `min_tau` and trip assembly.py's strict `tau < dt` guard.
-        min_tau = jax.lax.stop_gradient(jnp.asarray(min_tau, dtype=time_dtype))
-        min_tau = min_tau * (1 - 100 * jnp.finfo(time_dtype).eps)
 
     # Cast save ts to the same dtype
     def _cast_ts(saveat):
@@ -514,8 +492,6 @@ def circuit_diffeqsolve(
     error_order = solver.error_order(terms)
     tnext, controller_state = stepsize_controller.init(terms, t0, t1, y0, dt0, args, solver.func, error_order)
     tnext = jnp.minimum(tnext, t1)
-    if min_tau is not None:
-        tnext = jnp.minimum(tnext, t0 + min_tau)
     solver_state = solver.init(terms, t0, tnext, y0, args)
 
     # ------------------------------------------------------------------
@@ -592,7 +568,6 @@ def circuit_diffeqsolve(
         init_state=init_state,
         inner_while_loop=inner_while_loop,
         outer_while_loop=outer_while_loop,
-        min_tau=min_tau,
     )
 
     # ------------------------------------------------------------------
