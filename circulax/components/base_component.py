@@ -14,7 +14,7 @@ JAX-traceable leaves. The resulting classes expose two entry points:
 Example::
 
     @component(ports=("p1", "p2"))
-    def Resistor(signals: Signals, s: States, R: float = 1.0):
+    def Resistor(signals: Signals, R: float = 1.0):
         i = (signals.p1 - signals.p2) / R
         return {"p1": i, "p2": -i}, {}
 
@@ -24,10 +24,10 @@ Example::
 """
 
 import inspect
-from collections import namedtuple
-from typing import Any, ClassVar, Protocol, runtime_checkable
+from typing import Any, ClassVar
 
 import equinox as eqx
+import equinox.internal as eqxi
 import jax
 import jax.numpy as jnp
 from jax import Array
@@ -36,28 +36,56 @@ PhysicsReturn = tuple[dict[str, Array], dict[str, Array]]
 
 
 # ---------------------------------------------------------------------------
-# Protocols
+# Component variable view
 # ---------------------------------------------------------------------------
-@runtime_checkable
-class Signals(Protocol):
-    """Protocol representing the port voltage signals passed to a component's physics function.
+class Signals:
+    """Unified view of a component's ports and internal state variables.
 
-    Attributes are accessed by port name (e.g. ``signals.p1``), backed by a
-    namedtuple constructed from the component's ``ports`` declaration.
+    ``signals.name`` reads the value at the current analysis time, while
+    ``signals.at_delay(tau).name`` reads it at ``t - tau``.  The analysis
+    supplies the delayed values in its natural representation (history
+    interpolation for transient, phase rotation for AC/HB, and identity for
+    DC), so component physics stays independent of the solver.
     """
 
-    def __getattr__(self, name: str) -> Any: ...
+    __slots__ = ("_delay_recorder", "_delayed", "_indices", "_names", "_values")
 
+    def __init__(
+        self,
+        values: Any,
+        names: tuple[str, ...],
+        *,
+        delayed: Any | None = None,
+        delay_recorder: list[Any] | None = None,
+    ) -> None:
+        """Create a named view over current and optionally delayed values."""
+        self._values = values
+        self._names = names
+        self._indices = {name: i for i, name in enumerate(names)}
+        self._delayed = values if delayed is None else delayed
+        self._delay_recorder = delay_recorder
 
-@runtime_checkable
-class States(Protocol):
-    """Protocol representing the internal state variables passed to a component's physics function.
+    def __getattr__(self, name: str) -> Any:
+        try:
+            index = self._indices[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+        return self._values[index]
 
-    Attributes are accessed by state name (e.g. ``s.i_L``), backed by a
-    namedtuple constructed from the component's ``states`` declaration.
-    """
+    def at_delay(self, delay: Any) -> "Signals":
+        """Return component-local values at ``t - delay``.
 
-    def __getattr__(self, name: str) -> Any: ...
+        Delays are causal durations and must therefore be non-negative.  The
+        current implementation supports one unique delay per component.
+        """
+        delay = jnp.asarray(delay)
+        if delay.ndim != 0:
+            msg = "circulax delay: signals.at_delay(...) expects a scalar duration."
+            raise ValueError(msg)
+        delay = eqxi.error_if(delay, delay < 0, "circulax delay: delays must be non-negative.")
+        if self._delay_recorder is not None:
+            self._delay_recorder.append(delay)
+        return Signals(self._delayed, self._names)
 
 
 # ---------------------------------------------------------------------------
@@ -77,10 +105,6 @@ class CircuitComponent(eqx.Module):
             e.g. ``("i_L",)``. Empty for purely algebraic components.
         _uses_time: ``True`` for components decorated with :func:`source`
             whose physics function accepts a ``t`` argument.
-        _VarsType_P: Namedtuple type for unpacking port voltages from a
-            flat array. ``None`` if the component has no ports.
-        _VarsType_S: Namedtuple type for unpacking state variables from a
-            flat array. ``None`` if the component has no states.
         _n_ports: Number of ports, cached to avoid repeated ``len`` calls
             in the hot path.
         _fast_physics: Static closure over the user-defined physics function,
@@ -95,19 +119,18 @@ class CircuitComponent(eqx.Module):
     _is_fdomain: ClassVar[bool] = False
     _holomorphic: ClassVar[bool] = False
 
-    _VarsType_P: ClassVar[Any] = None
-    _VarsType_S: ClassVar[Any] = None
     _n_ports: ClassVar[int] = 0
 
     _fast_physics: ClassVar[Any] = None
 
+    @staticmethod
+    def delay_values(params: Any) -> tuple[Any, ...]:  # noqa: ARG004
+        """Return inline delays used by a generated component, if any."""
+        return ()
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Initialise namedtuple types and cached port count for each new subclass."""
+        """Cache the port count for each generated subclass."""
         super().__init_subclass__(**kwargs)
-        if cls.ports:
-            cls._VarsType_P = namedtuple("Ports", cls.ports)  # noqa: PYI024
-        if cls.states:
-            cls._VarsType_S = namedtuple("States", cls.states)  # noqa: PYI024
         cls._n_ports = len(cls.ports)
 
     def __call__(
@@ -140,27 +163,16 @@ class CircuitComponent(eqx.Module):
             resistive (``f``) and reactive (``q``) contributions respectively.
 
         """
-        hist = kwargs.pop("hist", None)
-
         if y is None and not kwargs:
             is_scalar = isinstance(t, (int, float)) or (hasattr(t, "shape") and t.shape == ())
             if not is_scalar:
                 y = t
                 t = 0.0
 
-        if y is not None:
-            n_p = self._n_ports
-            signals = self._VarsType_P(*y[:n_p]) if self._VarsType_P else ()
-            s = self._VarsType_S(*y[n_p:]) if self._VarsType_S else ()
-        else:
+        values = y if y is not None else [kwargs.get(name, 0.0) for name in self.ports + self.states]
 
-            def _get_args(names: tuple[str, ...]) -> list[Any]:
-                return [kwargs.get(name, 0.0) for name in names]
-
-            signals = self._VarsType_P(*_get_args(self.ports)) if self._VarsType_P else ()
-            s = self._VarsType_S(*_get_args(self.states)) if self._VarsType_S else ()
-
-        return self._invoke_physics(signals, s, t, self, hist)
+        signals = Signals(values, self.ports + self.states)
+        return self._invoke_physics(signals, t, self)
 
     @classmethod
     def solver_call(
@@ -185,11 +197,10 @@ class CircuitComponent(eqx.Module):
                 ``{"R": 100.0}`` or an object (e.g. the component instance
                 itself) whose attributes match the parameter names. Must not
                 be a raw scalar.
-            hist: Delayed local-variable vector of shape
+            hist: Internally supplied delayed local-variable vector of shape
                 ``(n_ports + n_states,)``, i.e. this instance's ports followed
                 by its internal states, evaluated at ``t - tau``. Only
-                consumed by components declaring a ``hist`` argument (see
-                :func:`component`/:func:`source`); ``None`` otherwise.
+                exposed through ``signals.at_delay(...)``; ``None`` otherwise.
 
         Returns:
             A two-tuple ``(f_vec, q_vec)`` of JAX arrays, each of shape
@@ -209,10 +220,8 @@ class CircuitComponent(eqx.Module):
     def _invoke_physics(
         self,
         signals: Any,
-        s: Any,
         t: float,
         params: Any,
-        hist: Any = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Trampoline used by ``__call__`` to dispatch to the user physics function.
 
@@ -221,13 +230,9 @@ class CircuitComponent(eqx.Module):
         arguments to the original decorated function.
 
         Args:
-            signals: Namedtuple of port voltages.
-            s: Namedtuple of state variable values.
+            signals: Unified view of current port and internal-state values.
             t: Current simulation time.
             params: Parameter container (instance or dict).
-            hist: Delayed local-variable namedtuple/tuple (ports followed by
-                internal states), or ``None``. Only consumed by components
-                declaring a ``hist`` argument.
 
         Returns:
             A two-tuple ``(f, q)`` of physics dicts.
@@ -285,7 +290,7 @@ def _jaxpr_has_non_holomorphic(jaxpr: Any) -> set[str]:
 # ---------------------------------------------------------------------------
 # The Builder
 # ---------------------------------------------------------------------------
-def _build_component(  # noqa: C901
+def _build_component(  # noqa: C901, PLR0912, PLR0915
     fn: Any,
     ports: tuple[str, ...],
     states: tuple[str, ...],
@@ -309,9 +314,8 @@ def _build_component(  # noqa: C901
 
     Args:
         fn: The decorated physics function. Its signature must begin with
-            ``(signals, s)`` for :func:`component` or ``(signals, s, t)``
-            for :func:`source`, followed by any number of keyword-only
-            parameters with defaults.
+            ``signals`` for :func:`component` or ``(signals, t)`` for
+            :func:`source`, followed by parameters with defaults.
         ports: Ordered tuple of port names matching the netlist connections.
         states: Ordered tuple of internal state variable names.
         uses_time: ``True`` when compiling a :func:`source` component whose
@@ -337,7 +341,13 @@ def _build_component(  # noqa: C901
             not in ``ports``.
 
     """
-    reserved = ("signals", "s", "t") if uses_time else ("signals", "s")
+    overlap = set(ports) & set(states)
+    if overlap:
+        names = ", ".join(sorted(overlap))
+        msg = f"{fn.__name__}: ports and states must have distinct names; duplicated: {names}"
+        raise ValueError(msg)
+
+    reserved = ("signals", "t") if uses_time else ("signals",)
 
     sig = inspect.signature(fn)
     params = list(sig.parameters.values())
@@ -363,21 +373,6 @@ def _build_component(  # noqa: C901
     if has_init_arg:
         param_specs = param_specs[1:]
 
-    # Optional delay-history slot. When the physics function declares ``hist``
-    # as the next non-reserved positional argument (after ``init``, if
-    # present), the framework injects the component's own local variables
-    # (ports followed by states) evaluated at ``t - tau``, where ``tau`` is
-    # computed by a ``@<Component>.delay``-registered function. Requires ``ports`` to be
-    # non-empty. See ``circulax.solvers.assembly`` for how the delayed read
-    # is computed (a fixed-size accepted-step history buffer + ``jnp.interp``,
-    # vmapped per-instance since ``tau`` may vary across instances).
-    has_hist_arg = bool(param_specs) and param_specs[0].name == "hist"
-    if has_hist_arg:
-        param_specs = param_specs[1:]
-        if not ports:
-            msg = f"{fn.__name__}: 'hist' argument requires non-empty ports."
-            raise TypeError(msg)
-
     if not uses_time:
         for p in param_specs:
             if p.name == "t":
@@ -389,24 +384,17 @@ def _build_component(  # noqa: C901
             msg = f"Parameter '{p.name}' must have a default."
             raise TypeError(msg)
 
-    n_p = len(ports)
     full_keys = ports + states
-    _dummy_P = namedtuple("Ports", ports)(*([0.0] * len(ports))) if ports else ()  # noqa: PYI024
-    _dummy_S = namedtuple("States", states)(*([0.0] * len(states))) if states else ()  # noqa: PYI024
-    _dummy_H = namedtuple("History", full_keys)(*([0.0] * len(full_keys)))  # noqa: PYI024
+    _dummy_signals = Signals([0.0] * len(full_keys), full_keys)
     _defaults = {p.name: p.default for p in param_specs}
 
-    # Dry-run only validates non-injected args; ``init``/``hist`` will be
-    # injected by the closure once registered via ``.setup``/``.delay`` —
-    # pass structural placeholders (empty dict / zero ports) here instead.
-    _dry_positional = [_dummy_P, _dummy_S]
+    # Dry-run validates ordinary arguments. ``init`` is registered only after
+    # class construction, so setup-backed components receive a placeholder.
+    _dry_positional = [_dummy_signals]
     if uses_time:
         _dry_positional.append(0.0)
     if has_init_arg:
         _dry_positional.append({})
-    if has_hist_arg:
-        _dry_positional.append(_dummy_H)
-
     try:
         fn(*_dry_positional, **_defaults)
     except Exception as exc:
@@ -420,9 +408,6 @@ def _build_component(  # noqa: C901
 
     _param_names = tuple(p.name for p in param_specs)
     _user_fn = fn
-    _PortsType = namedtuple("Ports", ports) if ports else None  # noqa: PYI024
-    _StatesType = namedtuple("States", states) if states else None  # noqa: PYI024
-    _HistoryType = namedtuple("History", full_keys)  # noqa: PYI024
 
     # Mutable cell for the analog-init function — populated by the
     # ``@<Component>.setup`` classmethod after class construction. The
@@ -458,37 +443,12 @@ def _build_component(  # noqa: C901
         sub_kw = {k: v for k, v in kw.items() if k in accepts}
         return setup_fn(**sub_kw)
 
-    # Mutable cell for the delay function — populated by the
-    # ``@<Component>.delay`` classmethod after class construction, mirroring
-    # ``_setup_cell`` above.
-    _tau_cell: list[Any] = [None]
-
-    def _resolve_tau(kw: dict[str, Any]) -> Any:
-        """Run the registered delay fn with the current params, returning tau."""
-        tau_fn = _tau_cell[0]
-        if tau_fn is None:
-            msg = (
-                f"{fn.__name__}: physics function declares a 'hist' argument "
-                f"but no delay function has been registered. "
-                f"Use ``@{fn.__name__}.delay`` to register one."
-            )
-            raise RuntimeError(msg)
-        tau_sig = inspect.signature(tau_fn)
-        has_var_kw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in tau_sig.parameters.values())
-        if has_var_kw:
-            return tau_fn(**kw)
-        accepts = {p.name for p in tau_sig.parameters.values()}
-        sub_kw = {k: v for k, v in kw.items() if k in accepts}
-        return tau_fn(**sub_kw)
-
-    def _build_positional(signals: Any, s: Any, t: float, init_value: Any, hist_signals: Any) -> list[Any]:
-        positional = [signals, s]
+    def _build_positional(signals: Any, t: float, init_value: Any) -> list[Any]:
+        positional = [signals]
         if uses_time:
             positional.append(t)
         if has_init_arg:
             positional.append(init_value)
-        if has_hist_arg:
-            positional.append(hist_signals)
         return positional
 
     if len(full_keys) == 0:
@@ -501,16 +461,10 @@ def _build_component(  # noqa: C901
             t: float,
             hist: jax.Array | None = None,
         ) -> tuple[jax.Array, jax.Array]:
-            signals = _PortsType(*vars_vec[:n_p]) if _PortsType else ()
-            s = _StatesType(*vars_vec[n_p:]) if _StatesType else ()
             kw = {name: _extract_param(params, name) for name in _param_names}
             init_value = _resolve_init(kw) if has_init_arg else None
-            # hist is None outside the delay-aware solver path (e.g. the DC
-            # operating-point solve in circulax.solvers.linear, which has no
-            # history buffer yet) -- default to zero so those callers don't
-            # need to know about delayed components at all.
-            hist_signals = _HistoryType(*(hist if hist is not None else jnp.zeros_like(vars_vec))) if has_hist_arg else None
-            positional = _build_positional(signals, s, t, init_value, hist_signals)
+            signals = Signals(vars_vec, full_keys, delayed=vars_vec if hist is None else hist)
+            positional = _build_positional(signals, t, init_value)
             f_dict, q_dict = _user_fn(*positional, **kw)
             f_vals = [f_dict.get(k, 0.0) for k in full_keys]
             q_vals = [q_dict.get(k, 0.0) for k in full_keys]
@@ -521,30 +475,24 @@ def _build_component(  # noqa: C901
         def _invoke_physics(
             self: CircuitComponent,
             signals: Any,
-            s: Any,
             t: float,
             params: Any,
-            hist: Any = None,
         ) -> tuple[dict, dict]:
             kw = {name: _extract_param(params, name) for name in _param_names}
             init_value = _resolve_init(kw) if has_init_arg else None
-            hist_signals = _HistoryType(*(hist if hist is not None else [0.0] * len(full_keys))) if has_hist_arg else None
-            positional = _build_positional(signals, s, t, init_value, hist_signals)
+            positional = _build_positional(signals, t, init_value)
             return _user_fn(*positional, **kw)
     else:
 
         def _invoke_physics(
             self: CircuitComponent,
             signals: Any,
-            s: Any,
             t: float,
             params: Any,
-            hist: Any = None,
         ) -> tuple[dict, dict]:
             kw = {name: _extract_param(params, name) for name in _param_names}
             init_value = _resolve_init(kw) if has_init_arg else None
-            hist_signals = _HistoryType(*(hist if hist is not None else [0.0] * len(full_keys))) if has_hist_arg else None
-            positional = _build_positional(signals, s, t, init_value, hist_signals)
+            positional = _build_positional(signals, t, init_value)
             return _user_fn(*positional, **kw)
 
     annotations = {p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any) for p in param_specs}
@@ -600,7 +548,7 @@ def _build_component(  # noqa: C901
                 f"@{fn.__name__}.setup requires the physics function to declare "
                 f"an 'init' argument as the first non-reserved positional "
                 f"parameter. Add ``init`` to the signature, e.g. "
-                f"``def {fn.__name__}(signals, s, init, R=1.0): ...``"
+                f"``def {fn.__name__}(signals, init, R=1.0): ...``"
             )
             raise TypeError(msg)
         if _setup_cell[0] is not None:
@@ -617,45 +565,32 @@ def _build_component(  # noqa: C901
         cls_inner._setup_fn_ref = staticmethod(setup_fn)
         return cls_inner
 
-    def _register_delay(cls_inner: type, tau_fn: Any) -> type:
-        """Register a fixed-delay function on the component class.
-
-        Used as ``@<Component>.delay`` decorator. The registered function is
-        called with the component's own params (filtered to those it
-        declares) and must return the delay ``tau`` — the physics function
-        then receives ``hist`` as this instance's own port voltages at
-        ``t - tau``. Requires the physics function to declare ``hist`` as a
-        reserved argument (see :func:`_build_component`).
-
-        Returns ``cls_inner`` for decorator chaining.
-
-        Raises:
-            TypeError: physics function did not declare a ``hist`` arg.
-            RuntimeError: ``.delay`` was already registered on this class.
-
-        """
-        if not has_hist_arg:
-            msg = (
-                f"@{fn.__name__}.delay requires the physics function to declare "
-                f"a 'hist' argument (after 'init', if present). Add ``hist`` to "
-                f"the signature, e.g. ``def {fn.__name__}(signals, s, hist, "
-                f"length_um=100.0): ...``"
-            )
-            raise TypeError(msg)
-        if _tau_cell[0] is not None:
-            msg = f"@{fn.__name__}.delay is already registered. Re-register is intentionally rejected to catch typos."
-            raise RuntimeError(msg)
-        if not callable(tau_fn):
-            msg = f"@{fn.__name__}.delay expects a callable; got {type(tau_fn).__name__}"
-            raise TypeError(msg)
-        _tau_cell[0] = tau_fn
-        cls_inner._tau_fn_ref = staticmethod(tau_fn)
-        return cls_inner
+    def _delay_values(params: Any) -> tuple[Any, ...]:
+        """Evaluate physics with a recorder to discover inline delay reads."""
+        kw = {name: _extract_param(params, name) for name in _param_names}
+        init_value = _resolve_init(kw) if has_init_arg else None
+        values = jnp.zeros(len(full_keys))
+        recorded: list[Any] = []
+        signals = Signals(values, full_keys, delayed=values, delay_recorder=recorded)
+        positional = _build_positional(signals, 0.0, init_value)
+        _user_fn(*positional, **kw)
+        return tuple(recorded)
 
     def _tau_of(params: Any) -> Any:
-        """Compute tau for a single instance's params — vmapped by assembly.py over a group."""
-        kw = {name: _extract_param(params, name) for name in _param_names}
-        return _resolve_tau(kw)
+        """Infer one instance's delay from its ``signals.at_delay`` call."""
+        delays = _delay_values(params)
+        if not delays:
+            msg = f"{fn.__name__}: no signals.at_delay(...) call was found"
+            raise RuntimeError(msg)
+        first = delays[0]
+        if len(delays) > 1:
+            distinct = jnp.any(jnp.stack([delay != first for delay in delays[1:]]))
+            first = eqxi.error_if(
+                first,
+                distinct,
+                f"{fn.__name__}: multiple distinct delays are not supported; reuse one signals.at_delay(...) snapshot.",
+            )
+        return first
 
     namespace = {
         "__annotations__": annotations,
@@ -669,10 +604,7 @@ def _build_component(  # noqa: C901
         "_has_init_arg": has_init_arg,
         "_setup_fn_ref": None,
         "setup": classmethod(_register_setup),
-        "_has_hist_arg": has_hist_arg,
-        "_has_delay": has_hist_arg,
-        "_tau_fn_ref": None,
-        "delay": classmethod(_register_delay),
+        "delay_values": staticmethod(_delay_values),
         "tau_of": staticmethod(_tau_of),
         # Expose static/diff param name splits for _install_custom_jvp.
         "_static_param_names": tuple(sorted(_static_names)),
@@ -705,9 +637,9 @@ def component(
     """Decorator for defining a time-independent circuit component.
 
     Compiles the decorated physics function into a :class:`CircuitComponent`
-    subclass. The function must begin with ``(signals, s)`` followed by any
-    number of parameters with defaults, which become JAX-traceable Equinox
-    fields on the resulting class.
+    subclass. The function must begin with ``signals`` followed by parameters
+    with defaults, which become JAX-traceable Equinox fields on the resulting
+    class. Ports and internal states share the ``signals`` namespace.
 
     Args:
         ports: Ordered tuple of port names. Must match the connection keys
@@ -739,7 +671,7 @@ def component(
     Example::
 
         @component(ports=("p1", "p2"))
-        def Resistor(signals: Signals, s: States, R: float = 1.0):
+        def Resistor(signals: Signals, R: float = 1.0):
             i = (signals.p1 - signals.p2) / R
             return {"p1": i, "p2": -i}, {}
 
@@ -759,7 +691,7 @@ def source(
     """Decorator for defining a time-dependent circuit component.
 
     Identical to :func:`component` except the decorated physics function
-    must accept ``t`` as its third argument (after ``signals`` and ``s``),
+    must accept ``t`` as its second argument (after ``signals``),
     and may use it to implement time-varying behaviour such as sinusoidal
     sources or delayed step functions.
 
@@ -784,9 +716,9 @@ def source(
     Example::
 
         @source(ports=("p1", "p2"), states=("i_src",))
-        def VoltageSource(signals: Signals, s: States, t: float, V: float = 1.0):
+        def VoltageSource(signals: Signals, t: float, V: float = 1.0):
             constraint = (signals.p1 - signals.p2) - V
-            return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+            return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
     """
     return lambda fn: _build_component(

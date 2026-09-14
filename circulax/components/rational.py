@@ -1,4 +1,5 @@
 """Factory functions for creating circulax components from vfitax SSModel."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -44,6 +45,7 @@ def rational_component(
         ``setup_ac_sweep``, even for electrical (real-valued) circuits. A future
         real-pair block form (``_ss_to_real_pairs``) would halve the system size
         for circuits with conjugate pole pairs.
+
     """
     A = np.asarray(ss.A, dtype=np.complex128)
     B = np.asarray(ss.B, dtype=np.complex128)
@@ -62,7 +64,7 @@ def rational_component(
             f"This would create a singular DC stamp."
         )
 
-    ports = tuple(f"p{i+1}" for i in range(Nc))
+    ports = tuple(f"p{i + 1}" for i in range(Nc))
     states = tuple(f"x{j}" for j in range(n_states))
     n_p = Nc
 
@@ -96,10 +98,8 @@ def rational_component(
     def _invoke_physics(
         self: CircuitComponent,
         signals: Any,
-        s: Any,
         t: float,
         params: Any,
-        hist: Any = None,
     ) -> tuple[dict, dict]:
         ss_A = _extract_param(params, "ss_A")
         ss_B = _extract_param(params, "ss_B")
@@ -108,7 +108,7 @@ def rational_component(
         ss_E = _extract_param(params, "ss_E")
 
         v = jnp.array([getattr(signals, p) for p in ports], dtype=jnp.complex128)
-        x = jnp.array([getattr(s, st) for st in states], dtype=jnp.complex128)
+        x = jnp.array([getattr(signals, st) for st in states], dtype=jnp.complex128)
 
         i_port = ss_C @ x + ss_D @ v
         f_state = -(ss_A * x + (ss_B @ v))
@@ -138,8 +138,6 @@ def rational_component(
         "_holomorphic": holomorphic,
         "amplitude_param": "",
         "_has_init_arg": False,
-        "_has_hist_arg": False,
-        "_has_delay": False,
         "_static_param_names": (),
         "_diff_param_names": _param_names,
         "ss_A": eqx.field(default_factory=lambda: jnp.array(A)),
@@ -177,7 +175,7 @@ def rational_fdomain_component(
     E_val = jnp.array(np.asarray(ss.E, dtype=np.complex128))
 
     Nc = D_val.shape[0]
-    ports = tuple(f"p{i+1}" for i in range(Nc))
+    ports = tuple(f"p{i + 1}" for i in range(Nc))
 
     def _fast_physics(f: float, args: Any) -> jnp.ndarray:
         ss_A = _extract_param(args, "ss_A")
@@ -247,6 +245,7 @@ def rational_delay_component(
 
     Returns:
         A CircuitComponent subclass with ``_is_fdomain = True``.
+
     """
     A_val = jnp.array(np.asarray(ss.A, dtype=np.complex128))
     B_val = jnp.array(np.asarray(ss.B, dtype=np.complex128))
@@ -256,7 +255,7 @@ def rational_delay_component(
     tau_val = jnp.array(np.asarray(tau, dtype=np.float64))
 
     Nc = D_val.shape[0]
-    ports = tuple(f"p{i+1}" for i in range(Nc))
+    ports = tuple(f"p{i + 1}" for i in range(Nc))
     z0_val = float(z0)
 
     def _fast_physics(f: float, args: Any) -> jnp.ndarray:

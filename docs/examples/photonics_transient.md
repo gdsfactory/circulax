@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
 from circulax import compile_circuit
-from circulax.components.base_component import PhysicsReturn, Signals, States, component
+from circulax.components.base_component import PhysicsReturn, Signals, component
 from circulax.components.electronic import Resistor
 from circulax.components.photonic import OpticalSourcePulse
 

@@ -54,7 +54,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from circulax import compile_circuit
-from circulax.components.base_component import PhysicsReturn, Signals, States, component
+from circulax.components.base_component import PhysicsReturn, Signals, component
 from circulax.components.electronic import Capacitor, Inductor, Resistor
 
 # 64-bit precision is important: HB Newton requires accurate Jacobians, and
@@ -79,7 +79,7 @@ making the component compatible with `jax.vmap`, `jax.jacfwd`, and `jax.grad`.
 
 ```python
 @component(ports=("p1", "p2"))
-def VanDerPolElement(signals: Signals, s: States, mu: float = 2.0, G0: float = 0.01) -> PhysicsReturn:
+def VanDerPolElement(signals: Signals, mu: float = 2.0, G0: float = 0.01) -> PhysicsReturn:
     """Nonlinear two-terminal element with cubic I-V characteristic.
 
     I(V) = -mu*G0*V + (G0/3)*V^3

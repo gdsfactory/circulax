@@ -58,7 +58,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from circulax import compile_circuit
-from circulax.components.base_component import PhysicsReturn, Signals, States, component, source
+from circulax.components.base_component import PhysicsReturn, Signals, component, source
 from circulax.components.electronic import Resistor
 
 jax.config.update("jax_enable_x64", True)
@@ -74,7 +74,6 @@ jax.config.update("jax_enable_x64", True)
 @source(ports=("p1", "p2"), states=("i_src",))
 def OpticalSourcePulseOnOff(
     signals: Signals,
-    s: States,
     t: float,
     power: float = 1.0,
     phase: float = 0.0,
@@ -103,13 +102,12 @@ def OpticalSourcePulseOnOff(
     sigmoid_off = jax.nn.sigmoid((t - t_off) / rise)
     amp = jnp.sqrt(power) * jnp.exp(1j * phase) * (sigmoid_on - sigmoid_off)
     constraint = (signals.p1 - signals.p2) - amp
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @component(ports=("p1", "p2"), states=("a", "i_out"))
 def RingModulator(
     signals: Signals,
-    s: States,
     ng: float = 3.8,
     L: float = 3.14159265e-5,
     gamma: float = 0.976,
@@ -167,18 +165,18 @@ def RingModulator(
     delta_omega = 2.0 * jnp.pi * (f_operating - f_resonance) + v_to_wr * voltage
 
     # Ring energy ODE RHS: da/dt = -j*coupling*E_i + j*delta_omega*a - a/tau
-    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * s.a - s.a / tau
+    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * signals.a - signals.a / tau
 
     # Output field from the ring: E_o = E_i - j*coupling*a
-    E_o_expected = signals.p1 - 1j * coupling * s.a
+    E_o_expected = signals.p1 - 1j * coupling * signals.a
 
     f = {
         "p1": 0.0 + 0.0j,  # ring is transparent at input (S11=0)
-        "p2": s.i_out,
+        "p2": signals.i_out,
         "i_out": signals.p2 - E_o_expected,  # enforce E_o = E_i - j*coupling*a
         "a": -rhs_a,  # ring energy ODE (negated RHS)
     }
-    q = {"a": s.a}
+    q = {"a": signals.a}
     return f, q
 ```
 
@@ -193,7 +191,7 @@ inside `.setup`.
 
 ```python
 @component(ports=("in_", "thru"))
-def RingMod(signals, s, init, kappa=0.3, neff=2.4, alpha=1e-3, L=..., V_pi=2.0, V=0.0):
+def RingMod(signals, init, kappa=0.3, neff=2.4, alpha=1e-3, L=..., V_pi=2.0, V=0.0):
     # init["a"], init["t"], init["phi"] were computed by the round-trip model below
     phi = init["phi"] * (1.0 + V / V_pi)
     H = (init["t"] - init["a"] * jnp.exp(1j * phi)) / (1 - init["t"] * init["a"] * jnp.exp(1j * phi))
@@ -221,7 +219,6 @@ The full runnable example and gradient tests are in `tests/test_setup_decorator.
 @component(ports=("in_", "thru"))
 def RingModSetup(
     signals: Signals,
-    s: States,
     init,
     kappa: float = 0.3,
     neff: float = 2.4,
@@ -571,7 +568,6 @@ from circulax.components.electronic import Capacitor
 @source(ports=("p1", "p2"), states=("i_src",))
 def OpticalSourceStep(
     signals: Signals,
-    s: States,
     t: float,
     power: float = 1.0,
     phase: float = 0.0,
@@ -579,13 +575,12 @@ def OpticalSourceStep(
     """Constant-amplitude optical CW source (always on, no time dependence)."""
     amp = jnp.sqrt(power) * jnp.exp(1j * phase)
     constraint = (signals.p1 - signals.p2) - amp
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @source(ports=("p1", "p2"), states=("i_src",))
 def BiasedACSource(
     signals: Signals,
-    s: States,
     t: float,
     V_bias: float = -2.0,
     V_ac: float = 0.1,
@@ -604,13 +599,12 @@ def BiasedACSource(
     ac_enable = jax.nn.sigmoid((t - t_ac_start) / rise_ac)
     v_total = V_bias + v_ac * ac_enable
     constraint = (signals.p1 - signals.p2) - v_total
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @component(ports=("p1", "p2", "v_e"), states=("a", "i_out"))
 def RingModulatorEO(
     signals: Signals,
-    s: States,
     ng: float = 3.8,
     L: float = 3.14159265e-5,
     gamma: float = 0.976,
@@ -640,17 +634,17 @@ def RingModulatorEO(
 
     delta_omega = 2.0 * jnp.pi * (f_operating - f_resonance) + v_to_wr * voltage
 
-    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * s.a - s.a / tau
-    E_o_expected = signals.p1 - 1j * coupling * s.a
+    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * signals.a - signals.a / tau
+    E_o_expected = signals.p1 - 1j * coupling * signals.a
 
     f = {
         "p1": 0.0 + 0.0j,
-        "p2": s.i_out,
+        "p2": signals.i_out,
         "v_e": 0.0 + 0.0j,  # high-impedance electrical port
         "i_out": signals.p2 - E_o_expected,
         "a": -rhs_a,
     }
-    q = {"a": s.a}
+    q = {"a": signals.a}
     return f, q
 ```
 
@@ -951,7 +945,6 @@ amps_hb = jax.jit(jax.vmap(hb_sweep_point))(sweep_freqs)
 @source(ports=("p1", "p2"), states=("i_src",))
 def BiasedSinSource(
     signals: Signals,
-    s: States,
     t: float,
     V_bias: float = -2.0,
     V_ac: float = 0.1,
@@ -963,7 +956,7 @@ def BiasedSinSource(
     :class:`BiasedACSource` with the AC component disabled.
     """
     v = V_bias + V_ac * jnp.sin(2.0 * jnp.pi * freq * t)
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": (signals.p1 - signals.p2) - v}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": (signals.p1 - signals.p2) - v}, {}
 
 
 models_map_hb = {
@@ -1190,7 +1183,7 @@ and distortion that the frequency response alone cannot capture:
    $\tau \approx 7.3\,\text{ps}$, comparable to the 56 GBaud bit period
    $T_{\rm bit} \approx 17.9\,\text{ps}$ (ratio $T_{\rm bit}/\tau \approx 2.4$).
    Consecutive bits see different initial ring states — a "1" after many "0"s opens
-   differently from a "1" after many "1"s. The electrical RC bandwidth is set to
+   differently from a "1" after many "1"signals. The electrical RC bandwidth is set to
    $f_{\rm RC} \approx 72\,\text{GHz} \gg f_{\rm opt} \approx 22\,\text{GHz}$
    so the photon lifetime is the sole bandwidth-limiting mechanism.
 
@@ -1214,7 +1207,6 @@ pattern.
 @source(ports=("p1", "p2"), states=("i_src",))
 def NRZSource(
     signals: Signals,
-    s: States,
     t: float,
     V_low: float = -2.5,
     V_high: float = -1.5,
@@ -1237,7 +1229,7 @@ def NRZSource(
     v_norm = jnp.sum(delta_bits * jax.nn.sigmoid((t - bit_times) / rise))
     v = V_low + (V_high - V_low) * v_norm
     constraint = (signals.p1 - signals.p2) - v
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 # ── NRZ signal parameters ──────────────────────────────────────────────────────

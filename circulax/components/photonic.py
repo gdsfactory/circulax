@@ -6,7 +6,7 @@ All wavelength parameters are in nanometres and power in watts.
 import jax.nn as jnn
 import jax.numpy as jnp
 
-from circulax.components.base_component import PhysicsReturn, Signals, States, component, source
+from circulax.components.base_component import PhysicsReturn, Signals, component, source
 from circulax.s_transforms import fdomain_component, s_to_y
 
 # ===========================================================================
@@ -17,7 +17,6 @@ from circulax.s_transforms import fdomain_component, s_to_y
 @component(ports=("p1", "p2"), holomorphic=True)
 def OpticalWaveguide(
     signals: Signals,
-    s: States,
     length_um: float = 100.0,
     loss_dB_cm: float = 1.0,
     neff: float = 2.4,
@@ -34,7 +33,6 @@ def OpticalWaveguide(
 
     Args:
         signals: Field amplitudes at input (``p1``) and output (``p2``).
-        s: Unused.
         length_um: Waveguide length in micrometres. Defaults to ``100.0``.
         loss_dB_cm: Propagation loss in dB/cm. Defaults to ``1.0``.
         neff: Effective refractive index at ``center_wavelength_nm``. Defaults to ``2.4``.
@@ -72,8 +70,6 @@ def OpticalWaveguide(
 @component(ports=("p1", "p2"), states=("i_p2",))
 def OpticalDelayLine(
     signals: Signals,
-    s: States,
-    hist: Signals,
     length_um: float = 100.0,
     loss_dB_cm: float = 1.0,
     neff: float = 2.4,
@@ -90,19 +86,15 @@ def OpticalDelayLine(
     :func:`TunableBeamSplitter`). ``p1`` carries no self-stamp and must be
     driven by a connected source/component, matching that same convention.
 
-    See ``circulax.solvers.assembly`` for how ``hist`` (the delayed local
-    state) is computed -- a fixed-size accepted-step history buffer read via
+    See ``circulax.solvers.assembly`` for how the delayed local state is
+    computed -- a fixed-size accepted-step history buffer read via
     ``jnp.interp``, vmapped per-instance since ``tau`` may vary across
     instances of different length. Adaptive and fixed step-size controllers
     may take steps longer than ``tau``; interpolation against the current
     Newton trial supplies the required delay Jacobian in that regime.
 
     Args:
-        signals: Field amplitudes at input (``p1``) and output (``p2``).
-        s: Branch current state variable ``i_p2``, carrying the VCVS current
-            injected at the output port.
-        hist: This instance's own port fields at ``t - tau``, injected by the
-            solver. Only ``hist.p1`` is used.
+        signals: Current and delayed component-local fields and branch state.
         length_um: Waveguide length in micrometres. Defaults to ``100.0``.
         loss_dB_cm: Propagation loss in dB/cm. Defaults to ``1.0``.
         neff: Effective refractive index, used for the carrier phase shift
@@ -117,16 +109,11 @@ def OpticalDelayLine(
     T_mag = 10.0 ** (-loss_val / 20.0)
     T = T_mag * jnp.exp(-1j * phi)
 
-    constraint = signals.p2 - T * hist.p1
+    c_um_per_s = 2.99792458e14
+    delay = (length_um * n_group) / c_um_per_s
+    constraint = signals.p2 - T * signals.at_delay(delay).p1
 
-    return {"p1": 0.0, "p2": s.i_p2, "i_p2": constraint}, {}
-
-
-@OpticalDelayLine.delay
-def _optical_delay_line_tau(length_um: float = 100.0, n_group: float = 4.0) -> float:
-    """Group delay ``tau = length / v_group`` in seconds (``length_um`` in micrometres)."""
-    c_um_per_s = 2.99792458e14  # speed of light, um/s
-    return (length_um * n_group) / c_um_per_s
+    return {"p1": 0.0, "p2": signals.i_p2, "i_p2": constraint}, {}
 
 
 @fdomain_component(ports=("p1", "p2"))
@@ -171,7 +158,6 @@ def delay_line_fdomain(
 @component(ports=("grating", "waveguide"), holomorphic=True)
 def Grating(
     signals: Signals,
-    s: States,
     center_wavelength_nm: float = 1310.0,
     peak_loss_dB: float = 0.0,
     bandwidth_1dB: float = 20.0,
@@ -185,7 +171,6 @@ def Grating(
 
     Args:
         signals: Field amplitudes at the grating (``grating``) and waveguide (``waveguide``) ports.
-        s: Unused.
         center_wavelength_nm: Peak transmission wavelength in nm. Defaults to ``1310.0``.
         peak_loss_dB: Insertion loss at peak wavelength in dB. Defaults to ``0.0``.
         bandwidth_1dB: Full 1 dB bandwidth in nm. Defaults to ``20.0``.
@@ -210,7 +195,7 @@ def Grating(
 
 
 @component(ports=("p1", "p2", "p3"), holomorphic=True)
-def Splitter(signals: Signals, s: States, split_ratio: float = 0.5) -> PhysicsReturn:
+def Splitter(signals: Signals, split_ratio: float = 0.5) -> PhysicsReturn:
     """Lossless asymmetric optical splitter (Y-junction) with a configurable power split ratio.
 
     The S-matrix is constructed to be unitary, with the cross-port coupling
@@ -219,7 +204,6 @@ def Splitter(signals: Signals, s: States, split_ratio: float = 0.5) -> PhysicsRe
     Args:
         signals: Field amplitudes at the input (``p1``) and two output ports
             (``p2``, ``p3``).
-        s: Unused.
         split_ratio: Fraction of input power routed to ``p2``. The remaining
             ``1 - split_ratio`` is routed to ``p3``. Defaults to ``0.5``
             (50/50 splitter).
@@ -241,7 +225,6 @@ def Splitter(signals: Signals, s: States, split_ratio: float = 0.5) -> PhysicsRe
 @component(ports=("p1", "p2", "p3", "p4"), holomorphic=True)
 def DirectionalCoupler(
     signals: Signals,
-    s: States,
     coupling: float = 0.5,
 ) -> PhysicsReturn:
     """4-port directional coupler (2×2 beamsplitter) with configurable power split ratio.
@@ -263,7 +246,6 @@ def DirectionalCoupler(
 
     Args:
         signals: Field amplitudes at all four ports.
-        s: Unused.
         coupling: Power fraction routed to the cross port (p4 for p1 input, p3 for p2 input).
             Defaults to ``0.5`` (50/50 splitter).
 
@@ -293,15 +275,14 @@ def DirectionalCoupler(
 
 
 @component(ports=("p1", "p2"), states=("i_src",), holomorphic=True)
-def OpticalSource(signals: Signals, s: States, power: float = 1.0, phase: float = 0.0) -> PhysicsReturn:
+def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> PhysicsReturn:
     """Ideal CW optical source for DC and small-signal AC analysis.
 
     Enforces a fixed complex field amplitude ``sqrt(power) * exp(j * phase)``
     across its ports, analogous to an ideal voltage source in electrical circuits.
 
     Args:
-        signals: Field amplitudes at the positive (``p1``) and negative (``p2``) ports.
-        s: Source current state variable ``i_src``.
+        signals: Port fields and source-current state ``i_src``.
         power: Output optical power in watts. Defaults to ``1.0``.
         phase: Output field phase in radians. Defaults to ``0.0``.
 
@@ -309,13 +290,12 @@ def OpticalSource(signals: Signals, s: States, power: float = 1.0, phase: float 
     v_val = jnp.sqrt(power) * jnp.exp(1j * phase)
     constraint = (signals.p1 - signals.p2) - v_val
 
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @source(ports=("p1", "p2"), states=("i_src",), holomorphic=True)
 def OpticalSourcePulse(
     signals: Signals,
-    s: States,
     t: float,
     power: float = 1.0,
     phase: float = 0.0,
@@ -329,8 +309,7 @@ def OpticalSourcePulse(
     Suitable for transient simulations of optical pulse propagation.
 
     Args:
-        signals: Field amplitudes at the positive (``p1``) and negative (``p2``) ports.
-        s: Source current state variable ``i_src``.
+        signals: Port fields and source-current state ``i_src``.
         t: Current simulation time in seconds.
         power: Peak output optical power in watts. Defaults to ``1.0``.
         phase: Output field phase in radians. Defaults to ``0.0``.
@@ -343,7 +322,7 @@ def OpticalSourcePulse(
 
     constraint = (signals.p1 - signals.p2) - v_val
 
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 # ===========================================================================
@@ -354,7 +333,6 @@ def OpticalSourcePulse(
 @component(ports=("p1", "p2", "p3", "p4"), states=("i_top", "i_bot"), holomorphic=True)
 def TunableBeamSplitter(
     signals: Signals,
-    s: States,
     theta: float = jnp.pi / 4,
 ) -> PhysicsReturn:
     """Ideal lossless 2×2 directional coupler with a variable coupling angle.
@@ -384,8 +362,7 @@ def TunableBeamSplitter(
     when using the ``"dense"`` solver backend.
 
     Args:
-        signals: Field amplitudes at all four ports.
-        s: Branch current state variables ``i_top`` and ``i_bot``.
+        signals: Port fields and branch-current states ``i_top`` and ``i_bot``.
         theta: Coupling angle in radians.  Controls the power split ratio:
             ``P_cross / P_total = sin²(theta)``.  Defaults to ``pi/4`` (50/50).
 
@@ -400,8 +377,8 @@ def TunableBeamSplitter(
     return {
         "p1": 0.0,  # no self-stamp on input ports
         "p2": 0.0,
-        "p3": s.i_top,  # VCVS branch current injected at output p3
-        "p4": s.i_bot,  # VCVS branch current injected at output p4
+        "p3": signals.i_top,  # VCVS branch current injected at output p3
+        "p4": signals.i_bot,  # VCVS branch current injected at output p4
         "i_top": eq_top,  # constraint: E_p3 = cos(θ)·E_p1 + j·sin(θ)·E_p2
         "i_bot": eq_bot,  # constraint: E_p4 = j·sin(θ)·E_p1 + cos(θ)·E_p2
     }, {}

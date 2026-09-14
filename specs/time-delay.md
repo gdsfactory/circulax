@@ -24,8 +24,9 @@ relation in its natural representation:
 | AC | `Z - exp(-j 2 pi f tau) X = 0` |
 | HB | `Z[k] - exp(-j 2 pi k f0 tau) X[k] = 0` |
 
-The component declares its fixed delay and ordinary equations. The solver owns
-history interpolation or spectral phase rotation. In particular, a query inside
+The component declares its fixed delay inline with
+`signals.at_delay(tau)`. The solver owns history interpolation or spectral
+phase rotation. In particular, a query inside
 the current transient step depends on the current Newton trial and must contribute
 to the Jacobian.
 

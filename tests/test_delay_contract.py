@@ -12,9 +12,10 @@ import diffrax
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from circulax.compiler import compile_netlist
-from circulax.components.base_component import PhysicsReturn, Signals, States, component
+from circulax.components.base_component import PhysicsReturn, Signals, component
 from circulax.components.electronic import Resistor, TransmissionLine, VoltageSourceAC
 from circulax.s_transforms import fdomain_component
 from circulax.solvers import analyze_circuit, setup_harmonic_balance, setup_transient
@@ -28,22 +29,14 @@ jax.config.update("jax_enable_x64", True)  # noqa: FBT003
 @component(ports=("input", "output"), states=("branch",))
 def FixedDelayConstraint(  # noqa: N802
     signals: Signals,
-    s: States,
-    hist: Signals,
     tau: float = 0.25,
 ) -> PhysicsReturn:
     """Minimal real delay relation: output(t) = input(t - tau)."""
-    _ = tau
     return {
         "input": 0.0,
-        "output": s.branch,
-        "branch": signals.output - hist.input,
+        "output": signals.branch,
+        "branch": signals.output - signals.at_delay(tau).input,
     }, {}
-
-
-@FixedDelayConstraint.delay
-def _fixed_delay_tau(tau: float = 0.25) -> float:
-    return tau
 
 
 @fdomain_component(ports=("p1",))
@@ -62,6 +55,29 @@ def _compiled_delay(tau: float = 0.25) -> tuple[dict[str, Any], int, dict[str, i
         "ports": {"input": "DUT,input", "output": "DUT,output"},
     }
     return compile_netlist(net, {"delay": FixedDelayConstraint})
+
+
+def test_inline_delay_is_inferred_from_component_physics() -> None:
+    groups, _, _ = _compiled_delay(tau=0.375)
+    group = groups["delay"]
+    assert group.has_delay
+    np.testing.assert_allclose(jax.vmap(group.tau_func)(group.params), [0.375])
+    assert not hasattr(FixedDelayConstraint, "delay")
+
+
+def test_multiple_distinct_inline_delays_are_rejected() -> None:
+    @component(ports=("p1", "p2"))
+    def MultipleDelays(signals: Signals, tau: float = 0.25) -> PhysicsReturn:  # noqa: N802
+        first = signals.at_delay(tau).p1
+        second = signals.at_delay(2 * tau).p2
+        return {"p1": first, "p2": second}, {}
+
+    net = {
+        "instances": {"DUT": {"component": "delay", "settings": {}}},
+        "connections": {"DUT,p1": "DUT,p2"},
+    }
+    with pytest.raises(ValueError, match="multiple distinct delays"):
+        compile_netlist(net, {"delay": MultipleDelays})
 
 
 def test_current_step_interpolation_value_and_jacobian() -> None:
