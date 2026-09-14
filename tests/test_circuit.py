@@ -242,5 +242,48 @@ def test_circuit_high_level_hb():
     assert jnp.isfinite(y_time).all()
 
 
+def test_sax_circuit_inside_model_no_concretization_error():
+    """Regression: klujax 0.5.1 raised ConcretizationTypeError when a SAX model
+    calls sax.circuit() inside its body (not pre-compiled).
+
+    CSPDK's coupler_ring does this — each call to coupler_ring() builds a fresh
+    sax.circuit(), which calls klujax.analyze() via the KLU backend. When circulax
+    traces the Newton step (optx.fixed_point → equinox JIT), the analyze() call
+    happens inside the trace and int(raw_symbol) fails on traced values.
+    """
+    import sax
+    from sax.models import straight as sax_straight
+
+    def composite_model(wl=1.55, length=100.0, neff=2.34):
+        """SAX model that calls sax.circuit() each invocation (like coupler_ring)."""
+        netlist = {
+            "instances": {"wg": {"component": "straight", "settings": {"length": length, "neff": neff}}},
+            "connections": {},
+            "ports": {"o1": "wg,in0", "o2": "wg,out0"},
+        }
+        circuit_fn, _ = sax.circuit(netlist, {"straight": sax_straight}, backend="klu")
+        return circuit_fn(wl=wl)
+
+    from circulax.s_transforms import sax_component
+
+    CompositeComp = sax_component(composite_model)
+    net_dict = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "R1": {"component": "resistor", "settings": {"R": 1.0}},
+            "comp": {"component": "composite"},
+        },
+        "connections": {
+            "GND,p1": ("R1,p2", "comp,o2"),
+            "R1,p1": "comp,o1",
+        },
+    }
+    models_map = {"resistor": Resistor, "composite": CompositeComp, "ground": lambda: 0}
+    circuit = compile_circuit(net_dict, models_map, is_complex=True)
+    y = circuit.dc()
+    assert y.shape[0] > 0
+    assert jnp.all(jnp.isfinite(y))
+
+
 def test_backend_default_is_klu_split_linear():
     assert backends["default"] is backends["klu_split_linear"]
