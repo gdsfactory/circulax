@@ -9,6 +9,8 @@ import pytest
 
 from circulax.fitting import FitOptions, VFModel, aaa_driver, eval_model
 from circulax.fitting.sparam import (
+    CausalityError,
+    CausalityWarning,
     _y_to_s,
     deembed_delay,
     embed_delay,
@@ -373,13 +375,28 @@ class TestFitWithDelay:
             residue_matrices=[R1, R2, R3],
         )
 
-        _, _, meta = fit_with_delay(
-            S,
-            freqs,
-            z0=50.0,
-            delay_scale=1.05,
-            tol=1e-6,
-            enforce_passive=False,
-            verbose=False,
-        )
+        with pytest.warns(CausalityWarning, match="right-half-plane"):
+            _, _, meta = fit_with_delay(
+                S,
+                freqs,
+                z0=50.0,
+                delay_scale=1.05,
+                tol=1e-6,
+                enforce_passive=False,
+                verbose=False,
+            )
         assert meta["pole_flips"] > 0, f"Over-estimated delay should produce RHP poles, got pole_flips={meta['pole_flips']}"
+        assert meta["causality"]["status"] == "warning"
+        assert meta["causality"]["max_raw_pole_real"] > 0
+
+        with pytest.raises(CausalityError, match="right-half-plane"):
+            fit_with_delay(
+                S,
+                freqs,
+                z0=50.0,
+                delay_scale=1.05,
+                tol=1e-6,
+                enforce_passive=False,
+                causality="error",
+                verbose=False,
+            )

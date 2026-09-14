@@ -110,6 +110,17 @@ remainder approximates `exp(+jωδ)` — a non-causal advance. AAA fits this wit
 RHP poles, and `_collect_poles` flips them to LHP, destroying the fit. The
 `fit_with_delay` metadata includes `pole_flips` count as a tripwire.
 
+### Causality feedback
+
+`fit_with_delay(..., causality="warn")` is the default: it emits a
+`CausalityWarning` when the phase fit produced a negative raw delay (which is
+clamped to zero) or AAA discovered right-half-plane poles before stabilization.
+The `metadata["causality"]` report retains raw/extracted delay, phase-slope
+residual, RHP pole count, and maximum raw pole real part. Use
+`causality="error"` in automated fitting flows to reject either condition
+before an RHP pole is reflected into the left half-plane. `"ignore"` records
+the report without warning.
+
 ### Solver-independent delay realization
 
 `rational_delay_component` remains the direct AC/HB oracle. For DC, transient,

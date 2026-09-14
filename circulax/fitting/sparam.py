@@ -7,6 +7,7 @@ and enforces passivity — yielding a low-order rational model.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import replace
 from typing import Literal
 
@@ -24,6 +25,14 @@ from .utils import (
     compute_weights,
     stack_upper_triangle,
 )
+
+
+class CausalityWarning(RuntimeWarning):
+    """A fitted delay model has evidence of a non-causal intermediate fit."""
+
+
+class CausalityError(ValueError):
+    """Strict causality policy rejected a delay-model fit."""
 
 
 def s_to_y(S: np.ndarray, z0: complex = 50.0) -> np.ndarray:
@@ -69,10 +78,22 @@ def extract_group_delay(
         ValueError: If adjacent phase differences exceed pi (undersampled data).
 
     """
-    Ns, Nc, _ = S.shape
+    tau_per_port, _ = _extract_group_delay_diagnostics(S, freqs, scale=scale)
+    return tau_per_port
+
+
+def _extract_group_delay_diagnostics(
+    S: np.ndarray,
+    freqs: np.ndarray,
+    scale: float = 1.0,
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """Extract delay and retain diagnostics needed for causality feedback."""
+    _, Nc, _ = S.shape
     omega = 2.0 * np.pi * freqs
 
     tau_per_port = np.zeros(Nc, dtype=np.float64)
+    raw_tau_per_port = np.zeros(Nc, dtype=np.float64)
+    phase_slope_rmse = np.zeros(Nc, dtype=np.float64)
 
     for i in range(Nc):
         j = (i + 1) % Nc if Nc > 1 else i
@@ -91,13 +112,20 @@ def extract_group_delay(
 
         coeffs = np.polynomial.polynomial.polyfit(omega, phase, 1)
         tau_i = -coeffs[1] * scale
+        raw_tau_per_port[i] = tau_i
         tau_per_port[i] = max(tau_i, 0.0)
+        fitted_phase = np.polynomial.polynomial.polyval(omega, coeffs)
+        phase_slope_rmse[i] = float(np.sqrt(np.mean((phase - fitted_phase) ** 2)))
 
     if Nc == 2:
         avg = 0.5 * (tau_per_port[0] + tau_per_port[1])
         tau_per_port[:] = avg
 
-    return tau_per_port
+    return tau_per_port, {
+        "raw_tau": raw_tau_per_port,
+        "phase_slope_rmse": phase_slope_rmse,
+        "negative_raw_delay_ports": np.flatnonzero(raw_tau_per_port < 0),
+    }
 
 
 def deembed_delay(
@@ -160,8 +188,9 @@ def _aaa_all_elements(
     dedup_rtol: float = 1e-2,
     reciprocal: bool = True,
     pole_selection: Literal["most_complex", "largest_response"] = "most_complex",
+    causality: Literal["warn", "error", "ignore"] = "warn",
     verbose: bool = True,
-) -> tuple[VFModel, SSModel, float, jnp.ndarray, int]:
+) -> tuple[VFModel, SSModel, float, jnp.ndarray, int, float]:
     """AAA fitting that runs on the selected matrix elements.
 
     Runs AAA on each selected element to find candidate poles, then
@@ -170,8 +199,9 @@ def _aaa_all_elements(
     poles to avoid near-duplicate clusters from independent AAA runs, which
     cause ill-conditioned residue identification.
 
-    Returns (model, ss, rmserr, bigHfit, n_rhp) where n_rhp is the number
-    of RHP poles found before _collect_poles flipped them.
+    Returns ``(model, ss, rmserr, bigHfit, n_rhp, max_raw_pole_real)``.
+    The final two values describe RHP poles before `_collect_poles` reflects
+    them into the LHP.
     """
     Nc = bigH.shape[0]
     Ns = s.shape[0]
@@ -218,6 +248,13 @@ def _aaa_all_elements(
         raise RuntimeError("AAA found no poles across the selected matrix responses.")
 
     n_rhp = int(np.sum(raw_poles.real > 0))
+    max_raw_pole_real = float(np.max(raw_poles.real))
+    if n_rhp and causality == "error":
+        raise CausalityError(
+            f"AAA found {n_rhp} right-half-plane pole(s) (maximum real part "
+            f"{max_raw_pole_real:.3e} rad/s) before stabilization. "
+            "The extracted delay may be over-estimated; reduce delay_scale or use causality='warn'."
+        )
     poles_np = _collect_poles([raw_poles])
 
     s_max = float(np.max(np.abs(s_np)))
@@ -272,7 +309,7 @@ def _aaa_all_elements(
     H_data = jnp.moveaxis(bigH, -1, 0)
     rmserr = compute_rmserr(H_data, bigHfit_stacked)
 
-    return model, ss, rmserr, bigHfit, n_rhp
+    return model, ss, rmserr, bigHfit, n_rhp, max_raw_pole_real
 
 
 def fit_with_delay(
@@ -286,6 +323,7 @@ def fit_with_delay(
     enforce_passive: bool = True,
     reciprocal: bool = True,
     delay_mode: Literal["auto", "port", "none"] = "auto",
+    causality: Literal["warn", "error", "ignore"] = "warn",
     fit_domain: Literal["y", "s"] = "y",
     s_refinement_iterations: int = 6,
     max_poles: int | None = None,
@@ -310,6 +348,10 @@ def fit_with_delay(
             ``"none"`` disables delay extraction, and ``"auto"`` uses port
             delay only for reciprocal networks. A shared port delay is usually
             inappropriate for directional active devices.
+        causality: How to handle evidence of a non-causal intermediate fit.
+            ``"warn"`` (default) emits :class:`CausalityWarning`, ``"error"``
+            rejects negative raw delay estimates and RHP AAA poles before they
+            are stabilized, and ``"ignore"`` records diagnostics only.
         fit_domain: Fit admittance directly with ``"y"`` or discover poles
             with AAA and refine them against all complex scattering responses
             with ``"s"``. The S-domain realization is transformed exactly to
@@ -335,6 +377,7 @@ def fit_with_delay(
             - pole_flips: int — number of RHP poles flipped by _collect_poles
             - reciprocal: bool — whether response matrices were mirrored
             - delay_mode: str — resolved delay strategy
+            - causality: raw delay, phase-fit, and pre-stabilization pole diagnostics
 
     """
     S = np.asarray(S, dtype=np.complex128)
@@ -364,6 +407,9 @@ def fit_with_delay(
     if delay_mode not in {"auto", "port", "none"}:
         msg = f"unknown delay_mode {delay_mode!r}; expected 'auto', 'port', or 'none'"
         raise ValueError(msg)
+    if causality not in {"warn", "error", "ignore"}:
+        msg = f"unknown causality policy {causality!r}; expected 'warn', 'error', or 'ignore'"
+        raise ValueError(msg)
     resolved_delay_mode = "port" if delay_mode == "auto" and reciprocal else delay_mode
     if resolved_delay_mode == "auto":
         resolved_delay_mode = "none"
@@ -374,11 +420,27 @@ def fit_with_delay(
         msg = "S-domain passivity enforcement is not implemented; use enforce_passive=False"
         raise ValueError(msg)
 
-    tau_per_port = (
-        extract_group_delay(S, freqs, scale=delay_scale)
-        if resolved_delay_mode == "port"
-        else np.zeros(Nc, dtype=np.float64)
-    )
+    if resolved_delay_mode == "port":
+        tau_per_port, delay_diagnostics = _extract_group_delay_diagnostics(S, freqs, scale=delay_scale)
+    else:
+        tau_per_port = np.zeros(Nc, dtype=np.float64)
+        delay_diagnostics = {
+            "raw_tau": tau_per_port.copy(),
+            "phase_slope_rmse": np.zeros(Nc, dtype=np.float64),
+            "negative_raw_delay_ports": np.array([], dtype=np.intp),
+        }
+
+    negative_delay_ports = delay_diagnostics["negative_raw_delay_ports"]
+    if len(negative_delay_ports):
+        message = (
+            "Group-delay extraction produced negative raw delay(s) for port(s) "
+            f"{negative_delay_ports.tolist()}; they were clamped to zero. "
+            "The measured response may not admit a causal fixed-delay decomposition."
+        )
+        if causality == "error":
+            raise CausalityError(message)
+        if causality == "warn":
+            warnings.warn(message, CausalityWarning, stacklevel=2)
 
     if verbose:
         for i, t in enumerate(tau_per_port):
@@ -392,13 +454,14 @@ def fit_with_delay(
     if fit_domain == "y":
         Y_deemb = np.stack([s_to_y(S_deemb[k], z0_conv) for k in range(Ns)])
         bigH = jnp.array(np.moveaxis(Y_deemb, 0, -1))
-        model, ss, rmserr_Y, _, pole_flips = _aaa_all_elements(
+        model, ss, rmserr_Y, _, pole_flips, max_raw_pole_real = _aaa_all_elements(
             bigH,
             s,
             opts,
             tol=tol,
             mmax=mmax,
             reciprocal=reciprocal,
+            causality=causality,
             verbose=verbose,
         )
         S_fit_deemb = np.stack([y_to_s(np.asarray(value), z0_conv) for value in eval_model(s, ss)])
@@ -409,7 +472,7 @@ def fit_with_delay(
         from .driver import vfdriver
 
         bigS = jnp.array(np.moveaxis(S_deemb, 0, -1))
-        aaa_model, _, _, _, pole_flips = _aaa_all_elements(
+        aaa_model, _, _, _, pole_flips, max_raw_pole_real = _aaa_all_elements(
             bigS,
             s,
             opts,
@@ -417,6 +480,7 @@ def fit_with_delay(
             mmax=mmax,
             reciprocal=reciprocal,
             pole_selection="largest_response",
+            causality=causality,
             verbose=verbose,
         )
         aaa_pole_count = len(aaa_model.poles)
@@ -460,8 +524,18 @@ def fit_with_delay(
         model = None
         direct_S_order = len(initial_poles)
 
-    if pole_flips > 0 and verbose:
-        print(f"  WARNING: {pole_flips} poles were in RHP (flipped to LHP). Delay may be over-estimated.")
+    if pole_flips > 0:
+        # The current AAA cleanup reflects these poles into the LHP. Preserve
+        # the event in metadata and warn regardless of ``verbose``.
+        message = (
+            f"AAA found {pole_flips} right-half-plane pole(s) before stabilization; "
+            "they were reflected into the LHP. The de-embedded fit may be non-causal; "
+            "when delay extraction is enabled, the delay may be over-estimated."
+        )
+        if causality == "warn":
+            warnings.warn(message, CausalityWarning, stacklevel=2)
+        if verbose:
+            print(f"  WARNING: {message}")
 
     passivity_margin = None
     if enforce_passive:
@@ -485,6 +559,16 @@ def fit_with_delay(
         "rmserr_S": rmserr_S,
         "passivity_margin": passivity_margin,
         "pole_flips": pole_flips,
+        "causality": {
+            "policy": causality,
+            "raw_tau": delay_diagnostics["raw_tau"],
+            "tau": tau_per_port.copy(),
+            "negative_raw_delay_ports": delay_diagnostics["negative_raw_delay_ports"],
+            "phase_slope_rmse": delay_diagnostics["phase_slope_rmse"],
+            "pole_flips": pole_flips,
+            "max_raw_pole_real": max_raw_pole_real,
+            "status": "warning" if pole_flips or len(negative_delay_ports) else "pass",
+        },
         "reciprocal": reciprocal,
         "delay_mode": resolved_delay_mode,
         "fit_domain": fit_domain,

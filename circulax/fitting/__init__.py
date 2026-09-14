@@ -19,6 +19,8 @@ from .driver import vfdriver
 from .passivity import enforce_passivity
 from .pole_sweep import PoleCountSweep, contribution_masks, vmap_pole_count_sweep
 from .sparam import (
+    CausalityError,
+    CausalityWarning,
     deembed_delay,
     embed_delay,
     evaluate_sparameter_model,
@@ -59,6 +61,8 @@ from .validation import (
 )
 
 __all__ = [
+    "CausalityError",
+    "CausalityWarning",
     "FitOptions",
     "FitValidationError",
     "FitValidationReport",
