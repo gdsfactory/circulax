@@ -38,6 +38,50 @@ def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
     return ({"p1": s.i_L, "p2": -s.i_L, "i_L": v_drop}, {"i_L": -L * s.i_L})
 
 
+@component(
+    ports=("p1", "p2"),
+    states=("a1", "a2"),
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+)
+def TransmissionLine(
+    signals: Signals,
+    s: States,
+    hist: Signals,
+    tau: float = 1e-9,
+    z0: float = 50.0,
+    attenuation: float = 1.0,
+) -> PhysicsReturn:
+    """Matched bidirectional transmission line with exact fixed delay.
+
+    ``a1`` and ``a2`` are the incident power-wave amplitudes at the two
+    reference planes. The outgoing waves are the delayed incident wave from
+    the opposite end. This stamp stays finite for an exactly lossless line
+    and therefore avoids the singular ``S -> Y`` conversion of an ideal
+    through connection.
+
+    The same equations are interpreted by DC, transient, AC, and HB. The
+    explicit ``tau`` argument is consumed by ``tau_of`` below; referencing
+    it here also makes its role visible to component introspection.
+    """
+    _ = tau
+    b1 = attenuation * hist.a2
+    b2 = attenuation * hist.a1
+    i1 = (s.a1 - b1) / z0
+    i2 = (s.a2 - b2) / z0
+    return {
+        "p1": i1,
+        "p2": i2,
+        "a1": signals.p1 - s.a1 - b1,
+        "a2": signals.p2 - s.a2 - b2,
+    }, {}
+
+
+@TransmissionLine.delay
+def _transmission_line_delay(tau: float = 1e-9) -> float:
+    return tau
+
+
 # ===========================================================================
 # Sources (Time-Dependent)
 # ===========================================================================
