@@ -6,6 +6,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **ac-sweep**: Default `setup_ac_sweep()` to the safe non-holomorphic 2N×2N path for complex circuits
+
 ## [0.2.3] - 2026-07-30
 
 ### Added

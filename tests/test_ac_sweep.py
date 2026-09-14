@@ -16,6 +16,11 @@ _C = 1e-9  # shunt capacitor (farads)
 _Z0 = 50.0  # reference impedance
 
 
+def test_ac_sweep_defaults_to_non_holomorphic() -> None:
+    """The low-level API favors the safe 2N path for complex circuits."""
+    assert setup_ac_sweep.__kwdefaults__["holomorphic"] is False
+
+
 @pytest.fixture
 def rc_netlist():
     """Single-port parallel RC circuit: R and C both shunt to GND.
@@ -387,7 +392,7 @@ def waveguide_complex_setup(waveguide_netlist):
     sys_size = num_vars * 2
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
     port_nodes = [pmap["WG1,p1"]]
-    run_ac = setup_ac_sweep(groups, num_vars, port_nodes, z0=_OPT_Z0, is_complex=True)
+    run_ac = setup_ac_sweep(groups, num_vars, port_nodes, z0=_OPT_Z0, is_complex=True, holomorphic=True)
     return run_ac, y_dc
 
 
@@ -516,7 +521,9 @@ def test_non_holomorphic_matches_holomorphic_for_waveguide(waveguide_complex_set
     solver = analyze_circuit(groups, num_vars, is_complex=True)
     sys_size = num_vars * 2
     y_dc_2 = solver.solve_dc(groups, jnp.zeros(sys_size))
-    run_ac_2n = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, holomorphic=False)
+    run_ac_2n = setup_ac_sweep(
+        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False
+    )
     S_2n = run_ac_2n(y_dc_2, freqs)
 
     assert S_2n.shape == S_wirtinger.shape
@@ -575,10 +582,14 @@ def test_non_holomorphic_lossy_waveguide():
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
     freqs = jnp.logspace(6, 10, 20)
 
-    run_ac_w = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True)
+    run_ac_w = setup_ac_sweep(
+        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=True
+    )
     S_wirtinger = run_ac_w(y_dc, freqs)
 
-    run_ac_2n = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, holomorphic=False)
+    run_ac_2n = setup_ac_sweep(
+        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False
+    )
     S_2n = run_ac_2n(y_dc, freqs)
 
     assert jnp.any(jnp.abs(S_2n[:, 0, 0]) < 0.99), "Lossy waveguide should have |S11| < 1"
@@ -593,7 +604,9 @@ def test_non_holomorphic_jit(waveguide_netlist):
     groups, num_vars, pmap = compile_netlist(net_dict, models_map)
     solver = analyze_circuit(groups, num_vars, is_complex=True)
     y_dc = solver.solve_dc(groups, jnp.zeros(num_vars * 2))
-    run_ac = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, holomorphic=False)
+    run_ac = setup_ac_sweep(
+        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False
+    )
     freqs = jnp.logspace(6, 10, 10)
     S_eager = run_ac(y_dc, freqs)
     S_jit = jax.jit(run_ac)(y_dc, freqs)
