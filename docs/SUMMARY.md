@@ -4,6 +4,8 @@
     * [Transient Simulation](transient.md)
     * [Rational Model Enforcement](rational_model_enforcement.md)
     * [Fitting API](fitting_api.md)
+    * [Delay-Aware Fitting Plan](delay_aware_fitting_plan.md)
+    * [Delay-aware fitting validation](delay_aware_fitting_results.md)
     * [Harmonic Balance](harmonic_balance.md)
     * [Choosing a Solver](choosing_a_solver.md)
     * [Subcircuit Hierarchy](hierarchy.md)

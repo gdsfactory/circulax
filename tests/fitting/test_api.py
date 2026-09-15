@@ -44,10 +44,12 @@ def test_ring_slot_public_workflow(tmp_path):
     skrf = pytest.importorskip("skrf")
     network = skrf.data.ring_slot
     mask = np.arange(len(network.f)) % 5 != 0
-    with pytest.warns(RuntimeWarning, match="reflected"):
-        coefficients = fit_model(
-            network.s[mask], network.f[mask], options=ModelFitOptions(normalized_rmse=1e-4, max_absolute_error=1e-3)
-        )
+    coefficients = fit_model(
+        network.s[mask],
+        network.f[mask],
+        options=ModelFitOptions(vector_fit_order=(4, 0), normalized_rmse=1e-4, max_absolute_error=1e-3),
+    )
+    assert coefficients.metadata["fitter"] == "scikit-rf"
     path = tmp_path / "ringslot.npz"
     coefficients.save(path)
     instance = component_from_coefficients(path)()
@@ -81,6 +83,12 @@ def test_invalid_coefficients_and_options():
         ModelFitOptions(aaa_backend="unknown")
     with pytest.raises(ValueError, match="tolerances"):
         ModelFitOptions(tol=np.nan)
+    with pytest.raises(ValueError, match="method"):
+        ModelFitOptions(method="unknown")
+    with pytest.raises(ValueError, match="vector_fit_order"):
+        ModelFitOptions(vector_fit_order=(0, 0))
+    with pytest.raises(ValueError, match="only"):
+        ModelFitOptions(method="aaa", vector_fit_order=(3, 0))
 
 
 def test_modified_coefficients_revalidated():
@@ -93,5 +101,41 @@ def test_modified_coefficients_revalidated():
 def test_jax_discovery_adapter():
     freqs = np.linspace(0.01, 3, 40)
     source = ModelCoefficients(np.array([-2.0]), np.array([[[0.3]]]), np.array([[0.2]]))
-    fitted = fit_model(source.evaluate(freqs), freqs, options=ModelFitOptions(aaa_backend="jax", mmax=5))
+    fitted = fit_model(source.evaluate(freqs), freqs, options=ModelFitOptions(method="aaa", aaa_backend="jax", mmax=5))
     np.testing.assert_allclose(fitted.evaluate(freqs), source.evaluate(freqs), atol=1e-8)
+
+
+def test_default_matches_skrf_auto_fit():
+    skrf = pytest.importorskip("skrf")
+    from skrf.vectorFitting import VectorFitting
+
+    network = skrf.data.ring_slot
+    mask = np.arange(len(network.f)) % 5 != 0
+    fitted = fit_model(network.s[mask], network.f[mask])
+    reference = VectorFitting(network[mask])
+    reference.auto_fit()
+    expected = np.stack([reference.get_model_response(r, c, network.f) for r in range(2) for c in range(2)], axis=-1).reshape(
+        -1, 2, 2
+    )
+    np.testing.assert_allclose(fitted.evaluate(network.f), expected, atol=1e-12)
+    assert fitted.metadata["order_selection"] == "automatic"
+    with pytest.raises(ValueError, match="unstable Y"):
+        component_from_coefficients(fitted)
+
+
+def test_optional_numpy_aaa_and_conflicting_orders():
+    freqs = np.linspace(0.01, 3, 40)
+    source = ModelCoefficients(np.array([-2.0]), np.array([[[0.3]]]), np.array([[0.2]]))
+    fitted = fit_model(source.evaluate(freqs), freqs, options=ModelFitOptions(method="aaa", mmax=5))
+    np.testing.assert_allclose(fitted.evaluate(freqs), source.evaluate(freqs), atol=1e-8)
+    with pytest.raises(ValueError, match="not both"):
+        fit_model(source.evaluate(freqs), freqs, initial_poles=source.poles, options=ModelFitOptions(vector_fit_order=(1, 0)))
+
+
+def test_vector_fitting_preserves_directionality():
+    freqs = np.linspace(0.01, 3, 60)
+    source = ModelCoefficients(np.array([-2.0]), np.array([[[0.3], [0.1]], [[0.2], [0.4]]]), np.eye(2) * 0.1)
+    fitted = fit_model(
+        source.evaluate(freqs), freqs, options=ModelFitOptions(reciprocal=False, vector_fit_order=(1, 0), normalized_rmse=1e-8)
+    )
+    np.testing.assert_allclose(fitted.evaluate(freqs), source.evaluate(freqs), atol=1e-9)
