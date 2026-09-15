@@ -302,6 +302,31 @@ class TestFitWithDelay:
         assert ss.E.shape == (Nc, Nc)
         assert np.all(np.isfinite(np.asarray(ss.A)))
 
+    def test_y_domain_max_poles_refits_a_reduced_model(self, synth_data):
+        """Contribution pruning is available for the simulation Y-model."""
+        S, freqs, _ = synth_data
+        _, _, full = fit_with_delay(
+            S,
+            freqs,
+            tol=1e-6,
+            enforce_passive=False,
+            causality="ignore",
+            verbose=False,
+        )
+        ss, _, reduced = fit_with_delay(
+            S,
+            freqs,
+            tol=1e-6,
+            max_poles=2,
+            enforce_passive=False,
+            causality="ignore",
+            verbose=False,
+        )
+
+        assert reduced["pole_count"] <= 2
+        assert reduced["pole_count"] < full["pole_count"]
+        assert ss.A.shape == (2 * reduced["pole_count"],)
+
     def test_nonreciprocal_fit_keeps_ordered_responses_distinct(self):
         """Active networks can fit Y12 and Y21 without mirroring them."""
         freqs = np.linspace(1e8, 10e9, 180)

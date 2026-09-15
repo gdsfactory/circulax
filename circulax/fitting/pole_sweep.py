@@ -85,7 +85,11 @@ def _contribution_ordered_groups(
     groups: list[tuple[float, list[int]]] = []
     index = 0
     while index < len(poles):
-        indices = [index] if cindex[index] == 0 else [index, index + 1]
+        # A malformed or numerically de-duplicated pole list can leave a
+        # complex pole without its adjacent mate. Keep that last pole as a
+        # singleton instead of indexing past the residue axis; the later
+        # residue solve still determines whether it is useful.
+        indices = [index] if cindex[index] == 0 or index + 1 == len(poles) else [index, index + 1]
         contribution = sum(
             residues[:, :, pole_index][None, ...]
             / (sample_points[:, None, None] - poles[pole_index])

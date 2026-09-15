@@ -85,8 +85,10 @@ def vectfit_iteration(
         D_mat = D_mat.at[r, c].set(float(D_vec[k]))
         E_mat = E_mat.at[r, c].set(float(E_vec[k]))
         if reciprocal and r != c:
-            # Symmetry: residues[c, r] = conj(residues[r, c]) for physical systems
-            residues = residues.at[c, r, :].set(jnp.conj(C_flat[k]))
+            # Reciprocity is transpose symmetry at a fixed complex frequency:
+            # H[c, r](s) = H[r, c](s). Conjugating here would instead impose
+            # an invalid Hermitian constraint and break S12 == S21.
+            residues = residues.at[c, r, :].set(C_flat[k])
             D_mat = D_mat.at[c, r].set(float(D_vec[k]))
             E_mat = E_mat.at[c, r].set(float(E_vec[k]))
 

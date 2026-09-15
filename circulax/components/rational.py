@@ -57,7 +57,7 @@ def rational_component(
     n_states = A.shape[0]
     N = n_states // Nc
 
-    min_pole_mag = float(np.min(np.abs(A[:N].real)))
+    min_pole_mag = float(np.min(np.abs(A[:N].real))) if N else float("inf")
     if min_pole_mag < 1e-14:
         raise ValueError(
             f"SSModel has a pole at or near the origin (min |Re(pole)| = {min_pole_mag:.2e}). "

@@ -190,6 +190,7 @@ def _aaa_all_elements(
     pole_selection: Literal["most_complex", "largest_response"] = "most_complex",
     causality: Literal["warn", "error", "ignore"] = "warn",
     verbose: bool = True,
+    aaa_backend: Literal["numpy", "jax"] = "numpy",
 ) -> tuple[VFModel, SSModel, float, jnp.ndarray, int, float]:
     """AAA fitting that runs on the selected matrix elements.
 
@@ -218,7 +219,7 @@ def _aaa_all_elements(
 
     for r, c in idx:
         f_elem = bigH_np[r, c, :]
-        w, zj, fj = aaa_scalar(f_elem, s_np, tol=tol, mmax=mmax)
+        w, zj, fj = aaa_scalar(f_elem, s_np, tol=tol, mmax=mmax, backend=aaa_backend)
         if len(zj) > 1:
             pols = _aaa_poles(w, zj)
         else:
@@ -329,6 +330,7 @@ def fit_with_delay(
     max_poles: int | None = None,
     pole_count_candidates: tuple[int, ...] | None = None,
     verbose: bool = True,
+    aaa_backend: Literal["numpy", "jax"] = "numpy",
 ) -> tuple[SSModel, np.ndarray, dict]:
     """De-embed delay and fit a simulation-ready admittance realization.
 
@@ -358,13 +360,16 @@ def fit_with_delay(
             an admittance realization for circuit simulation.
         s_refinement_iterations: Common-pole vector-fitting iterations after
             AAA initialization when ``fit_domain="s"``.
-        max_poles: Optional S-domain pole budget. AAA pole pairs are ranked by
-            their aggregate contribution over all measured responses before
-            common-pole refinement.
+        max_poles: Optional pole budget. AAA pole pairs are ranked by their
+            aggregate contribution over all measured responses before fitting
+            their residues again. In the S domain, the retained poles are also
+            refined by common-pole vector fitting.
         pole_count_candidates: Optional candidate budgets to refit and screen
             concurrently with a fixed-shape ``vmap`` before pole relocation.
             Results are returned as ``metadata["pole_sweep"]``.
         verbose: Print progress.
+        aaa_backend: NumPy or JAX for AAA support discovery only. Pole
+            extraction uses SciPy; residue fitting and VF still use JAX.
 
     Returns:
         ss: SSModel — fitted state-space model of the de-embedded response.
@@ -380,6 +385,8 @@ def fit_with_delay(
             - causality: raw delay, phase-fit, and pre-stabilization pole diagnostics
 
     """
+    if aaa_backend not in {"numpy", "jax"}:
+        raise ValueError("AAA backend must be 'numpy' or 'jax'")
     S = np.asarray(S, dtype=np.complex128)
     freqs = np.asarray(freqs, dtype=np.float64)
     Ns, Nc, _ = S.shape
@@ -396,9 +403,6 @@ def fit_with_delay(
         raise ValueError(msg)
     if max_poles is not None and max_poles < 1:
         msg = "max_poles must be positive"
-        raise ValueError(msg)
-    if max_poles is not None and fit_domain != "s":
-        msg = "max_poles is currently available only with fit_domain='s'"
         raise ValueError(msg)
     if pole_count_candidates is not None and fit_domain != "s":
         msg = "pole_count_candidates is currently available only with fit_domain='s'"
@@ -458,12 +462,38 @@ def fit_with_delay(
             bigH,
             s,
             opts,
+            aaa_backend=aaa_backend,
             tol=tol,
             mmax=mmax,
             reciprocal=reciprocal,
             causality=causality,
             verbose=verbose,
         )
+        if max_poles is not None and len(model.poles) > max_poles:
+            reduced_poles = prune_poles_by_contribution(model, s, max_poles)
+            f_full = stack_upper_triangle(bigH)
+            weights = compute_weights(bigH, opts.weightparam, reciprocal=reciprocal)
+            C_flat, D_vec, E_vec = identify_residues(f_full, s, reduced_poles, weights, opts)
+            N = len(reduced_poles)
+            residues = jnp.zeros((Nc, Nc, N), dtype=jnp.complex128)
+            D_mat = jnp.zeros((Nc, Nc), dtype=jnp.float64)
+            E_mat = jnp.zeros((Nc, Nc), dtype=jnp.float64)
+            idx = (
+                _upper_triangle_indices(Nc)
+                if reciprocal
+                else [(row, col) for row in range(Nc) for col in range(Nc)]
+            )
+            for k, (row, col) in enumerate(idx):
+                residues = residues.at[row, col, :].set(C_flat[k])
+                D_mat = D_mat.at[row, col].set(float(D_vec[k]))
+                E_mat = E_mat.at[row, col].set(float(E_vec[k]))
+                if reciprocal and row != col:
+                    residues = residues.at[col, row, :].set(C_flat[k])
+                    D_mat = D_mat.at[col, row].set(float(D_vec[k]))
+                    E_mat = E_mat.at[col, row].set(float(E_vec[k]))
+            model = VFModel(poles=jnp.array(reduced_poles), residues=residues, D=D_mat, E=E_mat)
+            ss = vfmodel_to_ss(model, Nc)
+            rmserr_Y = compute_rmserr(jnp.moveaxis(bigH, -1, 0), eval_model(s, ss))
         S_fit_deemb = np.stack([y_to_s(np.asarray(value), z0_conv) for value in eval_model(s, ss)])
         direct_S_order = None
         transform_condition = None
@@ -476,6 +506,7 @@ def fit_with_delay(
             bigS,
             s,
             opts,
+            aaa_backend=aaa_backend,
             tol=tol,
             mmax=mmax,
             reciprocal=reciprocal,
@@ -554,6 +585,7 @@ def fit_with_delay(
 
     metadata = {
         "pole_count": len(np.asarray(model.poles)) if model is not None else direct_S_order,
+        "aaa_backend": aaa_backend,
         "state_count": len(np.asarray(ss.A)),
         "rmserr_Y": float(rmserr_Y),
         "rmserr_S": rmserr_S,

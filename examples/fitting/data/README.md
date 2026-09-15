@@ -1,5 +1,14 @@
 # Third-party example data
 
+`vector_fitting_00_ring_slot.ipynb` uses `skrf.data.ring_slot`, the smooth
+passive two-port bundled with scikit-rf. It therefore needs no separately
+vendored Touchstone file. The notebook is intentionally the first fitting
+example: it is a compact, successful baseline before the active and resonant
+stress cases below.
+
+- Upstream example: <https://scikit-rf.readthedocs.io/en/latest/examples/vectorfitting/vectorfitting_ex1_ringslot.html>
+- License: BSD-3-Clause; see `SCIKIT_RF_LICENSE.txt` in this directory.
+
 `Agilent_E5071B.s4p` is copied from the scikit-rf test data and is used by the
 vector-fitting example notebook:
 

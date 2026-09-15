@@ -99,6 +99,26 @@ class TestVfdriver:
         Hfit_direct = jnp.moveaxis(Hfit_direct, 0, -1)  # (Nc, Nc, Ns)
         np.testing.assert_allclose(np.array(Hfit), np.array(Hfit_direct), atol=1e-12)
 
+    def test_reciprocal_complex_fit_preserves_transpose_symmetry(self):
+        """Reciprocity mirrors residues without conjugating them."""
+        poles = np.array([-2e3 - 3e4j, -2e3 + 3e4j])
+        bigH = _make_2port(
+            self.s,
+            poles=poles,
+            R11=[1e3 + 2e2j, 1e3 - 2e2j],
+            R22=[2e3 + 3e2j, 2e3 - 3e2j],
+            R12=[-5e2 + 1e2j, -5e2 - 1e2j],
+            D11=0.001,
+            D22=0.002,
+            D12=0.0005,
+        )
+        opts = FitOptions(N=2, Niter1=3, Niter2=4, asymp=2)
+        model, _, error, fitted = vfdriver(bigH, self.s, poles, opts, verbose=False)
+
+        assert error < 1e-10
+        np.testing.assert_allclose(model.residues[0, 1], model.residues[1, 0], atol=1e-12)
+        np.testing.assert_allclose(fitted[0, 1], fitted[1, 0], atol=1e-12)
+
     def test_none_poles_auto_init(self):
         """Passing poles=None should auto-generate logarithmically-spaced poles."""
         opts = FitOptions(N=4, Niter1=2, Niter2=2, asymp=2)

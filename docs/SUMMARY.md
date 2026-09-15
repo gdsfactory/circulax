@@ -2,6 +2,8 @@
 * Guide
     * [Writing Components](writing_components.md)
     * [Transient Simulation](transient.md)
+    * [Rational Model Enforcement](rational_model_enforcement.md)
+    * [Fitting API](fitting_api.md)
     * [Harmonic Balance](harmonic_balance.md)
     * [Choosing a Solver](choosing_a_solver.md)
     * [Subcircuit Hierarchy](hierarchy.md)
