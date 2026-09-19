@@ -4,6 +4,7 @@
     * [Transient Simulation](transient.md)
     * [Harmonic Balance](harmonic_balance.md)
     * [Choosing a Solver](choosing_a_solver.md)
+    * [S-Parameters and SAX Dispatch](sax_dispatch.md)
     * [Subcircuit Hierarchy](hierarchy.md)
 * Getting Started
     * [Resistor Ladder](examples/resistor_ladder.md)

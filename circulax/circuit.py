@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import kfnetlist as kfnl
 
+from circulax.sax_dispatch import SaxDispatch, build_sax_circuit, check_sax_dispatch
 from circulax.utils import apply_global_params, update_params_dict
 
 if TYPE_CHECKING:
@@ -88,6 +89,11 @@ class Circuit:
         self.max_steps = max_steps
         self._source_netlist = _source_netlist
         self._source_models = _source_models
+        # Both are resolved on first use by `sax_dispatch` / `_sax_evaluator`:
+        # detection inspects every instance, and building the SAX circuit is
+        # only worth doing for callers that actually ask for S-parameters.
+        self._sax_verdict: SaxDispatch | None = None
+        self._sax_circuit: Any = None
 
     @property
     def ports(self) -> tuple[str, ...]:
@@ -105,6 +111,119 @@ class Circuit:
     def source_models(self) -> dict | None:
         """The leaf models used to compile this circuit, if available."""
         return self._source_models
+
+    @property
+    def sax_dispatch(self) -> SaxDispatch:
+        """Whether :meth:`sdict` can shortcut this circuit through SAX.
+
+        Truthy when every instantiated model is a SAX model; otherwise it
+        carries the blocking reasons in ``.reasons``. See
+        :func:`circulax.sax_dispatch.check_sax_dispatch`.
+        """
+        if self._sax_verdict is None:
+            self._sax_verdict = check_sax_dispatch(self._source_netlist, self._source_models)
+        return self._sax_verdict
+
+    def _sax_evaluator(self) -> Any:
+        """Return this circuit's SAX evaluator, building it once on first use."""
+        if self._sax_circuit is None:
+            self._sax_circuit = build_sax_circuit(self._source_netlist, self._source_models)
+        return self._sax_circuit
+
+    def _sdict_via_nodal(self, params: dict[str, Any]) -> dict[tuple[str, str], jax.Array]:
+        """Compute the circuit S-matrix from the nodal system.
+
+        The fallback path, used when the circuit is not SAX-dispatchable. The
+        S-parameters come from the existing small-signal sweep at ``z0=1`` —
+        the normalisation ``sax_component`` stamps its admittances with —
+        evaluated at ``f = 0``: a scattering network carries no electrical
+        storage, so its S-matrix does not depend on the small-signal
+        frequency. Optical dispersion enters through model parameters (``wl``)
+        instead, which is why this returns the same matrix SAX composes.
+        """
+        if self._source_netlist is None:
+            msg = "Circuit has no retained source netlist, so its external ports are unknown."
+            raise ValueError(msg)
+        ports = self._source_netlist.get("ports") or {}
+        if not ports:
+            msg = "Circuit declares no external 'ports'; there is nothing to build an S-matrix over."
+            raise ValueError(msg)
+
+        port_names = list(ports)
+        s = self.sp(
+            ports=[ports[name] for name in port_names],
+            freqs=jnp.zeros(1),
+            z0=1.0,
+            params=params,
+        )[0]
+        return {(pi, pj): s[i, j] for i, pi in enumerate(port_names) for j, pj in enumerate(port_names)}
+
+    def sdict(
+        self,
+        *,
+        params: dict[str, Any] | None = None,
+        backend: str = "auto",
+        **param_updates: Any,
+    ) -> dict[tuple[str, str], jax.Array]:
+        """Return the circuit's S-parameters as a SAX S-dict.
+
+        One entry point for both kinds of circuit. When every model in the
+        netlist is a SAX model, the circuit is linear and memoryless and its
+        S-matrix is composed directly by SAX — far cheaper than assembling and
+        solving the nodal system for the same answer, and with no XLA compile
+        per call shape. Anything else (a nonlinear device, a source, a ground)
+        takes the nodal path. Both return the same S-dict, so callers need not
+        know which ran; :attr:`sax_dispatch` reports which one would.
+
+        Args:
+            params: Parameter updates (same format as :meth:`dc`).
+            backend: ``"auto"`` (default) uses SAX when the circuit qualifies
+                and the nodal solver otherwise. ``"sax"`` forces the SAX path
+                and raises if it does not qualify. ``"nodal"`` forces the nodal
+                path, which is how the two are cross-checked.
+            **param_updates: Global parameter overrides, e.g. ``wl=1.55``.
+                The SAX path broadcasts over array-valued parameters; the
+                nodal path requires scalars.
+
+        Returns:
+            A SAX S-dict mapping ``(port_out, port_in)`` pairs to complex
+            amplitudes, keyed by the netlist's external port names.
+
+        Raises:
+            ValueError: If *backend* is not one of the three accepted values,
+                or if ``"sax"`` was forced on a circuit that does not qualify.
+
+        """
+        if backend not in ("auto", "sax", "nodal"):
+            msg = f"backend must be 'auto', 'sax' or 'nodal'. Got {backend!r}."
+            raise ValueError(msg)
+
+        updates = self._coerce_param_updates(params, param_updates)
+        if backend == "nodal" or (backend == "auto" and not self.sax_dispatch):
+            return self._sdict_via_nodal(updates)
+        return self._sax_evaluator()(**updates)
+
+    def smatrix(
+        self,
+        *,
+        params: dict[str, Any] | None = None,
+        backend: str = "auto",
+        **param_updates: Any,
+    ) -> tuple[jax.Array, tuple[str, ...]]:
+        """Return the circuit's S-parameters as a dense matrix plus its port order.
+
+        Dense form of :meth:`sdict`, taking the same arguments.
+
+        Returns:
+            ``(s_matrix, port_order)`` — the matrix indexed ``[..., out, in]``
+            and the port names giving its row/column order.
+
+        """
+        from sax import sdense
+
+        s_dict = self.sdict(params=params, backend=backend, **param_updates)
+        s_matrix, port_map = sdense(s_dict)
+        return s_matrix, tuple(sorted(port_map, key=port_map.get))
 
     def _n(self) -> int:
         return self.sys_size * (2 if self.solver.is_complex else 1)
