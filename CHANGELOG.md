@@ -15,6 +15,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 - **dependencies**: Make scikit-rf a core dependency for the default vector-fitting backend.
 - **fitting**: Keep experimental AAA, reduction, and enforcement helpers in implementation submodules rather than the stable namespace.
+- **ac-sweep**: Default `setup_ac_sweep()` to the safe non-holomorphic 2N×2N path for complex circuits.
 
 ### Fixed
 
