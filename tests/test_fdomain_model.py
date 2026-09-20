@@ -96,6 +96,32 @@ def test_fdomain_model_does_not_track_ac_sweep_unlike_native_fdomain_component()
     assert not jnp.allclose(S_a[3], S_ref[3], atol=1e-9)
 
 
+def test_frequency_param_round_trip_tracks_ac_sweep():
+    """The explicit SAX extension restores @fdomain_component AC semantics."""
+    sweep_freqs = jnp.array([1e6, 1e8, 1e9, 1e10])
+    skin_round_trip = sax_component(
+        fdomain_model(_skin_effect_Y, ports=("p1", "p2")),
+        frequency_param="f",
+    )
+    circuit_round_trip = compile_circuit(
+        _rc_netlist("skinres", {"R0": 1.0, "a": 0.1}),
+        {"skinres": skin_round_trip, "capacitor": Capacitor, "ground": lambda: 0},
+        is_complex=True,
+    )
+    S_round_trip = circuit_round_trip.sp(ports=["in"], freqs=sweep_freqs, z0=1.0)[:, 0, 0]
+
+    skin_native = fdomain_component(ports=("p1", "p2"))(_skin_effect_Y)
+    circuit_native = compile_circuit(
+        _rc_netlist("skinres", {"R0": 1.0, "a": 0.1}),
+        {"skinres": skin_native, "capacitor": Capacitor, "ground": lambda: 0},
+        is_complex=True,
+    )
+    S_native = circuit_native.sp(ports=["in"], freqs=sweep_freqs, z0=1.0)[:, 0, 0]
+
+    assert jnp.allclose(S_round_trip, S_native, atol=1e-9)
+    assert not circuit_round_trip.check_sax_compatibility()
+
+
 def test_fdomain_model_rejects_missing_f_argument():
     def bad_model(R0=1.0):
         return jnp.eye(2, dtype=jnp.complex128)

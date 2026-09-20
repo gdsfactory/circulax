@@ -156,9 +156,12 @@ def fdomain_model(fn: callable, *, ports: tuple[str, ...], z0: complex = 1.0 + 1
     ``circuit.dc(f=jnp.linspace(...))``), but it is **not** a drop-in
     replacement for ``@fdomain_component`` inside a circuit that also has
     reactive elements (capacitors/inductors) or sources: there, the
-    component's own frequency dependence would be frozen at whatever value
-    its parameter was last set to, decoupled from the ``freqs`` sweep
-    argument driving the rest of the circuit.
+    component's own frequency dependence is frozen at whatever value its
+    parameter was last set to, decoupled from the ``freqs`` sweep argument
+    driving the rest of the circuit. To explicitly restore live sweep
+    semantics, wrap it as ``sax_component(fdomain_model(...),
+    frequency_param="f")``; that creates a frequency-domain Circulax
+    component and is consequently no longer eligible for SAX-circuit export.
 
     Note:
         Compiling the result with ``is_complex=True`` may emit a spurious
@@ -214,10 +217,22 @@ def fdomain_model(fn: callable, *, ports: tuple[str, ...], z0: complex = 1.0 + 1
     sax_model.__name__ = fn.__name__
     sax_model.__doc__ = fn.__doc__
     sax_model.__signature__ = sig
+    # Keep enough provenance for ``sax_component(..., frequency_param="f")``
+    # to recover the original admittance function.  This is deliberately
+    # private metadata: without the explicit ``frequency_param`` opt-in the
+    # returned callable remains a completely ordinary SAX model.
+    sax_model._fdomain_admittance = fn
+    sax_model._fdomain_ports = ports
+    sax_model._fdomain_frequency_param = f_name
     return sax_model
 
 
-def sax_component(fn: callable, *, name: str | None = None) -> callable:
+def sax_component(
+    fn: callable,
+    *,
+    name: str | None = None,
+    frequency_param: str | None = None,
+) -> callable:
     """Decorator to convert a SAX model function into a circulax component.
 
     Inspects ``fn`` at decoration time to discover its port interface via a
@@ -263,6 +278,17 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
             wrapping :class:`functools.partial` objects where several
             partials share the same underlying ``__name__`` — e.g.
             ``{key: sax_component(val, name=key) for key, val in pdk.items()}``.
+        frequency_param: Optional SAX parameter that is driven by
+            :meth:`~circulax.circuit.Circuit.sp`'s frequency at every sweep
+            point. This creates a Circulax frequency-domain component rather
+            than a normal static SAX wrapper, so it cannot be exported via
+            :meth:`~circulax.circuit.Circuit.to_sax_circuit`. Use this for an
+            explicit round trip such as
+            ``sax_component(fdomain_model(y_fn, ports=("p1", "p2")),
+            frequency_param="f")``. For models made by
+            :func:`fdomain_model`, the original Y function is recovered
+            directly; arbitrary SAX models are converted from S to Y at each
+            sweep point.
 
     Returns:
         A :class:`~circulax.components.base_component.CircuitComponent`
@@ -273,6 +299,9 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
         RuntimeError: If the dry run fails for any reason.
 
     """
+    if frequency_param is not None:
+        return _build_frequency_sax_component(fn, frequency_param=frequency_param, name=name)
+
     sig = inspect.signature(fn)
     base_fn = _unwrap(fn)
     cls_name = name if name is not None else getattr(base_fn, "__name__", "SaxComponent")
@@ -488,6 +517,78 @@ def fdomain_component(ports: tuple[str, ...]) -> Any:
 
     """
     return lambda fn: _build_fdomain_component(fn, ports)
+
+
+def _build_frequency_sax_component(
+    fn: callable,
+    *,
+    frequency_param: str,
+    name: str | None,
+) -> type[CircuitComponent]:
+    """Build the explicit, sweep-frequency-driven form of a SAX model.
+
+    This is intentionally separate from the usual :func:`sax_component`
+    path.  A SAX parameter has no intrinsic connection to the Circulax AC
+    sweep, so only the caller's ``frequency_param=...`` opt-in permits that
+    connection.
+    """
+    sig = inspect.signature(fn)
+    params = list(sig.parameters.values())
+    by_name = {param.name: param for param in params}
+    if frequency_param not in by_name:
+        msg = f"SAX model '{getattr(fn, '__name__', 'SaxComponent')}' has no parameter '{frequency_param}'."
+        raise TypeError(msg)
+
+    base_fn = _unwrap(fn)
+    cls_name = name if name is not None else getattr(base_fn, "__name__", "SaxComponent")
+
+    # fdomain_model preserves its source function as private provenance.  In
+    # this common route, use it directly instead of numerically undoing its
+    # Y -> S conversion at every sweep point.
+    source_fn = getattr(fn, "_fdomain_admittance", None)
+    source_frequency = getattr(fn, "_fdomain_frequency_param", None)
+    if source_fn is not None and source_frequency == frequency_param:
+        cls = _build_fdomain_component(source_fn, getattr(fn, "_fdomain_ports"))
+        cls.__name__ = cls_name
+        cls.__qualname__ = cls_name
+        return cls
+
+    defaults = {
+        param.name: param.default if param.default is not inspect.Parameter.empty else 1.0
+        for param in params
+        if param.name != frequency_param
+    }
+    try:
+        initial_kwargs = {**defaults, frequency_param: by_name[frequency_param].default}
+        dummy_s_dict = fn(**initial_kwargs)
+        detected_ports = get_ports(dummy_s_dict)
+    except Exception as exc:
+        msg = f"Failed to dry-run frequency-driven SAX component '{cls_name}': {exc}"
+        raise RuntimeError(msg) from exc
+
+    def sax_admittance(f: float, **kwargs: Any) -> jax.Array:
+        s_dict = fn(**{**kwargs, frequency_param: f})
+        s_matrix, _ = sdense(s_dict)
+        return s_to_y(s_matrix)
+
+    sax_admittance.__name__ = cls_name
+    sax_admittance.__doc__ = getattr(base_fn, "__doc__", None)
+    sax_admittance.__signature__ = inspect.Signature(
+        parameters=[
+            inspect.Parameter("f", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            *[
+                inspect.Parameter(
+                    param.name,
+                    inspect.Parameter.KEYWORD_ONLY,
+                    default=defaults[param.name],
+                    annotation=param.annotation if param.annotation is not inspect.Parameter.empty else inspect.Parameter.empty,
+                )
+                for param in params
+                if param.name != frequency_param
+            ],
+        ]
+    )
+    return _build_fdomain_component(sax_admittance, tuple(_sanitize_port(port) for port in detected_ports))
 
 
 # ---------------------------------------------------------------------------
