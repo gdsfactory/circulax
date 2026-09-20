@@ -14,7 +14,7 @@ import sax
 from sax import get_ports, sdense
 from sax.saxtypes import try_into
 
-from circulax.components.base_component import CircuitComponent, Signals, States, _extract_param, component
+from circulax.components.base_component import CircuitComponent, Signals, _extract_param, component
 
 
 def _unwrap(fn: callable) -> callable:
@@ -188,8 +188,8 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
 
     use_wave_stamp = _needs_wave_stamp(dummy_s_matrix)
 
-    # base_component builds a namedtuple over the port tuple, which requires
-    # every port name to be a valid Python identifier. Some SAX PDKs label
+    # Component variables use attribute access, which requires every port
+    # name to be a valid Python identifier. Some SAX PDKs label
     # ports numerically ('1', '2'); coerce those to identifiers while keeping
     # the index ordering.
     raw_to_sanitized = {str(p): _sanitize_port(p) for p in detected_ports}
@@ -199,7 +199,7 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
     port_names = tuple(raw_to_sanitized[str(p)] for p in detected_ports)
     aux_state_names = tuple(f"wave_{p}" for p in port_names) if use_wave_stamp else ()
 
-    def physics_wrapper(signals: Signals, s: States, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
+    def physics_wrapper(signals: Signals, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
         s_dict = fn(**kwargs)
         # `sdense` returns the S-matrix *and* a port_map keyed in dict-insertion
         # order (dict[raw_port, matrix_row_index]). `get_ports` returns ports
@@ -213,7 +213,7 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
         v_vec = jnp.array([getattr(signals, p) for p in sanitized_in_order], dtype=jnp.complex128)
 
         if use_wave_stamp:
-            a_vec = jnp.array([getattr(s, f"wave_{p}") for p in sanitized_in_order], dtype=jnp.complex128)
+            a_vec = jnp.array([getattr(signals, f"wave_{p}") for p in sanitized_in_order], dtype=jnp.complex128)
             b_vec = s_matrix.astype(jnp.complex128) @ a_vec
             i_vec = a_vec - b_vec
             constraints = a_vec + b_vec - v_vec
@@ -229,7 +229,7 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
     physics_wrapper.__doc__ = getattr(base_fn, "__doc__", None)
 
     # Synthesise a signature that base_component._build_component can consume:
-    # it must begin with the reserved (signals, s) args and expose every SAX
+    # it must begin with the reserved ``signals`` arg and expose every SAX
     # parameter as a keyword-only entry with a default. The wrapper's runtime
     # body still accepts them via **kwargs.
     _sax_params = [
@@ -244,7 +244,6 @@ def sax_component(fn: callable, *, name: str | None = None) -> callable:
     physics_wrapper.__signature__ = inspect.Signature(
         parameters=[
             inspect.Parameter("signals", inspect.Parameter.POSITIONAL_OR_KEYWORD),
-            inspect.Parameter("s", inspect.Parameter.POSITIONAL_OR_KEYWORD),
             *_sax_params,
         ]
     )

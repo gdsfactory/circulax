@@ -6,7 +6,6 @@ import jax.numpy as jnp
 from circulax.components.base_component import (
     PhysicsReturn,
     Signals,
-    States,
     component,
     source,
 )
@@ -15,14 +14,14 @@ _PN_ALIASES = {"p1": "P", "p2": "N"}
 
 
 @component(ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
-def Resistor(signals: Signals, s: States, R: float = 1e3) -> PhysicsReturn:
+def Resistor(signals: Signals, R: float = 1e3) -> PhysicsReturn:
     """Ohm's Law: I = V/R."""
     i = (signals.p1 - signals.p2) / (R + 1e-12)
     return {"p1": i, "p2": -i}, {}
 
 
 @component(ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
-def Capacitor(signals: Signals, s: States, C: float = 1e-12) -> PhysicsReturn:
+def Capacitor(signals: Signals, C: float = 1e-12) -> PhysicsReturn:
     """Q = C * V.
     Returns Charge (q) so the solver computes I = dq/dt.
     """  # noqa: D205
@@ -32,10 +31,45 @@ def Capacitor(signals: Signals, s: States, C: float = 1e-12) -> PhysicsReturn:
 
 
 @component(ports=("p1", "p2"), states=("i_L",), port_aliases=_PN_ALIASES, holomorphic=True)
-def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
+def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
     """V = L * di/dt formulated via flux: f['i_L'] = V, q['i_L'] = -L*i_L."""
     v_drop = signals.p1 - signals.p2
-    return ({"p1": s.i_L, "p2": -s.i_L, "i_L": v_drop}, {"i_L": -L * s.i_L})
+    return ({"p1": signals.i_L, "p2": -signals.i_L, "i_L": v_drop}, {"i_L": -L * signals.i_L})
+
+
+@component(
+    ports=("p1", "p2"),
+    states=("a1", "a2"),
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+)
+def TransmissionLine(
+    signals: Signals,
+    tau: float = 1e-9,
+    z0: float = 50.0,
+    attenuation: float = 1.0,
+) -> PhysicsReturn:
+    """Matched bidirectional transmission line with exact fixed delay.
+
+    ``a1`` and ``a2`` are the incident power-wave amplitudes at the two
+    reference planes. The outgoing waves are the delayed incident wave from
+    the opposite end. This stamp stays finite for an exactly lossless line
+    and therefore avoids the singular ``S -> Y`` conversion of an ideal
+    through connection.
+
+    The same equations are interpreted by DC, transient, AC, and HB.
+    """
+    past = signals.at_delay(tau)
+    b1 = attenuation * past.a2
+    b2 = attenuation * past.a1
+    i1 = (signals.a1 - b1) / z0
+    i2 = (signals.a2 - b2) / z0
+    return {
+        "p1": i1,
+        "p2": i2,
+        "a1": signals.p1 - signals.a1 - b1,
+        "a2": signals.p2 - signals.a2 - b2,
+    }, {}
 
 
 # ===========================================================================
@@ -44,17 +78,16 @@ def Inductor(signals: Signals, s: States, L: float = 1e-9) -> PhysicsReturn:
 
 
 @source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
-def VoltageSource(signals: Signals, s: States, t: float, V: float = 0.0, delay: float = 0.0) -> PhysicsReturn:
+def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0) -> PhysicsReturn:
     """Step voltage source."""
     v_val = jnp.where(t >= delay, V, 0.0)
     constraint = (signals.p1 - signals.p2) - v_val
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
 def SmoothPulse(
     signals: Signals,
-    s: States,
     t: float,
     V: float = 1.0,
     delay: float = 1e-9,
@@ -64,13 +97,12 @@ def SmoothPulse(
     k = 10.0 / tr
     v_val = V * jnn.sigmoid(k * (t - delay))
     constraint = (signals.p1 - signals.p2) - v_val
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
 def VoltageSourceAC(
     signals: Signals,
-    s: States,
     t: float,
     V: float = 0.0,
     freq: float = 1e6,
@@ -82,13 +114,12 @@ def VoltageSourceAC(
     v_ac = V * jnp.sin(omega * t + phase)
     v_val = jnp.where(t >= delay, v_ac, 0.0)
     constraint = (signals.p1 - signals.p2) - v_val
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @source(ports=("p1", "p2"), states=("i_src",), amplitude_param="v2", holomorphic=True)
 def PulseVoltageSource(
     signals: Signals,
-    s: States,
     t: float,
     v1: float = 0.0,
     v2: float = 1.0,
@@ -122,11 +153,11 @@ def PulseVoltageSource(
     )
     v_val = jnp.where(t < td, v1, v_periodic)
     constraint = (signals.p1 - signals.p2) - v_val
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True)
-def CurrentSource(signals: Signals, s: States, I: float = 0.0) -> PhysicsReturn:
+def CurrentSource(signals: Signals, I: float = 0.0) -> PhysicsReturn:
     """Constant current source."""
     return {"p1": I, "p2": -I}, {}
 
@@ -137,14 +168,13 @@ def CurrentSource(signals: Signals, s: States, I: float = 0.0) -> PhysicsReturn:
 
 
 @component(ports=("p1", "p2"))
-def Diode(signals: Signals, s: States, Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85e-3) -> PhysicsReturn:
+def Diode(signals: Signals, Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85e-3) -> PhysicsReturn:
     """Ideal diode using the Shockley equation ``I = Is * (exp(Vd / n*Vt) - 1)``.
 
     Junction voltage is clipped to ``[-5, 5]`` V for numerical stability.
 
     Args:
         signals: Port voltages at anode (``p1``) and cathode (``p2``).
-        s: Unused.
         Is: Saturation current in amperes. Defaults to ``1e-12``.
         n: Ideality factor. Defaults to ``1.0``.
         Vt: Thermal voltage in volts. Defaults to ``25.85e-3``.
@@ -160,7 +190,6 @@ def Diode(signals: Signals, s: States, Is: float = 1e-12, n: float = 1.0, Vt: fl
 @component(ports=("p1", "p2"))
 def ZenerDiode(
     signals: Signals,
-    s: States,
     Vz: float = 5.0,
     Is: float = 1e-12,
     n: float = 1.0,
@@ -173,7 +202,6 @@ def ZenerDiode(
 
     Args:
         signals: Port voltages at anode (``p1``) and cathode (``p2``).
-        s: Unused.
         Vz: Zener breakdown voltage in volts. Defaults to ``5.0``.
         Is: Saturation current in amperes. Defaults to ``1e-12``.
         n: Ideality factor. Defaults to ``1.0``.
@@ -225,7 +253,6 @@ def _nmos_current(v_d: float, v_g: float, v_s: float, Kp: float, W: float, L: fl
 @component(ports=("d", "g", "s"))
 def NMOS(
     signals: Signals,
-    s: States,
     Kp: float = 2e-5,
     W: float = 10e-6,
     L: float = 1e-6,
@@ -238,7 +265,6 @@ def NMOS(
 
     Args:
         signals: Port voltages at drain (``d``), gate (``g``), and source (``s``).
-        s: Unused.
         Kp: Process transconductance parameter in A/V². Defaults to ``2e-5``.
         W: Gate width in metres. Defaults to ``10e-6``.
         L: Gate length in metres. Defaults to ``1e-6``.
@@ -253,7 +279,6 @@ def NMOS(
 @component(ports=("d", "g", "s"))
 def PMOS(
     signals: Signals,
-    s: States,
     Kp: float = 1e-5,
     W: float = 20e-6,
     L: float = 1e-6,
@@ -266,7 +291,6 @@ def PMOS(
 
     Args:
         signals: Port voltages at drain (``d``), gate (``g``), and source (``s``).
-        s: Unused.
         Kp: Process transconductance parameter in A/V². Defaults to ``1e-5``.
         W: Gate width in metres. Defaults to ``20e-6``.
         L: Gate length in metres. Defaults to ``1e-6``.
@@ -292,7 +316,6 @@ def PMOS(
 @component(ports=("d", "g", "s"))
 def NMOSDynamic(
     signals: Signals,
-    s: States,
     Kp: float = 2e-5,
     W: float = 10e-6,
     L: float = 1e-6,
@@ -309,7 +332,6 @@ def NMOSDynamic(
 
     Args:
         signals: Port voltages at drain (``d``), gate (``g``), and source (``s``).
-        s: Unused.
         Kp: Process transconductance parameter in A/V². Defaults to ``2e-5``.
         W: Gate width in metres. Defaults to ``10e-6``.
         L: Gate length in metres. Defaults to ``1e-6``.
@@ -390,7 +412,6 @@ def _junction_charge(v, Cj0, Vj, m) -> float:
 @component(ports=("c", "b", "e"))
 def BJT_NPN(
     signals: Signals,
-    s: States,
     Is: float = 1e-12,
     BetaF: float = 100.0,
     BetaR: float = 1.0,
@@ -404,7 +425,6 @@ def BJT_NPN(
 
     Args:
         signals: Port voltages at collector (``c``), base (``b``), and emitter (``e``).
-        s: Unused.
         Is: Saturation current in amperes. Defaults to ``1e-12``.
         BetaF: Forward common-emitter current gain. Defaults to ``100``.
         BetaR: Reverse common-emitter current gain. Defaults to ``1``.
@@ -433,7 +453,6 @@ def BJT_NPN(
 @component(ports=("c", "b", "e"))
 def BJT_NPN_Dynamic(
     signals: Signals,
-    s: States,
     Is: float = 1e-12,
     BetaF: float = 100.0,
     BetaR: float = 1.0,
@@ -465,7 +484,6 @@ def BJT_NPN_Dynamic(
     Args:
         signals: Port voltages at collector (``c``), base (``b``), and
             emitter (``e``).
-        s: Unused; present to satisfy the component protocol.
         Is: Saturation current in amperes. Defaults to ``1e-12``.
         BetaF: Forward common-emitter current gain. Defaults to ``100``.
         BetaR: Reverse common-emitter current gain. Defaults to ``1``.
@@ -528,12 +546,12 @@ def BJT_NPN_Dynamic(
 
 
 @component(ports=("out_p", "out_m", "ctrl_p", "ctrl_m"), states=("i_src",), holomorphic=True)
-def VCVS(signals: Signals, s: States, A: float = 1.0) -> PhysicsReturn:
+def VCVS(signals: Signals, A: float = 1.0) -> PhysicsReturn:
     """Voltage Controlled Voltage Source."""
     constraint = (signals.out_p - signals.out_m) - A * (signals.ctrl_p - signals.ctrl_m)
     return {
-        "out_p": s.i_src,
-        "out_m": -s.i_src,
+        "out_p": signals.i_src,
+        "out_m": -signals.i_src,
         "ctrl_p": 0.0,
         "ctrl_m": 0.0,
         "i_src": constraint,
@@ -541,19 +559,19 @@ def VCVS(signals: Signals, s: States, A: float = 1.0) -> PhysicsReturn:
 
 
 @component(ports=("out_p", "out_m", "ctrl_p", "ctrl_m"), holomorphic=True)
-def VCCS(signals: Signals, s: States, G: float = 0.0) -> PhysicsReturn:
+def VCCS(signals: Signals, G: float = 0.0) -> PhysicsReturn:
     """Voltage Controlled Current Source."""
     i = G * (signals.ctrl_p - signals.ctrl_m)
     return {"out_p": i, "out_m": -i, "ctrl_p": 0.0, "ctrl_m": 0.0}, {}
 
 
 @component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_src",), holomorphic=True)
-def IdealOpAmp(signals: Signals, s: States, A: float = 1e6) -> PhysicsReturn:
+def IdealOpAmp(signals: Signals, A: float = 1e6) -> PhysicsReturn:
     """Ideal Op Amp."""
     constraint = (signals.out_p - signals.out_m) - A * (signals.in_p - signals.in_m)
     return {
-        "out_p": s.i_src,
-        "out_m": -s.i_src,
+        "out_p": signals.i_src,
+        "out_m": -signals.i_src,
         "in_p": 0.0,
         "in_m": 0.0,
         "i_src": constraint,
@@ -561,7 +579,7 @@ def IdealOpAmp(signals: Signals, s: States, A: float = 1e6) -> PhysicsReturn:
 
 
 @component(ports=("p1", "p2", "cp", "cm"), holomorphic=True)
-def VoltageControlledSwitch(signals: Signals, s: States, Ron: float = 1.0, Roff: float = 1e6, Vt: float = 0.0) -> PhysicsReturn:
+def VoltageControlledSwitch(signals: Signals, Ron: float = 1.0, Roff: float = 1e6, Vt: float = 0.0) -> PhysicsReturn:
     """Voltage Controlled Switch."""
     v_ctrl = signals.cp - signals.cm
     k = 10.0
@@ -576,29 +594,29 @@ def VoltageControlledSwitch(signals: Signals, s: States, Ron: float = 1.0, Roff:
 
 
 @component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_src", "i_ctrl"), holomorphic=True)
-def CCVS(signals: Signals, s: States, R: float = 1.0) -> PhysicsReturn:
+def CCVS(signals: Signals, R: float = 1.0) -> PhysicsReturn:
     """Current Controlled Voltage Source: V_out = R * i_ctrl, V_in = 0 (short)."""
     eq_in = signals.in_p - signals.in_m
-    eq_out = (signals.out_p - signals.out_m) - (R * s.i_ctrl)
+    eq_out = (signals.out_p - signals.out_m) - (R * signals.i_ctrl)
     return {
-        "out_p": s.i_src,
-        "out_m": -s.i_src,
-        "in_p": s.i_ctrl,
-        "in_m": -s.i_ctrl,
+        "out_p": signals.i_src,
+        "out_m": -signals.i_src,
+        "in_p": signals.i_ctrl,
+        "in_m": -signals.i_ctrl,
         "i_src": eq_out,
         "i_ctrl": eq_in,
     }, {}
 
 
 @component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_ctrl",), holomorphic=True)
-def CCCS(signals: Signals, s: States, alpha: float = 1.0) -> PhysicsReturn:
+def CCCS(signals: Signals, alpha: float = 1.0) -> PhysicsReturn:
     """Current Controlled Current Source: I_out = alpha * i_ctrl, V_in = 0 (short)."""
     eq_in = signals.in_p - signals.in_m
-    i_out = alpha * s.i_ctrl
+    i_out = alpha * signals.i_ctrl
     return {
         "out_p": i_out,
         "out_m": -i_out,
-        "in_p": s.i_ctrl,
-        "in_m": -s.i_ctrl,
+        "in_p": signals.i_ctrl,
+        "in_m": -signals.i_ctrl,
         "i_ctrl": eq_in,
     }, {}

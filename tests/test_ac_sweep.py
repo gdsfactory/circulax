@@ -231,9 +231,7 @@ def test_renormalize_analytical(rc_netlist):
     S_75_renorm = renormalize(S_50, z0_from=50.0, z0_to=75.0)
 
     S_75_direct = setup_ac_sweep(groups, num_vars, [pmap["R1,p1"]], z0=75.0)(y_dc, _FREQS)
-    assert jnp.allclose(S_75_renorm, S_75_direct, atol=1e-6), (
-        f"Max error: {jnp.max(jnp.abs(S_75_renorm - S_75_direct)):.2e}"
-    )
+    assert jnp.allclose(S_75_renorm, S_75_direct, atol=1e-6), f"Max error: {jnp.max(jnp.abs(S_75_renorm - S_75_direct)):.2e}"
 
 
 # ---------------------------------------------------------------------------
@@ -505,8 +503,14 @@ def test_non_holomorphic_matches_holomorphic_for_waveguide(waveguide_complex_set
             "GND": {"component": "ground"},
             "WG1": {
                 "component": "waveguide",
-                "settings": {"length_um": 100.0, "loss_dB_cm": 0.0, "neff": 2.4, "n_group": 4.0,
-                              "center_wavelength_nm": 1310.0, "wavelength_nm": 1310.0},
+                "settings": {
+                    "length_um": 100.0,
+                    "loss_dB_cm": 0.0,
+                    "neff": 2.4,
+                    "n_group": 4.0,
+                    "center_wavelength_nm": 1310.0,
+                    "wavelength_nm": 1310.0,
+                },
             },
         },
         "connections": {"WG1,p2": "GND,p1"},
@@ -577,17 +581,26 @@ def _ring_modulator_circuit():
     from circulax.components.electronic import Capacitor, Resistor
 
     @source(ports=("p1", "p2"), states=("i_src",), holomorphic=True)
-    def OpticalCW(signals, s, t, power=1.0, phase=0.0):
+    def OpticalCW(signals, t, power=1.0, phase=0.0):
         amp = jnp.sqrt(power) * jnp.exp(1j * phase)
-        return {"p1": s.i_src, "p2": -s.i_src, "i_src": (signals.p1 - signals.p2) - amp}, {}
+        return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": (signals.p1 - signals.p2) - amp}, {}
 
     @source(ports=("p1", "p2"), states=("i_src",), holomorphic=True)
-    def DCVoltage(signals, s, t, V_dc=-2.0):
-        return {"p1": s.i_src, "p2": -s.i_src, "i_src": (signals.p1 - signals.p2) - V_dc}, {}
+    def DCVoltage(signals, t, V_dc=-2.0):
+        return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": (signals.p1 - signals.p2) - V_dc}, {}
 
     @component(ports=("p1", "p2", "v_e"), states=("a", "i_out"), holomorphic=False)
-    def RingEO(signals, s, ng=3.8, L=3.14159265e-5, gamma=0.976, alpha0=0.969,
-               alpha1=0.0, f_operating=2.2904e14, f_resonance=2.2901e14, v_to_wr=0.0):
+    def RingEO(
+        signals,
+        ng=3.8,
+        L=3.14159265e-5,
+        gamma=0.976,
+        alpha0=0.969,
+        alpha1=0.0,
+        f_operating=2.2904e14,
+        f_resonance=2.2901e14,
+        v_to_wr=0.0,
+    ):
         c_val = 2.998e8
         voltage = jnp.real(signals.v_e)  # <-- non-holomorphic
         tau_e = 2 * ng * L / ((1 - gamma**2) * c_val)
@@ -596,9 +609,9 @@ def _ring_modulator_circuit():
         tau = 1 / (1 / tau_e + 1 / tau_l)
         coupling = jnp.sqrt(2 / tau_e)
         delta_omega = 2 * jnp.pi * (f_operating - f_resonance) + v_to_wr * voltage
-        rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * s.a - s.a / tau
-        E_o = signals.p1 - 1j * coupling * s.a
-        return {"p1": 0 + 0j, "p2": s.i_out, "v_e": 0 + 0j, "i_out": signals.p2 - E_o, "a": -rhs_a}, {"a": s.a}
+        rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * signals.a - signals.a / tau
+        E_o = signals.p1 - 1j * coupling * signals.a
+        return {"p1": 0 + 0j, "p2": signals.i_out, "v_e": 0 + 0j, "i_out": signals.p2 - E_o, "a": -rhs_a}, {"a": signals.a}
 
     c = 2.998e8
     ng = 3.8
@@ -613,16 +626,29 @@ def _ring_modulator_circuit():
     v_to_wr = 2 * np.pi * 2e9
 
     models_map = {
-        "ground": lambda: 0, "optical_cw": OpticalCW, "dc_voltage": DCVoltage,
-        "ring_eo": RingEO, "resistor": Resistor, "capacitor": Capacitor,
+        "ground": lambda: 0,
+        "optical_cw": OpticalCW,
+        "dc_voltage": DCVoltage,
+        "ring_eo": RingEO,
+        "resistor": Resistor,
+        "capacitor": Capacitor,
     }
     net_dict = {
         "instances": {
             "GND": {"component": "ground"},
             "OptSrc": {"component": "optical_cw", "settings": {"power": 1.0}},
-            "Ring": {"component": "ring_eo", "settings": {
-                "ng": ng, "L": L_ring, "gamma": gamma, "alpha0": alpha0,
-                "f_operating": float(f_op), "f_resonance": float(f_res), "v_to_wr": v_to_wr}},
+            "Ring": {
+                "component": "ring_eo",
+                "settings": {
+                    "ng": ng,
+                    "L": L_ring,
+                    "gamma": gamma,
+                    "alpha0": alpha0,
+                    "f_operating": float(f_op),
+                    "f_resonance": float(f_res),
+                    "v_to_wr": v_to_wr,
+                },
+            },
             "Load": {"component": "resistor", "settings": {"R": 1.0}},
             "Vsrc": {"component": "dc_voltage", "settings": {"V_dc": V_bias}},
             "Rs": {"component": "resistor", "settings": {"R": R_s}},
@@ -630,8 +656,10 @@ def _ring_modulator_circuit():
         },
         "connections": {
             "GND,p1": ("OptSrc,p2", "Load,p2", "Vsrc,p2", "Cj,p2"),
-            "OptSrc,p1": "Ring,p1", "Ring,p2": "Load,p1",
-            "Vsrc,p1": "Rs,p1", "Rs,p2": ("Cj,p1", "Ring,v_e"),
+            "OptSrc,p1": "Ring,p1",
+            "Ring,p2": "Load,p1",
+            "Vsrc,p1": "Rs,p1",
+            "Rs,p2": ("Cj,p1", "Ring,v_e"),
         },
         "ports": {"in": "Ring,p1", "out": "Ring,p2", "ve": "Ring,v_e"},
     }
@@ -666,9 +694,7 @@ def test_non_holomorphic_ring_modulator_matches_analytic():
     # ── Analytic transfer ─────────────────────────────────────────────
     inv_tau, inv_tau_l = 1 / tau, 1 / tau_l
     H_RC = 1 / (1 + 1j * omega_m * R_s * C_j)
-    H_opt = (1j * omega_m + 2 * inv_tau_l) / (
-        -(omega_m**2) + 1j * 2 * inv_tau * omega_m + delta_omega_dc**2 + inv_tau**2
-    )
+    H_opt = (1j * omega_m + 2 * inv_tau_l) / (-(omega_m**2) + 1j * 2 * inv_tau * omega_m + delta_omega_dc**2 + inv_tau**2)
     H_analytic = np.abs(H_RC * H_opt)
     H_analytic_norm = H_analytic / H_analytic[0]
     H_analytic_dB = 20 * np.log10(H_analytic_norm)
@@ -691,9 +717,7 @@ def test_non_holomorphic_ring_modulator_matches_analytic():
         Y = jnp.zeros((2 * N, 2 * N), dtype=jnp.complex128)
         for k in range(4):
             ro, co = offsets[k]
-            Y = Y.at[rows_j + ro, cols_j + co].add(
-                (G_blocks[k] + 1j * w * C_blocks[k]).astype(jnp.complex128)
-            )
+            Y = Y.at[rows_j + ro, cols_j + co].add((G_blocks[k] + 1j * w * C_blocks[k]).astype(jnp.complex128))
         Y = Y.at[gidxs_2n, gidxs_2n].add(GROUND_STIFFNESS)
         x = jnp.linalg.solve(Y, rhs_2n)
         dy_R, dy_I = x[:N], x[N:]
@@ -753,7 +777,7 @@ def test_holomorphic_jaxpr_validation_warns():
     from circulax.components.photonic import OpticalWaveguide
 
     @component(ports=("p1", "p2"), holomorphic=True)
-    def _BadPhotodetector(signals, s, R=1.0):
+    def _BadPhotodetector(signals, R=1.0):
         power = jnp.real(signals.p1 * jnp.conj(signals.p1))
         i_photo = power * R
         return {"p1": 0 + 0j, "p2": i_photo}, {}

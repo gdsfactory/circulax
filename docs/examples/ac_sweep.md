@@ -1,6 +1,6 @@
 ## AC Small-Signal Analysis (S-parameters)
 
-This notebook demonstrates `circuit.sp(...)` on three circuits:
+This notebook demonstrates `circuit.ac(...)` on three circuits:
 
 1. **Parallel RC — single port** — a minimal benchmark.  We compare $S_{11}(f)$ against the analytical admittance formula.
 2. **Series-R shunt-C lowpass — two ports** — a classic LC prototype filter.  We recover all four S-parameters and verify passivity.
@@ -29,7 +29,7 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-06-24 18:02:23,719:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-07-31 09:56:57,040:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ---
@@ -96,13 +96,17 @@ circuit = compile_circuit(net_rc, models)
 y_dc = circuit.dc()
 
 freqs = jnp.logspace(6, 10, 300)  # 1 MHz → 10 GHz
-S = jax.jit(lambda f: circuit.sp(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc))(freqs)
+S = jax.jit(lambda f: circuit.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc))(freqs)
 S11 = S[:, 0, 0]
 print(f"S shape: {S.shape}  (N_freqs, N_ports, N_ports)")
 
 ```
 
     S shape: (300, 1, 1)  (N_freqs, N_ports, N_ports)
+
+
+    /tmp/ipykernel_24752/32422522.py:21: DeprecationWarning: Circuit.ac() is deprecated, use Circuit.sp() instead.
+      S = jax.jit(lambda f: circuit.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc))(freqs)
 
 
 
@@ -206,12 +210,16 @@ net_lp = {
 circuit_lp = compile_circuit(net_lp, models)
 y_dc_lp = circuit_lp.dc()
 
-S_lp = jax.jit(lambda f: circuit_lp.sp(ports=["in", "out"], freqs=f, z0=Z0, y_dc=y_dc_lp))(freqs)
+S_lp = jax.jit(lambda f: circuit_lp.ac(ports=["in", "out"], freqs=f, z0=Z0, y_dc=y_dc_lp))(freqs)
 print(f"S shape: {S_lp.shape}  (N_freqs, 2, 2)")
 
 ```
 
     S shape: (300, 2, 2)  (N_freqs, 2, 2)
+
+
+    /tmp/ipykernel_24752/4051655305.py:22: DeprecationWarning: Circuit.ac() is deprecated, use Circuit.sp() instead.
+      S_lp = jax.jit(lambda f: circuit_lp.ac(ports=["in", "out"], freqs=f, z0=Z0, y_dc=y_dc_lp))(freqs)
 
 
 
@@ -325,7 +333,7 @@ net_skin = {
 circuit_sk = compile_circuit(net_skin, models_skin)
 y_dc_sk = circuit_sk.dc()
 
-S_sk = jax.jit(lambda f: circuit_sk.sp(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc_sk))(freqs)
+S_sk = jax.jit(lambda f: circuit_sk.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc_sk))(freqs)
 S11_sk = S_sk[:, 0, 0]
 
 # Analytical: Z(f) is real so |Γ| = |Z - Z0| / |Z + Z0|
@@ -363,8 +371,8 @@ print(f"S11 at 10 GHz: {float(jnp.abs(S11_sk[-1])):.4f}  (expected {float(jnp.ab
 
 ```
 
-    /home/cdaunt/code/circulax/circulax/circulax/circuit.py:468: UserWarning: Complex-mode auto-detection failed for group (TypeError('_build_fdomain_component.<locals>.solver_call() takes 3 positional arguments but 4 were given')); defaulting to real. Pass is_complex=True to compile_circuit() if this is a photonic/complex-valued circuit.
-      if _group_outputs_complex(group):
+    /tmp/ipykernel_24752/2032088635.py:30: DeprecationWarning: Circuit.ac() is deprecated, use Circuit.sp() instead.
+      S_sk = jax.jit(lambda f: circuit_sk.ac(ports=["in"], freqs=f, z0=Z0, y_dc=y_dc_sk))(freqs)
 
 
     Max |ΔS11| (skin effect) = 1.78e-11
@@ -382,4 +390,4 @@ print(f"S11 at 10 GHz: {float(jnp.abs(S11_sk[-1])):.4f}  (expected {float(jnp.ab
 
 
 !!! note "Advanced port-node workflows"
-    `circuit.sp(...)` is the normal API for named S-parameter ports. The lower-level `setup_ac_sweep()` helper remains available when you need to build custom port-node lists or transform-control loops around compiled groups.
+    `circuit.ac(...)` is the normal API for named S-parameter ports. The lower-level `setup_ac_sweep()` helper remains available when you need to build custom port-node lists or transform-control loops around compiled groups.

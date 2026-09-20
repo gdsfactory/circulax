@@ -54,7 +54,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from circulax import compile_circuit
-from circulax.components.base_component import PhysicsReturn, Signals, States, component
+from circulax.components.base_component import PhysicsReturn, Signals, component
 from circulax.components.electronic import Capacitor, Inductor, Resistor
 
 # 64-bit precision is important: HB Newton requires accurate Jacobians, and
@@ -67,7 +67,7 @@ pio.renderers.default = "png"
 
 ```
 
-    WARNING:2026-06-24 18:02:52,804:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-07-31 09:57:20,787:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## Defining the Van der Pol component
@@ -79,7 +79,7 @@ making the component compatible with `jax.vmap`, `jax.jacfwd`, and `jax.grad`.
 
 ```python
 @component(ports=("p1", "p2"))
-def VanDerPolElement(signals: Signals, s: States, mu: float = 2.0, G0: float = 0.01) -> PhysicsReturn:
+def VanDerPolElement(signals: Signals, mu: float = 2.0, G0: float = 0.01) -> PhysicsReturn:
     """Nonlinear two-terminal element with cubic I-V characteristic.
 
     I(V) = -mu*G0*V + (G0/3)*V^3
@@ -197,8 +197,6 @@ print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (
     System size : 3 unknowns
     Named ports : ['osc']
     Oscillator port: 'osc'
-
-
     DC operating point: max|y_dc| = 0.00e+00 V  (trivially zero)
 
 

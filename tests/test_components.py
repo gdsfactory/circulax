@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from circulax.components.base_component import CircuitComponent, PhysicsReturn, Signals, States, component
+from circulax.components.base_component import PhysicsReturn, Signals, component
 
 # Import components to be tested
 from circulax.components.electronic import (
@@ -227,24 +227,13 @@ def test_solver_call_capacitor() -> None:
     assert jnp.allclose(q_vec, jnp.array([q_val, -q_val]))
 
 
-def test_subclass_init_creates_namedtuples() -> None:
-    # Define a dummy component
-    class MyComp(CircuitComponent):
-        ports = ("a", "b")
-        states = ("s1",)
-
-        def physics(self, v: Signals, s: States, t: float) -> PhysicsReturn:
-            return {}, {}
-
-    assert MyComp._VarsType_P is not None  # noqa: SLF001
-    assert MyComp._VarsType_S is not None  # noqa: SLF001
-
-    p = MyComp._VarsType_P(1, 2)  # noqa: SLF001
-    assert p.a == 1
-    assert p.b == 2
-
-    s = MyComp._VarsType_S(10)  # noqa: SLF001
-    assert s.s1 == 10
+def test_signals_unifies_ports_states_and_delayed_values() -> None:
+    signals = Signals(jnp.array([1.0, 2.0, 10.0]), ("a", "b", "s1"), delayed=jnp.array([3.0, 4.0, 20.0]))
+    assert signals.a == 1
+    assert signals.b == 2
+    assert signals.s1 == 10
+    assert signals.at_delay(0.5).a == 3
+    assert signals.at_delay(0.5).s1 == 20
 
 
 # --- port_aliases (gdsfactory/circulax#30) ---
@@ -256,7 +245,7 @@ def test_component_port_aliases_sets_raw_port_map() -> None:
 
 def test_component_port_aliases_accepts_tuple_of_aliases() -> None:
     @component(ports=("p1", "p2"), port_aliases={"p1": ("P", "A")})
-    def Foo(signals: Signals, s: States, R: float = 1.0) -> PhysicsReturn:
+    def Foo(signals: Signals, R: float = 1.0) -> PhysicsReturn:
         i = (signals.p1 - signals.p2) / R
         return {"p1": i, "p2": -i}, {}
 
@@ -267,5 +256,13 @@ def test_component_port_aliases_rejects_unknown_canonical_name() -> None:
     with pytest.raises(ValueError, match="port_aliases"):
 
         @component(ports=("p1", "p2"), port_aliases={"p3": "P"})
-        def Bad(signals: Signals, s: States, R: float = 1.0) -> PhysicsReturn:
+        def Bad(signals: Signals, R: float = 1.0) -> PhysicsReturn:
             return {"p1": 0.0, "p2": 0.0}, {}
+
+
+def test_component_rejects_overlapping_port_and_state_names() -> None:
+    with pytest.raises(ValueError, match="distinct names"):
+
+        @component(ports=("value",), states=("value",))
+        def BadNamespace(signals: Signals) -> PhysicsReturn:  # noqa: N802
+            return {"value": signals.value}, {}

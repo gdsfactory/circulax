@@ -45,7 +45,7 @@ from circulax.solvers.transient import TrapFactorizedTransientSolver
 jax.config.update("jax_enable_x64", True)
 ```
 
-    WARNING:2026-06-24 18:02:01,569:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-07-31 09:56:38,322:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
 ## 1. Load the PSP103 OSDI Model
@@ -233,7 +233,7 @@ for i in range(1, N_STAGES + 1):
     print(f"  {key}: {float(y0[port_map[key]]):.4f} V")
 ```
 
-    DC converged in 0.59s
+    DC converged in 0.46s
     All finite: True
 
     DC node voltages:
@@ -299,7 +299,7 @@ print(f"Transient: {wall:.2f}s wall ({wall / n_steps * 1e6:.1f} µs/step)")
 print(f"Finite:    {np.all(np.isfinite(ys))}")
 ```
 
-    Transient: 1.39s wall (346.8 µs/step)
+    Transient: 1.14s wall (285.6 µs/step)
     Finite:    True
 
 

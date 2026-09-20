@@ -72,6 +72,13 @@ class ComponentGroup(eqx.Module):
     combined_func: Any = eqx.field(static=True, default=None)
     holomorphic: bool = eqx.field(static=True, default=False)
 
+    # Fixed time-delay support (see circulax.solvers.assembly). ``has_delay``
+    # is inferred from ``signals.at_delay(...)`` during compilation;
+    # ``tau_func(params) -> tau`` re-evaluates that inline expression and is
+    # vmapped over the group's batched params by the assembly layer.
+    has_delay: bool = eqx.field(static=True, default=False)
+    tau_func: Any = eqx.field(static=True, default=None)
+
 
 def get_model_width(func: callable) -> int:
     """Determines the size of the 'vars' vector expected by the model."""
@@ -341,6 +348,23 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
         instance_objects = [item["obj"] for item in items]
         batched_params = jax.tree.map(lambda *args: jnp.stack(args), *instance_objects)
 
+        # Delay reads are part of component physics rather than separately
+        # registered metadata. Probe every instance so delay presence cannot
+        # silently depend on settings within one vmapped component group.
+        delay_values = [comp_cls.delay_values(obj) for obj in instance_objects]
+        delay_counts = [len(values) for values in delay_values]
+        has_delay = bool(delay_counts[0])
+        if any(bool(count) != has_delay for count in delay_counts[1:]):
+            msg = (
+                f"Component group '{group_name}' conditionally uses signals.at_delay(...). "
+                "Delay presence must be the same for every instance in a group."
+            )
+            raise ValueError(msg)
+        for values in delay_values:
+            if len(values) > 1 and any(bool(jnp.any(value != values[0])) for value in values[1:]):
+                msg = f"Component group '{group_name}' requests multiple distinct delays. Reuse one signals.at_delay(...) snapshot."
+                raise ValueError(msg)
+
         # C. Matrices
         var_indices_arr = jnp.array(all_var_indices, dtype=jnp.int32)
         width = var_indices_arr.shape[1]
@@ -366,6 +390,8 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
             amplitude_param=getattr(comp_cls, "amplitude_param", ""),
             combined_func=_combined_func,
             holomorphic=getattr(comp_cls, "_holomorphic", True),
+            has_delay=has_delay,
+            tau_func=comp_cls.tau_of if has_delay else None,
         )
 
     # --- Process OSDI buckets (requires circulax[verilog-a] / bosdi) ---
@@ -389,6 +415,7 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
         try:
             import numpy as _np
             from osdi_jax import osdi_setup_batch
+
             handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
         except ImportError:
             pass  # older bosdi without Tier-3; legacy model_id + params path still works

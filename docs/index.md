@@ -64,7 +64,7 @@ Common analyses use the same compiled object:
 ```python
 op = circuit.dc()
 op_sweep = circuit.dc(params={"R1.R": 20.0, "wavelength_nm": 1310.0})
-S = circuit.sp(ports=["C1,p1"], freqs=jnp.logspace(6, 10, 101), y_dc=op)
+S = circuit.ac(ports=["C1,p1"], freqs=jnp.logspace(6, 10, 101), y_dc=op)
 y_time, y_freq = circuit.hb(freq=1e6, harmonics=5, y0=op)
 v_out = circuit.port(op, "C1,p1")
 ```
@@ -77,15 +77,15 @@ Parameter keys like `"R1.R"` update one instance. Keys without a dot, such as
 Components are plain Python functions — no boilerplate, no subclassing:
 
 ```python
-from circulax.components.base_component import component, Signals, States
+from circulax.components.base_component import component, Signals
 
 @component(ports=("p1", "p2"))
-def Resistor(signals: Signals, s: States, R: float = 1e3):
+def Resistor(signals: Signals, R: float = 1e3):
     i = (signals.p1 - signals.p2) / R
     return {"p1": i, "p2": -i}, {}          # (currents, charges)
 
 @component(ports=("p1", "p2"))
-def Capacitor(signals: Signals, s: States, C: float = 1e-12):
+def Capacitor(signals: Signals, C: float = 1e-12):
     q = C * (signals.p1 - signals.p2)
     return {}, {"p1": q, "p2": -q}          # dq/dt becomes current automatically
 ```
@@ -94,7 +94,7 @@ Non-linear opto-electronic components are just as simple — the Jacobian is com
 
 ```python
 @component(ports=("optical_in", "anode", "cathode"))
-def Photodetector(signals: Signals, s: States,
+def Photodetector(signals: Signals,
                   responsivity: float = 0.8, dark_current: float = 1e-9):
     optical_power = jnp.abs(signals.optical_in) ** 2           # non-linear
     i_photo = responsivity * optical_power + dark_current

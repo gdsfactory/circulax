@@ -583,6 +583,7 @@ def compile_circuit(
         source_netlist = net_dict.get(next(iter(net_dict)))
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
         net_dict = flatten_recursive_netlist(net_dict)
+        source_netlist = net_dict
     elif isinstance(net_dict, dict):
         source_netlist = net_dict
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}

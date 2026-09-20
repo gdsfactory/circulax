@@ -53,7 +53,7 @@ print("JAX backend:", jax.default_backend())
 
 ```
 
-    WARNING:2026-06-24 18:06:08,518:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+    WARNING:2026-07-31 09:59:56,831:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
 
 
     JAX backend: cpu
@@ -86,7 +86,7 @@ The model is a **Modified Curtice-Quadratic** with three-terminal gate/drain/sou
 
 ```python
 @component(ports=("g", "d", "s"))
-def HEMT(signals, s,
+def HEMT(signals,
          beta=0.012, Vp=-2.0, lam=0.05, alpha=4.0,
          Cgs0=0.3e-12, Cgs1=0.1e-12, Cgd0=0.05e-12):
     # Modified Curtice-Quadratic HEMT with smooth approximations.
@@ -136,8 +136,6 @@ print(f"gm at Vgs=0, Vds=3 V: {gm*1e3:.2f} mS")
 
     Ids at Vgs=0 V,   Vds=3 V: 55.20 mA  (Idss)
     Ids at Vgs=-2.5 V (below pinch-off): 0.006 µA  (should be ~0)
-
-
     gm at Vgs=0, Vds=3 V: 55.20 mS
 
 
