@@ -309,10 +309,20 @@ def pure_sax_netlist():
 def test_pure_sax_circuit_detected(pure_sax_netlist):
     net_dict, models = pure_sax_netlist
     circuit = compile_circuit(net_dict, models, is_complex=True)
-    assert circuit._is_pure_sax is True  # noqa: SLF001
+    assert circuit.check_sax_compatibility() is True
 
 
-def test_pure_sax_dc_matches_native_sax_scalar(pure_sax_netlist):
+def test_pure_sax_dc_still_returns_zero_array(pure_sax_netlist):
+    """dc()'s contract is unchanged even for an all-SAX circuit: it always
+    returns an Array (all-zero here, since the linear system has no source)."""
+    net_dict, models = pure_sax_netlist
+    circuit = compile_circuit(net_dict, models, is_complex=True)
+    y = circuit.dc()
+    assert isinstance(y, jax.Array)
+    assert jnp.allclose(y, 0.0)
+
+
+def test_to_sax_circuit_matches_native_sax_scalar(pure_sax_netlist):
     import sax
 
     net_dict, models = pure_sax_netlist
@@ -320,14 +330,14 @@ def test_pure_sax_dc_matches_native_sax_scalar(pure_sax_netlist):
     S_native = sax_model(wl=1.55)
 
     circuit = compile_circuit(net_dict, models, is_complex=True)
-    S = circuit.dc(wl=1.55)
+    S = circuit.to_sax_circuit()(wl=1.55)
 
     assert isinstance(S, dict)
     for key, native_val in S_native.items():
         assert jnp.allclose(S[key], native_val, atol=1e-9), key
 
 
-def test_pure_sax_dc_matches_native_sax_batched(pure_sax_netlist):
+def test_to_sax_circuit_matches_native_sax_batched(pure_sax_netlist):
     import sax
 
     net_dict, models = pure_sax_netlist
@@ -335,7 +345,7 @@ def test_pure_sax_dc_matches_native_sax_batched(pure_sax_netlist):
 
     circuit = compile_circuit(net_dict, models, is_complex=True)
     wls = jnp.array([1.5, 1.55, 1.6])
-    S_batched = circuit.dc(wl=wls)
+    S_batched = circuit.to_sax_circuit()(wl=wls)
 
     assert S_batched[("in0", "out0")].shape == (3,)
     for i, wl in enumerate(wls):
@@ -344,25 +354,8 @@ def test_pure_sax_dc_matches_native_sax_batched(pure_sax_netlist):
             assert jnp.allclose(S_batched[key][i], native_val, atol=1e-9), (i, key)
 
 
-def test_pure_sax_dc_rejects_newton_only_args(pure_sax_netlist):
-    net_dict, models = pure_sax_netlist
-    circuit = compile_circuit(net_dict, models, is_complex=True)
-    with pytest.raises(ValueError, match="ignores y_guess"):
-        circuit.dc(y_guess=jnp.zeros(1))
-    with pytest.raises(ValueError, match="ignores y_guess"):
-        circuit.dc(rtol=1e-3)
-
-
-def test_pure_sax_dc_rejects_missing_ports(pure_sax_netlist):
-    net_dict, models = pure_sax_netlist
-    circuit = compile_circuit(net_dict, models, is_complex=True)
-    stripped = circuit.with_groups(circuit.groups)
-    with pytest.raises(ValueError, match="no known external ports"):
-        stripped.dc()
-
-
-def test_mixed_circuit_dc_still_returns_array():
-    """A circuit with a non-SAX component (resistor/GND) must keep returning an array."""
+def test_to_sax_circuit_rejects_incompatible_circuit():
+    """A circuit with a non-SAX component (resistor/GND) can't become a SAX circuit."""
     import sax
     from sax.models import straight
 
@@ -392,7 +385,17 @@ def test_mixed_circuit_dc_still_returns_array():
     models_map = {"resistor": Resistor, "composite": CompositeComp, "ground": lambda: 0}
     circuit = compile_circuit(net_dict, models_map, is_complex=True)
 
-    assert circuit._is_pure_sax is False  # noqa: SLF001
+    assert circuit.check_sax_compatibility() is False
     y = circuit.dc()
     assert isinstance(y, jax.Array)
     assert jnp.all(jnp.isfinite(y))
+    with pytest.raises(ValueError, match="check_sax_compatibility"):
+        circuit.to_sax_circuit()
+
+
+def test_to_sax_circuit_rejects_missing_ports(pure_sax_netlist):
+    net_dict, models = pure_sax_netlist
+    circuit = compile_circuit(net_dict, models, is_complex=True)
+    stripped = circuit.with_groups(circuit.groups)
+    with pytest.raises(ValueError, match="no known external ports"):
+        stripped.to_sax_circuit()

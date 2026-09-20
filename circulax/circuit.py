@@ -229,7 +229,7 @@ class Circuit:
         atol: float | None = None,
         max_steps: int | None = None,
         **param_updates: Any,
-    ) -> jax.Array | dict[tuple[str, str], jax.Array]:
+    ) -> jax.Array:
         """Solve the DC operating point for the given parameters.
 
         Scalar params produce a single solve returning shape ``(n,)``.
@@ -237,27 +237,14 @@ class Circuit:
         returning shape ``(batch, n)``. All array params must share the
         same leading dimension size.
 
-        **Return-type note:** if every component in the circuit is a
-        SAX-wrapped model and none is a source (a passive photonic mesh),
-        the DC operating point is provably all-zero (linear system, no
-        driving term), so this method instead returns the circuit's
-        S-parameters as a native SAX ``SDict`` — ``{(port_a, port_b): S}``,
-        with array-valued entries when params are batched. This is the same
-        dispatch used by ``circuit()``/``__call__``.
-
         Args:
             y_guess: Initial guess for the Newton solver. Defaults to zeros.
-                Not accepted for all-SAX/source-free circuits (no Newton
-                solve runs in that case).
             rtol: Relative tolerance override. Defaults to value from
-                :func:`compile_circuit` (``1e-6``). Not accepted for
-                all-SAX/source-free circuits.
+                :func:`compile_circuit` (``1e-6``).
             atol: Absolute tolerance override. Defaults to value from
-                :func:`compile_circuit` (``1e-6``). Not accepted for
-                all-SAX/source-free circuits.
+                :func:`compile_circuit` (``1e-6``).
             max_steps: Max Newton iterations override. Defaults to value
-                from :func:`compile_circuit` (``100``). Not accepted for
-                all-SAX/source-free circuits.
+                from :func:`compile_circuit` (``100``).
             params: Optional mapping of parameter updates. Keys without a dot
                 are broadcast to every component group declaring that parameter.
                 Keys like ``"R1.R"`` update one instance.
@@ -266,32 +253,12 @@ class Circuit:
                 ``wavelength_nm=jnp.linspace(1260, 1360, 1000)``.
 
         Returns:
-            Flat solution vector of shape ``(n,)`` or ``(batch, n)``, or a
-            SAX ``SDict`` for all-SAX/source-free circuits (see above).
+            Flat solution vector of shape ``(n,)`` or ``(batch, n)``.
 
         Raises:
-            ValueError: If multiple array params have different leading
-                dims, if a Newton-solve-only argument is passed for an
-                all-SAX/source-free circuit, or if such a circuit has no
-                known external ports (e.g. after :meth:`with_groups`).
+            ValueError: If multiple array params have different leading dims.
 
         """
-        if self._is_pure_sax:
-            if y_guess is not None or rtol is not None or atol is not None or max_steps is not None:
-                msg = (
-                    "Circuit.dc() ignores y_guess/rtol/atol/max_steps for an all-SAX, "
-                    "source-free circuit: it returns S-parameters directly with no Newton solve."
-                )
-                raise ValueError(msg)
-            if not self.ports:
-                msg = (
-                    "This all-SAX, source-free circuit has no known external ports "
-                    "(e.g. built via with_groups(), which drops the source netlist), "
-                    "so S-parameters cannot be extracted."
-                )
-                raise ValueError(msg)
-            return self._batched_solve(params, param_updates, self._solve_sparams_sdict)
-
         rtol = self.rtol if rtol is None else rtol
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
@@ -303,6 +270,52 @@ class Circuit:
 
         return self._batched_solve(params, param_updates, solve_fn)
 
+    def check_sax_compatibility(self) -> bool:
+        """Return True if this circuit can be represented as a pure SAX S-parameter network.
+
+        A circuit qualifies when every component group is a SAX-wrapped
+        model (:func:`sax_component`) and none is a source — i.e. a passive
+        photonic (or RF) mesh with no reactive (``dQ/dt``) terms and no
+        driving term. Such a circuit's DC operating point is provably
+        all-zero, and :meth:`to_sax_circuit` can extract its S-parameters
+        directly.
+        """
+        return self._is_pure_sax
+
+    def to_sax_circuit(self) -> Callable[..., dict[tuple[str, str], jax.Array]]:
+        """Convert this circuit into a native SAX model function.
+
+        Only valid when :meth:`check_sax_compatibility` is True. Returns a
+        callable ``model(**params) -> sax.SDict`` matching the calling
+        convention of :func:`sax.circuit`'s own returned model: scalar
+        params produce one ``SDict``; array-valued params trigger
+        ``jax.vmap`` and return an ``SDict`` whose values are stacked
+        arrays, e.g. ``model(wl=jnp.linspace(1500, 1600, 101))``.
+
+        Raises:
+            ValueError: If this circuit is not all-SAX/source-free, or has
+                no known external ports (e.g. built via :meth:`with_groups`).
+
+        """
+        if not self._is_pure_sax:
+            msg = (
+                "Circuit.to_sax_circuit() requires an all-SAX, source-free circuit "
+                "(check_sax_compatibility() is False for this circuit)."
+            )
+            raise ValueError(msg)
+        if not self.ports:
+            msg = (
+                "This all-SAX, source-free circuit has no known external ports "
+                "(e.g. built via with_groups(), which drops the source netlist), "
+                "so it cannot be converted to a SAX circuit."
+            )
+            raise ValueError(msg)
+
+        def model(*, params: dict[str, Any] | None = None, **param_updates: Any) -> dict[tuple[str, str], jax.Array]:
+            return self._batched_solve(params, param_updates, self._solve_sparams_sdict)
+
+        return model
+
     def __call__(
         self,
         y_guess: jax.Array | None = None,
@@ -312,8 +325,8 @@ class Circuit:
         atol: float | None = None,
         max_steps: int | None = None,
         **param_updates: Any,
-    ) -> jax.Array | dict[tuple[str, str], jax.Array]:
-        """Backward-compatible alias for :meth:`dc` (see its return-type note)."""
+    ) -> jax.Array:
+        """Backward-compatible alias for :meth:`dc`."""
         return self.dc(
             y_guess,
             params=params,

@@ -115,6 +115,108 @@ def s_to_y(S: jax.Array, z0: complex = 1.0 + 1e-12j) -> jax.Array:
     return jnp.linalg.solve(M.swapaxes(-1, -2), (eye - Sc).swapaxes(-1, -2)).swapaxes(-1, -2)
 
 
+@jax.jit
+def y_to_s(Y: jax.Array, z0: complex = 1.0 + 1e-12j) -> jax.Array:
+    """Convert an admittance (Y) matrix to an S-parameter matrix.
+
+    Exact inverse of :func:`s_to_y`: ``S = (I - z0 Y) (I + z0* Y)^-1``.
+    Reduces to ``(I - z0 Y) (I + z0 Y)^-1`` for real ``z0``. ``(I + z0* Y)``
+    and ``(I - z0 Y)`` are both polynomials in ``Y`` and so commute, making
+    this well-defined regardless of multiplication order.
+    """
+    n = Y.shape[-1]
+    eye = jnp.eye(n, dtype=jnp.complex128)
+    Yc = Y.astype(jnp.complex128)
+    z0c = jnp.asarray(z0, dtype=jnp.complex128)
+    M = eye + jnp.conj(z0c) * Yc
+    return jnp.linalg.solve(M.swapaxes(-1, -2), (eye - z0c * Yc).swapaxes(-1, -2)).swapaxes(-1, -2)
+
+
+def fdomain_model(fn: callable, *, ports: tuple[str, ...], z0: complex = 1.0 + 1e-12j) -> callable:
+    """Adapt a frequency-domain admittance function into a SAX-shaped S-parameter model.
+
+    Bridges :func:`fdomain_component`-style physics (``fn(f, **params) ->
+    Y-matrix``) into an ordinary SAX model function (``(**params) ->
+    sax.SDict``) via :func:`y_to_s`. The result is meant to be passed to
+    :func:`sax_component`, e.g.::
+
+        @sax_component
+        def my_rf_model(f=1e9, R0=50.0):
+            ...  # returns a Y-matrix
+
+        RfComp = sax_component(fdomain_model(my_rf_model, ports=("p1", "p2")))
+
+    Once wrapped this way, the resulting component's frequency argument
+    becomes an ordinary settable parameter (like ``wl`` on a photonic SAX
+    model) rather than the circuit-level AC-sweep frequency: it is evaluated
+    once per compile/param-update, not re-evaluated per point in a
+    :meth:`~circulax.circuit.Circuit.sp` sweep. This makes it usable in the
+    all-SAX, source-free :meth:`~circulax.circuit.Circuit.dc` S-parameter
+    path (where the frequency becomes a batchable parameter, e.g.
+    ``circuit.dc(f=jnp.linspace(...))``), but it is **not** a drop-in
+    replacement for ``@fdomain_component`` inside a circuit that also has
+    reactive elements (capacitors/inductors) or sources: there, the
+    component's own frequency dependence would be frozen at whatever value
+    its parameter was last set to, decoupled from the ``freqs`` sweep
+    argument driving the rest of the circuit.
+
+    Note:
+        Compiling the result with ``is_complex=True`` may emit a spurious
+        "uses non-holomorphic operations: conj" warning from
+        :func:`~circulax.circuit.compile_circuit`. This is a known false
+        positive: ``s_to_y``/``y_to_s`` are individually ``jax.jit``-ed, so
+        their default ``z0`` argument is traced as an abstract value inside
+        that nested call, which trips the checker's literal-vs-traced
+        heuristic. It does not indicate an actual bug — ``fn`` never
+        receives port signals (only ``f`` and parameters), so its
+        contribution is provably linear in the port voltages regardless.
+
+    Args:
+        fn: Admittance function with signature ``fn(f, **params) ->
+            Y-matrix``, matching :func:`fdomain_component`'s contract (``f``
+            first, every other parameter with a default).
+        ports: Ordered tuple of port names, matching the shape of ``fn``'s
+            returned Y-matrix.
+        z0: Reference impedance used for the Y-to-S conversion. Defaults to
+            SAX's own convention so the wrapped model composes correctly
+            with other SAX models under :func:`sax_component`.
+
+    Returns:
+        A callable with the same signature as ``fn`` that returns a
+        ``sax.SDict`` instead of a Y-matrix.
+
+    Raises:
+        TypeError: If ``fn``'s signature doesn't start with ``f`` or any
+            other parameter lacks a default.
+
+    """
+    sig = inspect.signature(fn)
+    params_list = list(sig.parameters.values())
+    if not params_list or params_list[0].name != "f":
+        msg = f"fdomain_model function '{fn.__name__}' must have 'f' as its first argument."
+        raise TypeError(msg)
+    for p in params_list[1:]:
+        if p.default is inspect.Parameter.empty:
+            msg = f"Parameter '{p.name}' in '{fn.__name__}' must have a default value."
+            raise TypeError(msg)
+
+    f_name = params_list[0].name
+
+    def sax_model(*args, **kwargs) -> dict:  # noqa: ANN002, ANN003
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        arguments = dict(bound.arguments)
+        f = arguments.pop(f_name)
+        Y = fn(f, **arguments)
+        S = y_to_s(Y, z0=z0)
+        return {(a, b): S[i, j] for i, a in enumerate(ports) for j, b in enumerate(ports)}
+
+    sax_model.__name__ = fn.__name__
+    sax_model.__doc__ = fn.__doc__
+    sax_model.__signature__ = sig
+    return sax_model
+
+
 def sax_component(fn: callable, *, name: str | None = None) -> callable:
     """Decorator to convert a SAX model function into a circulax component.
 
