@@ -11,6 +11,9 @@ from scipy.optimize import minimize
 from .reduction_numpy import _model_from_coefficients, basis_numpy, evaluate_numpy, pole_groups
 from .types import VFModel
 
+_OPTIMIZER_FTOL = 1e-10
+_FEASIBILITY_ATOL = 1e-9
+
 
 def enforce_s_passivity_numpy(model, freqs, *, enforcement_freqs=None, limit=0.999999, max_iterations=300) -> tuple[VFModel, dict]:
     """Minimize measured-band perturbation subject to sampled S and D bounds.
@@ -18,7 +21,9 @@ def enforce_s_passivity_numpy(model, freqs, *, enforcement_freqs=None, limit=0.9
     Requires a stable, proper, reciprocal real-rational model. Poles are held
     fixed; conjugacy, reality and reciprocity are preserved by construction.
     ``freqs`` defines the equally weighted preservation objective, not new data.
-    Always inspect ``converged`` and independently validate the returned model.
+    ``converged`` reports whether the returned model satisfies the sampled
+    passivity constraints. ``optimizer_success`` separately records SLSQP's
+    termination status. Always independently validate the returned model.
     """
     freqs = np.asarray(freqs, float)
     poles = np.asarray(model.poles)
@@ -55,6 +60,7 @@ def enforce_s_passivity_numpy(model, freqs, *, enforcement_freqs=None, limit=0.9
         corrected = VFModel(poles.copy(), residues.copy(), corrected_direct, np.zeros_like(corrected_direct))
         return corrected, {
             "converged": True,
+            "optimizer_success": True,
             "optimizer_message": "Static symmetric spectral projection",
             "iterations": 0,
             "max_sigma_grid_and_infinity": float(np.linalg.norm(corrected_direct, 2)),
@@ -103,13 +109,19 @@ def enforce_s_passivity_numpy(model, freqs, *, enforcement_freqs=None, limit=0.9
         jac=True,
         constraints={"type": "ineq", "fun": constraint, "jac": jacobian},
         method="SLSQP",
-        options={"ftol": 1e-14, "maxiter": max_iterations},
+        options={"ftol": _OPTIMIZER_FTOL, "maxiter": max_iterations},
     )
     coeff = np.einsum("ka,aij->kij", transform @ result.x.reshape(shape), mapping)
     corrected = _model_from_coefficients(coeff.reshape(len(poles) + 1, -1), poles, n)
     peak = float(limit - constraint(result.x).min())
+    feasible = bool(np.isfinite(peak) and peak <= limit + _FEASIBILITY_ATOL)
     return corrected, {
-        "converged": bool(result.success and peak <= limit + 1e-9),
+        # SLSQP can report a failed line search for a feasible solution, with
+        # platform-dependent BLAS/LAPACK rounding deciding the status. The
+        # constraint itself is the relevant acceptance criterion; preserve the
+        # optimizer status separately for diagnosis.
+        "converged": feasible,
+        "optimizer_success": bool(result.success),
         "optimizer_message": result.message,
         "iterations": result.nit,
         "max_sigma_grid_and_infinity": peak,

@@ -1,5 +1,7 @@
 """Rational coefficient correction, distinct from sample conditioning."""
 
+import importlib
+
 import numpy as np
 import pytest
 
@@ -11,7 +13,8 @@ from circulax.fitting.types import VFModel
 def test_constant_and_input_unchanged():
     model = VFModel(np.array([], complex), np.zeros((2, 2, 0), complex), np.diag([1.2, 0.5]), np.zeros((2, 2)))
     result, report = enforce_s_passivity_numpy(model, np.linspace(0, 10, 10))
-    assert report["converged"]
+    assert report["converged"], report
+    assert report["optimizer_success"]
     assert not report["global_passivity_certified"]
     np.testing.assert_allclose(result.D, np.diag([0.999999, 0.5]), atol=1e-8)
     assert model.D[0, 0] == 1.2
@@ -20,7 +23,7 @@ def test_constant_and_input_unchanged():
 def test_passive_model_unchanged():
     model = VFModel(np.array([-2.0 + 0j]), np.array([[[0.3]]]), np.array([[0.2]]), np.zeros((1, 1)))
     result, report = enforce_s_passivity_numpy(model, np.linspace(0, 10, 20))
-    assert report["converged"]
+    assert report["converged"], report
     np.testing.assert_array_equal(result.poles, model.poles)
     np.testing.assert_allclose(result.residues, model.residues, atol=1e-12)
 
@@ -31,9 +34,28 @@ def test_frequency_dependent_violation_and_failure_reporting():
     _, failed = enforce_s_passivity_numpy(model, freqs, max_iterations=1)
     assert not failed["converged"]
     result, report = enforce_s_passivity_numpy(model, freqs)
-    assert report["converged"]
+    assert report["converged"], report
     assert np.abs(evaluate_numpy(result, freqs)).max() <= 1
     np.testing.assert_array_equal(result.poles, model.poles)
+
+
+def test_feasible_solution_is_not_rejected_by_optimizer_status(monkeypatch):
+    enforcement = importlib.import_module("circulax.fitting.enforcement_numpy")
+    minimize = enforcement.minimize
+
+    def minimize_with_failed_status(*args, **kwargs):
+        result = minimize(*args, **kwargs)
+        result.success = False
+        result.message = "platform-dependent line-search status"
+        return result
+
+    monkeypatch.setattr(enforcement, "minimize", minimize_with_failed_status)
+    model = VFModel(np.array([-2.0 + 0j]), np.array([[[2.0]]]), np.array([[0.5]]), np.zeros((1, 1)))
+    result, report = enforce_s_passivity_numpy(model, np.linspace(0, 10, 40))
+
+    assert report["converged"], report
+    assert not report["optimizer_success"]
+    assert np.abs(evaluate_numpy(result, np.linspace(0, 10, 40))).max() <= 1
 
 
 @pytest.mark.parametrize(("pole", "e"), [(2.0, 0.0), (-2.0, 1.0)])
@@ -60,8 +82,9 @@ def test_ring_slot_rational_enforcement():
     corrected, report = enforce_s_passivity_numpy(
         model, network.f[mask], enforcement_freqs=np.r_[network.f[mask], np.geomspace(1e5, 1e15, 4000)]
     )
-    assert report["converged"]
     assert len(oracle(corrected, network)) == 0
+    assert report["max_sigma_grid_and_infinity"] <= 1.0
+    assert report["converged"], report
     np.testing.assert_array_equal(model.poles, corrected.poles)
     np.testing.assert_allclose(corrected.residues, corrected.residues.swapaxes(0, 1))
     assert errors_numpy(corrected, network.s[~mask], network.f[~mask])[0] < 3e-6
