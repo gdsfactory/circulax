@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
     "numpy",
     "scipy>=1.12",
+    "scikit-rf>=1.8,<2",
     # Core supports jax>=0.7.2,<0.10.0. Lower bound 0.7.2 because equinox/optimistix
     # exclude 0.7.0/0.7.1; upper bound from sax (<0.10.0). The old <0.8 cap was a
     # leftover from klujax 0.4.x (which used jax.pmap); klujax 0.5.0 dropped pmap.
@@ -43,7 +44,6 @@ verilog-a = [
 ]
 docs = [
     "ipykernel>=6.29.5",
-    "scikit-rf>=1.8,<2",
     "nbconvert",
     "papermill",
     "hippogriffe==0.2.2",
@@ -186,6 +186,7 @@ copy_readme      = { cmd = ["python", "scripts/copy_readme.py"],   description =
 install_ipkernel = "python -m ipykernel install --user --name circulax"
 nbrun            = { cmd = ["python", "scripts/run_notebooks.py"], depends-on = ["install_ipkernel", "compile_osdi"], description = "Execute all notebooks in-place with papermill" }
 nbdocs           = { cmd = ["python", "scripts/build_docs.py"],    depends-on = ["copy_readme"], description = "Convert executed notebooks to Markdown in docs/examples/" }
+docs-build       = { cmd = ["mkdocs", "build", "--strict"], depends-on = ["copy_readme"], description = "Build documentation and fail on warnings" }
 docs-serve       = { cmd = ["mkdocs", "serve", "-w", "docs"], depends-on = ["copy_readme"] }
 docs-deploy      = { cmd = ["mkdocs", "gh-deploy", "--force"], depends-on = ["copy_readme"] }
 compile_osdi     = { cmd = ["python", "scripts/compile_osdi.py"], description = "Compile VA test fixtures to OSDI using openvaf-r (--target-cpu generic). Manual/LGPL-gated: never a dependency of build/build-conda." }

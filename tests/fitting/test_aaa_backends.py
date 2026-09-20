@@ -27,7 +27,7 @@ def test_exact_rational_holdout(backend):
     assert len(result[0]) == 3
 
 
-@pytest.mark.parametrize("value", [0., 2. + 1j])
+@pytest.mark.parametrize("value", [0.0, 2.0 + 1j])
 def test_jax_constant_stops_after_one_support(value):
     z = jnp.arange(10, dtype=float).astype(complex)
     result = aaa_scalar_jax(jnp.full(10, value, dtype=complex), z, mmax=8)
@@ -46,16 +46,24 @@ def test_jax_compiles_and_batches_without_host_compaction():
 
 def test_ring_slot_backend_parity():
     skrf = pytest.importorskip("skrf")
-    from circulax.fitting import evaluate_sparameter_model, fit_with_delay
+    from circulax.fitting.sparam import evaluate_sparameter_model, fit_with_delay
 
     network = skrf.data.ring_slot
     train = np.arange(len(network.f)) % 5 != 0
     predictions = []
     for backend in ("numpy", "jax"):
         ss, tau, metadata = fit_with_delay(
-            network.s[train], network.f[train], fit_domain="s", delay_mode="none",
-            aaa_backend=backend, tol=1e-8, mmax=12, max_poles=4,
-            enforce_passive=False, causality="ignore", verbose=False,
+            network.s[train],
+            network.f[train],
+            fit_domain="s",
+            delay_mode="none",
+            aaa_backend=backend,
+            tol=1e-8,
+            mmax=12,
+            max_poles=4,
+            enforce_passive=False,
+            causality="ignore",
+            verbose=False,
         )
         assert metadata["aaa_backend"] == backend
         prediction = evaluate_sparameter_model(ss, network.f[~train], tau)

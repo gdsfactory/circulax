@@ -4,7 +4,6 @@ from circulax._version import __version__
 from circulax.circuit import Circuit, compile_circuit
 from circulax.compiler import compile_netlist
 from circulax.components.electronic import TransmissionLine
-from circulax.components.rational import rational_component, rational_delay_component, rational_fdomain_component
 from circulax.netlist import (
     build_net_map,
     build_net_map_kfnetlist,

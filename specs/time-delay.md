@@ -79,8 +79,8 @@ ideal-through S-matrix to a singular or extremely ill-conditioned Y-matrix.
 
 ## Current limitations
 
-- `rational_delay_component` remains a compact AC/HB oracle. A solver-independent
-  realization is assembled from `rational_component` plus one `TransmissionLine`
-  per external port.
+- The stable fitting constructor assembles a rational core plus one
+  `TransmissionLine` per delayed external port and returns a flattened `Circuit`.
+  Lower-level rational factories are implementation APIs.
 - Fixed-delay history currently uses a buffer sized by `max_steps`.
 - State-dependent delays and discontinuity propagation are not implemented.

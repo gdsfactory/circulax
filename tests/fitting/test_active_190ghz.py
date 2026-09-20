@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import skrf
 
-from circulax.fitting import evaluate_sparameter_model, fit_with_delay
+from circulax.fitting.sparam import evaluate_sparameter_model, fit_with_delay
 
 
 def test_s_domain_fit_matches_skrf_published_accuracy() -> None:

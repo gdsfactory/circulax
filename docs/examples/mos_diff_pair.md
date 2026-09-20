@@ -27,9 +27,6 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-07-31 09:56:33,620:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 
 ```python
 net_dict = {
@@ -125,7 +122,7 @@ plt.show()
     Sweeping DC Operating Point (with Continuation)...
 
 
-    Simulation Time: 0.217s
+    Simulation Time: 0.402s
 
 
 

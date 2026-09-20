@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from circulax.fitting import FitOptions, VFModel, aaa_driver, eval_model
+from circulax.fitting.aaa import aaa_driver
 from circulax.fitting.sparam import (
     CausalityError,
     CausalityWarning,
@@ -23,7 +23,7 @@ from circulax.fitting.sparam import (
     vmap_scattering_state_space_to_admittance,
     y_to_s,
 )
-from circulax.fitting.types import vfmodel_to_ss
+from circulax.fitting.types import FitOptions, VFModel, eval_model, vfmodel_to_ss
 
 
 def _synth_delay_rational_2port(freqs, tau, poles=None, residue_matrices=None, Y_const=None, z0=50.0):

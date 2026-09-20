@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from .types import FitOptions
 from .utils import build_dk, compute_cindex, sort_poles
 
 # Tolerances for relaxed sigma D term (matching vectfit4 line 169)
@@ -219,7 +220,7 @@ def identify_poles(
     s: jnp.ndarray,  # (Ns,) complex
     poles: np.ndarray,  # (N,) complex — current poles (NumPy, outside JAX)
     weight: jnp.ndarray,  # (nnn, Ns) or (1, Ns)
-    opts,  # FitOptions
+    opts: FitOptions,
 ) -> np.ndarray:
     """Identify new poles from the current poles using FRVF (Stage 1).
 

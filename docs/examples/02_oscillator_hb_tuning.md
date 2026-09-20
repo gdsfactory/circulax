@@ -67,9 +67,6 @@ pio.renderers.default = "png"
 
 ```
 
-    WARNING:2026-07-31 09:57:20,787:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 ## Defining the Van der Pol component
 
 Custom components are plain Python functions decorated with `@component`. The decorator
@@ -197,6 +194,8 @@ print(f"DC operating point: max|y_dc| = {float(jnp.max(jnp.abs(y_dc))):.2e} V  (
     System size : 3 unknowns
     Named ports : ['osc']
     Oscillator port: 'osc'
+
+
     DC operating point: max|y_dc| = 0.00e+00 V  (trivially zero)
 
 
@@ -569,14 +568,10 @@ print(f"\nFinal: f={f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz),  L={L_o
 
 
       Step   0: loss=3.80062,  f=5.033 MHz,  L=0.951 µH,  C=1.051 nF,  mu=1.902
-
-
       Step  50: loss=0.08338,  f=8.245 MHz,  L=0.235 µH,  C=1.588 nF,  mu=0.413
 
 
       Step 100: loss=0.02942,  f=8.013 MHz,  L=0.223 µH,  C=1.769 nF,  mu=0.305
-
-
       Step 150: loss=0.00059,  f=8.001 MHz,  L=0.221 µH,  C=1.787 nF,  mu=0.268
 
 

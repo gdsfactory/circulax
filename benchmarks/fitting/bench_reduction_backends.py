@@ -14,16 +14,8 @@ import numpy as np
 import skrf
 from skrf.vectorFitting import VectorFitting
 
-from circulax.fitting import (
-    FitOptions,
-    fit_with_delay,
-    scattering_state_space_to_admittance,
-    surface_from_fit,
-    validate_surface_fit,
-    vfdriver,
-    vmap_pole_count_sweep,
-)
-from circulax.fitting.pole_sweep import prune_poles_by_contribution
+from circulax.fitting.driver import vfdriver
+from circulax.fitting.pole_sweep import prune_poles_by_contribution, vmap_pole_count_sweep
 from circulax.fitting.reduction_numpy import (
     candidate_subsets,
     discover_numpy,
@@ -32,7 +24,10 @@ from circulax.fitting.reduction_numpy import (
     refit_numpy,
     screen_masked_numpy,
 )
-from circulax.fitting.types import SSModel, VFModel, vfmodel_to_ss
+from circulax.fitting.sparam import fit_with_delay, scattering_state_space_to_admittance
+from circulax.fitting.surface import surface_from_fit
+from circulax.fitting.types import FitOptions, SSModel, VFModel, vfmodel_to_ss
+from circulax.fitting.validation import validate_surface_fit
 
 
 def measure[T](label: str, run: Callable[[], T], repeats: int = 6) -> T:

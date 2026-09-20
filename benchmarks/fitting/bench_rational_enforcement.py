@@ -10,10 +10,12 @@ import numpy as np
 import skrf
 from skrf.vectorFitting import VectorFitting
 
-from circulax.fitting import scattering_state_space_to_admittance, surface_from_fit, validate_surface_fit
 from circulax.fitting.enforcement_numpy import enforce_s_passivity_numpy
 from circulax.fitting.reduction_numpy import errors_numpy, fit_s_numpy
+from circulax.fitting.sparam import scattering_state_space_to_admittance
+from circulax.fitting.surface import surface_from_fit
 from circulax.fitting.types import VFModel, vfmodel_to_ss
+from circulax.fitting.validation import validate_surface_fit
 
 
 def oracle(model: VFModel, network: skrf.Network) -> np.ndarray:

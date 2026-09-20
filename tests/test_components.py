@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from circulax.components.base_component import PhysicsReturn, Signals, component
+from circulax.components.base_component import PhysicsReturn, Signals, States, component, source
 
 # Import components to be tested
 from circulax.components.electronic import (
@@ -234,6 +234,30 @@ def test_signals_unifies_ports_states_and_delayed_values() -> None:
     assert signals.s1 == 10
     assert signals.at_delay(0.5).a == 3
     assert signals.at_delay(0.5).s1 == 20
+
+
+def test_023_component_signature_remains_supported() -> None:
+    @component(ports=("p",), states=("x",))
+    def Legacy(signals: Signals, s: States, gain: float = 2.0) -> PhysicsReturn:  # noqa: N802
+        return {"p": gain * s.x, "x": signals.p - s.x}, {"x": s.x}
+
+    model = Legacy(gain=3.0)
+    f, q = model(y=jnp.array([2.0, 0.5]))
+    assert f == {"p": 1.5, "x": 1.5}
+    assert q == {"x": 0.5}
+    f_vec, q_vec = Legacy.solver_call(0.0, jnp.array([2.0, 0.5]), model)
+    assert jnp.allclose(f_vec, jnp.array([1.5, 1.5]))
+    assert jnp.allclose(q_vec, jnp.array([0.0, 0.5]))
+
+
+def test_023_source_signature_remains_supported() -> None:
+    @source(ports=("p",), states=("x",))
+    def LegacySource(signals: Signals, s: States, t: float, scale: float = 2.0) -> PhysicsReturn:  # noqa: N802
+        return {"p": scale * t + s.x, "x": signals.p}, {}
+
+    model = LegacySource(scale=3.0)
+    f, _ = model(t=2.0, y=jnp.array([4.0, 0.5]))
+    assert f == {"p": 6.5, "x": 4.0}
 
 
 # --- port_aliases (gdsfactory/circulax#30) ---

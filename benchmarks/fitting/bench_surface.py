@@ -9,8 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from circulax.fitting import fit_with_delay
-from circulax.fitting.sparam import _y_to_s, embed_delay
+from circulax.fitting.sparam import _y_to_s, embed_delay, fit_with_delay
 from circulax.fitting.surface import (
     RationalSurface,
     evaluate_surface,
@@ -153,9 +152,7 @@ def run_benchmark(
     refined_loss = float(surface_loss(refined, features, freqs, S))
     refined_rmse = float(np.sqrt(np.mean(np.abs(np.asarray(evaluate_surface(refined, features, freqs)) - S) ** 2)))
     refined_passivity_margin = float(jnp.min(surface_passivity_margins(refined, features, freqs)))
-    validation_passivity_margin = float(
-        jnp.min(surface_passivity_margins(refined, validation_features, validation_freqs))
-    )
+    validation_passivity_margin = float(jnp.min(surface_passivity_margins(refined, validation_features, validation_freqs)))
     D_margins, E_margins = surface_asymptotic_passivity_margins(refined, validation_features)
 
     start = time.perf_counter()

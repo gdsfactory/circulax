@@ -10,8 +10,9 @@ import jax.numpy as jnp
 import numpy as np
 import skrf
 
-from circulax.fitting import FitOptions, vmap_pole_count_sweep
+from circulax.fitting.pole_sweep import vmap_pole_count_sweep
 from circulax.fitting.sparam import _aaa_all_elements
+from circulax.fitting.types import FitOptions
 
 
 def main() -> None:
@@ -62,8 +63,7 @@ def main() -> None:
         strict=True,
     ):
         print(  # noqa: T201
-            f"{count:2d} poles: NRMSE={error:.4%}, max |dS|={maximum:.4f}, "
-            f"max Re(pY)={y_pole:.3e}, cond(V)={condition:.3e}"
+            f"{count:2d} poles: NRMSE={error:.4%}, max |dS|={maximum:.4f}, max Re(pY)={y_pole:.3e}, cond(V)={condition:.3e}"
         )
 
 

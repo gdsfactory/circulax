@@ -55,9 +55,6 @@ from circulax.solvers.sensitivity import _resolve_param_cols
 jax.config.update("jax_enable_x64", True)
 ```
 
-    WARNING:2026-07-31 10:00:43,775:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 ## 1. Load the PSP103 OSDI Model
 
 `osdi_component` loads a compiled Verilog-A `.osdi` binary and creates a
@@ -207,7 +204,7 @@ print(f"DC sweep ({len(VGS_SWEEP)} points, vmapped): {t_sweep:.2f} s")
 print(f"Id range: {id_ref.min() * 1e3:.3f} mA to {id_ref.max() * 1e3:.3f} mA")
 ```
 
-    DC sweep (25 points, vmapped): 0.29 s
+    DC sweep (25 points, vmapped): 0.28 s
     Id range: -1.867 mA to -0.000 mA
 
 
@@ -387,7 +384,7 @@ for k in range(K_STARTS):
     Compiling and running 8 parallel optimisations...
 
 
-    Total time: 5.4 s (8 starts, 40 steps each)
+    Total time: 5.9 s (8 starts, 40 steps each)
 
     Final losses per start:
       Start 0: 1.1542e-08 <-- best

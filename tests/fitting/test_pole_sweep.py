@@ -3,8 +3,8 @@
 import jax.numpy as jnp
 import numpy as np
 
-from circulax.fitting import VFModel, eval_model, vmap_pole_count_sweep
-from circulax.fitting.types import vfmodel_to_ss
+from circulax.fitting.pole_sweep import vmap_pole_count_sweep
+from circulax.fitting.types import VFModel, eval_model, vfmodel_to_ss
 
 
 def test_vmap_pole_sweep_refits_nested_conjugate_pair_masks() -> None:

@@ -3,7 +3,9 @@
 import jax.numpy as jnp
 import numpy as np
 
-from circulax.fitting import FitOptions, init_poles_logcmplx, vfdriver
+from circulax.fitting.driver import vfdriver
+from circulax.fitting.types import FitOptions
+from circulax.fitting.utils import init_poles_logcmplx
 
 
 def _make_rational_admittance(poles, residues, D, s):

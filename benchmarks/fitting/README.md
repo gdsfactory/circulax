@@ -49,7 +49,7 @@ differentiable end to end.
 ## Complete S-domain reduction workflow
 
 ```python
-from circulax.fitting import fit_s_numpy
+from circulax.fitting.reduction_numpy import fit_s_numpy
 
 # Train samples only; choose the smallest shortlisted model meeting the
 # training NRMSE/max-error limits after six VF relocation iterations.
@@ -123,7 +123,7 @@ results, not a general claim about larger networks or accelerators.
 To hand the fitted model to Circulax explicitly:
 
 ```python
-from circulax.fitting import scattering_state_space_to_admittance
+from circulax.fitting.sparam import scattering_state_space_to_admittance
 from circulax.fitting.types import vfmodel_to_ss
 
 scattering_ss = vfmodel_to_ss(model, model.D.shape[0])
@@ -206,7 +206,7 @@ extrapolated endpoint is unsuitable as a passive ring-slot constraint.
 ## Vectorized NumPy sample conditioning
 
 ```python
-from circulax.fitting import condition_sparameters
+from circulax.fitting.conditioning import condition_sparameters
 
 # Input grid must start at DC and be uniformly spaced for the FFT projection.
 cleaned, report = condition_sparameters(S_grid, freqs_grid, max_iterations=500)

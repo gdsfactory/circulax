@@ -12,15 +12,12 @@ from dataclasses import asdict
 import numpy as np
 import skrf
 
-from circulax.fitting import (
-    condition_sparameters,
-    fit_s_numpy,
-    project_s_passive,
-    scattering_state_space_to_admittance,
-    surface_from_fit,
-    validate_surface_fit,
-)
+from circulax.fitting.conditioning_numpy import condition_sparameters, project_s_passive
+from circulax.fitting.reduction_numpy import fit_s_numpy
+from circulax.fitting.sparam import scattering_state_space_to_admittance
+from circulax.fitting.surface import surface_from_fit
 from circulax.fitting.types import vfmodel_to_ss
+from circulax.fitting.validation import validate_surface_fit
 
 
 def main() -> None:

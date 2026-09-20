@@ -65,9 +65,6 @@ from circulax.components.electronic import Resistor
 jax.config.update("jax_enable_x64", True)
 ```
 
-    WARNING:2026-07-31 10:01:05,752:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 ## Component definitions
 
 
@@ -1020,8 +1017,8 @@ print(f"  Warm run           : {t_ac_warm * 1e3:.1f} ms")
 ```
 
     AC sweep: 10 frequencies
-      JIT compile + run : 122 ms
-      Warm run           : 95.9 ms
+      JIT compile + run : 124 ms
+      Warm run           : 136.1 ms
 
 
 

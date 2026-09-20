@@ -11,9 +11,11 @@ import numpy as np
 import skrf
 from skrf.vectorFitting import VectorFitting
 
-from circulax.fitting import fit_s_numpy, scattering_state_space_to_admittance, surface_from_fit, validate_surface_fit
-from circulax.fitting.reduction_numpy import errors_numpy
+from circulax.fitting.reduction_numpy import errors_numpy, fit_s_numpy
+from circulax.fitting.sparam import scattering_state_space_to_admittance
+from circulax.fitting.surface import surface_from_fit
 from circulax.fitting.types import vfmodel_to_ss
+from circulax.fitting.validation import validate_surface_fit
 
 
 def main() -> None:

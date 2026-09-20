@@ -225,10 +225,10 @@ def setup_ac_sweep(
         A callable ``run_ac(y_dc, freqs) -> S`` where:
 
         - **y_dc** — DC operating point, shape ``(num_vars,)`` for real
-          circuits or ``(2 * num_vars,)`` for complex circuits.
+        circuits or ``(2 * num_vars,)`` for complex circuits.
         - **freqs** — frequencies in Hz, shape ``(N_freqs,)``.
-        - **S** — S-parameter matrix, shape ``(N_freqs, N_ports, N_ports)``
-            complex128.
+        - **S** — complex128 S-parameter matrix with shape
+        ``(N_freqs, N_ports, N_ports)``.
 
         Compatible with :func:`jax.jit` and :func:`jax.vmap` over ``y_dc``.
 

@@ -23,9 +23,6 @@ from circulax import compile_circuit
 from circulax.components.electronic import Resistor, VoltageSource
 ```
 
-    WARNING:2026-07-31 09:57:08,707:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 
 ```python
 net_dict = {
@@ -144,7 +141,7 @@ else:
        System Size: 6 variables
 
     2. Solving DC Operating Point...
-    Time take = 0.1427s
+    Time take = 0.1716s
 
     3. Verification:
        V_REF:    8.0 V

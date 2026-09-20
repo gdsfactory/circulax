@@ -46,8 +46,8 @@ def test_reject_unstable_or_improper(pole, e):
 def test_ring_slot_rational_enforcement():
     skrf = pytest.importorskip("skrf")
     from benchmarks.fitting.bench_rational_enforcement import oracle
-    from circulax.fitting import scattering_state_space_to_admittance
     from circulax.fitting.reduction_numpy import errors_numpy, fit_s_numpy
+    from circulax.fitting.sparam import scattering_state_space_to_admittance
     from circulax.fitting.types import vfmodel_to_ss
 
     network = skrf.data.ring_slot

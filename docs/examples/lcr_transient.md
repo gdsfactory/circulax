@@ -26,9 +26,6 @@ from circulax.components.electronic import Capacitor, Inductor, Resistor, Voltag
 
 ```
 
-    WARNING:2026-07-31 09:57:03,719:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 
 ```python
 net_dict = {

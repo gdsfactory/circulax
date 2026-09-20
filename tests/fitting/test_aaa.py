@@ -5,8 +5,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from circulax.fitting import FitOptions, SSModel, VFModel, eval_model
 from circulax.fitting.aaa import _aaa_poles, aaa_driver, aaa_scalar
+from circulax.fitting.types import FitOptions, SSModel, VFModel, eval_model
 
 # ---------------------------------------------------------------------------
 # Helpers

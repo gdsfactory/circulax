@@ -180,9 +180,6 @@ TARGET_WLS = jnp.array([1285.0, 1300.0, 1315.0, 1330.0])   # nm
 Y_GUESS    = jnp.ones(circuit.sys_size * 2)   # flat initial guess for Newton-Raphson
 ```
 
-    WARNING:2026-07-31 09:58:21,424:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
     System size: 25 real nodes  (50 complex DOFs)
     Component groups: ['dc', 'resistor', 'source', 'waveguide']
     Detector ports: ['det1', 'det2', 'det3', 'det4']
@@ -592,7 +589,7 @@ for name, p0, pf in zip(param_names, params_init, params):
     Training 8 parallel starts × 2000 Adam steps (lr=0.02)...
 
 
-      Finished in 46.8 s
+      Finished in 43.2 s
 
 
 
@@ -733,8 +730,6 @@ print(f"Improvement: {diag_init.mean()*100:.1f}% -> {np.mean(diag_final)*100:.1f
 
 
       [ 31/44] step 266
-
-
     Done.
 
 

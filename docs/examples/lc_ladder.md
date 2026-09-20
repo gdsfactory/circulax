@@ -38,9 +38,6 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-07-31 09:56:24,772:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 
 ```python
 N_SECTIONS = 500
@@ -199,7 +196,7 @@ else:
     Generating 500-stage LC Ladder...
 
 
-    Compilation finished in 1.3150s
+    Compilation finished in 1.4444s
     System Matrix Size: 1004x1004 (1008016 elements)
     Solving DC Operating Point...
 
@@ -208,7 +205,7 @@ else:
 
 
        ✅ Simulation Successful
-    Simulation completed in 3.3478s
+    Simulation completed in 3.2091s
     Total Steps: 19662
 
 

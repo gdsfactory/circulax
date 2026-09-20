@@ -22,9 +22,6 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-07-31 09:56:11,883:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 ## Defining the Netlist
 
 
@@ -149,7 +146,7 @@ else:
 
 
        ✅ Simulation Successful
-    Performed 591 steps performed in 0.66 seconds
+    Performed 591 steps performed in 0.71 seconds
 
 
 

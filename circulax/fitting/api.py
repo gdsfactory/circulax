@@ -1,4 +1,4 @@
-"""Recommended two-stage S fitting API: coefficients first, component second."""
+"""Stable S-parameter fitting, validation, and circuit-construction API."""
 
 from __future__ import annotations
 
@@ -21,6 +21,48 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class DelayInferenceOptions:
+    """Conservative controls for propagation-delay inference.
+
+    Inference is limited to passive, approximately reciprocal, low-reflection
+    two-ports. By default, 20% of the frequencies are reserved for candidate
+    selection, and the selected configuration is refitted on all samples.
+    """
+
+    min_transmission: float = 0.05
+    phase_residual: float = 0.05
+    direction_tolerance: float = 0.05
+    reflection_threshold: float = 0.05
+    delay_fractions: tuple[float, ...] = (1.0, 0.5)
+    reciprocity_tolerance: float = 0.02
+    passivity_tolerance: float = 0.01
+    validation_fraction: float = 0.2
+    validation_degradation: float = 0.1
+
+    def __post_init__(self) -> None:
+        positive = (
+            self.min_transmission,
+            self.phase_residual,
+            self.direction_tolerance,
+            self.reflection_threshold,
+            self.reciprocity_tolerance,
+            self.passivity_tolerance,
+        )
+        if not np.all(np.isfinite(positive)) or min(positive) <= 0:
+            raise ValueError("delay-inference tolerances must be finite and positive")
+        if not self.delay_fractions or any(not np.isfinite(f) or not 0 < f <= 1 for f in self.delay_fractions):
+            raise ValueError("delay_fractions must lie in (0, 1]")
+        if not 0 < self.validation_fraction < 0.5:
+            raise ValueError("validation_fraction must lie in (0, 0.5)")
+        if not np.isfinite(self.validation_degradation) or self.validation_degradation < 0:
+            raise ValueError("validation_degradation must be finite and nonnegative")
+
+
+class DelayInferenceWarning(RuntimeWarning):
+    """Emitted when requested delay inference returns the undelayed baseline."""
+
+
+@dataclass(frozen=True)
 class ModelFitOptions:
     """Controls for proper S fitting with optional one-way port delays.
 
@@ -31,14 +73,10 @@ class ModelFitOptions:
     iterations=0. Error limits apply AFTER optional enforcement as well.
     """
 
-    delay_mode: Literal["none", "supplied", "auto"] = "none"
+    delay_mode: Literal["none", "supplied", "infer"] = "none"
     port_delays: tuple[float, ...] | None = None
-    auto_max_delay: float | None = None
-    auto_min_transmission: float = 0.05
-    auto_phase_residual: float = 0.05
-    auto_direction_tolerance: float = 0.05
-    auto_reflection_threshold: float = 1e-3
-    auto_delay_fractions: tuple[float, ...] = (1.0, 0.5)
+    max_delay: float | None = None
+    delay_inference: DelayInferenceOptions = field(default_factory=DelayInferenceOptions)
     method: Literal["vector_fitting", "aaa"] = "vector_fitting"
     vector_fit_order: tuple[int, int] | None = None
     aaa_backend: Literal["numpy", "jax"] = "numpy"
@@ -56,7 +94,7 @@ class ModelFitOptions:
     enforcement_freqs: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
-        if self.delay_mode not in {"none", "supplied", "auto"}:
+        if self.delay_mode not in {"none", "supplied", "infer"}:
             raise ValueError("invalid delay_mode")
         if (self.port_delays is not None) != (self.delay_mode == "supplied"):
             raise ValueError("port_delays are required only for supplied delay mode")
@@ -65,18 +103,14 @@ class ModelFitOptions:
             if delays.ndim != 1 or not len(delays) or not np.all(np.isfinite(delays)) or np.any(delays < 0):
                 raise ValueError("port_delays must be finite nonnegative one-way seconds")
             object.__setattr__(self, "port_delays", tuple(float(d) for d in delays))
-        if self.auto_max_delay is not None and (not np.isfinite(self.auto_max_delay) or self.auto_max_delay <= 0):
-            raise ValueError("auto_max_delay must be finite positive seconds")
-        safeguards = (
-            self.auto_min_transmission,
-            self.auto_phase_residual,
-            self.auto_direction_tolerance,
-            self.auto_reflection_threshold,
-        )
-        if not np.all(np.isfinite(safeguards)) or min(safeguards) <= 0:
-            raise ValueError("automatic safeguards must be finite and positive")
-        if not self.auto_delay_fractions or any(not np.isfinite(f) or not 0 < f <= 1 for f in self.auto_delay_fractions):
-            raise ValueError("auto_delay_fractions must lie in (0, 1]")
+        if self.max_delay is not None and (not np.isfinite(self.max_delay) or self.max_delay <= 0):
+            raise ValueError("max_delay must be finite positive seconds")
+        if self.delay_mode == "infer" and self.max_delay is None:
+            raise ValueError("max_delay is required for inferred delay")
+        if self.delay_mode != "infer" and self.max_delay is not None:
+            raise ValueError("max_delay applies only to inferred delay")
+        if not isinstance(self.delay_inference, DelayInferenceOptions):
+            raise TypeError("delay_inference must be DelayInferenceOptions")
         if self.method not in {"vector_fitting", "aaa"}:
             raise ValueError("method must be 'vector_fitting' or 'aaa'")
         if self.vector_fit_order is not None:
@@ -201,6 +235,158 @@ class ModelCoefficients:
             )
 
 
+@dataclass(frozen=True)
+class ModelValidationReport:
+    """Validation evidence for admitting fitted coefficients to simulation."""
+
+    status: Literal["pass", "warn", "fail"]
+    training_nrmse: float | None
+    training_max_error: float | None
+    validation_nrmse: float | None
+    validation_max_error: float | None
+    maximum_singular_value: float
+    maximum_s_pole_real_part: float
+    maximum_y_pole_real_part: float
+    findings: tuple[str, ...]
+
+    @property
+    def simulation_ready(self) -> bool:
+        """Whether validation passed without findings."""
+        return self.status == "pass"
+
+    def raise_for_simulation(self, *, allow_warnings: bool = False) -> None:
+        """Raise when the report does not admit the model to simulation."""
+        if self.status == "fail" or (self.status == "warn" and not allow_warnings):
+            raise ValueError(f"model validation {self.status}: {'; '.join(self.findings)}")
+
+
+def _validation_errors(prediction: np.ndarray, target: np.ndarray) -> tuple[float, float]:
+    difference = prediction - target
+    return (
+        float(np.linalg.norm(difference) / max(np.linalg.norm(target), 1e-30)),
+        float(np.max(np.abs(difference))),
+    )
+
+
+def _validation_dataset(S: np.ndarray, freqs: np.ndarray, ports: int, label: str) -> tuple[np.ndarray, np.ndarray]:
+    S = np.asarray(S, complex)
+    freqs = np.asarray(freqs, float)
+    if freqs.ndim != 1 or not len(freqs) or not np.all(np.isfinite(freqs)) or np.any(freqs < 0):
+        raise ValueError(f"{label} frequencies must be a finite nonempty vector of nonnegative Hz values")
+    if S.shape != (len(freqs), ports, ports) or not np.all(np.isfinite(S)):
+        raise ValueError(f"{label} S data must be finite with shape (frequencies, {ports}, {ports})")
+    return S, freqs
+
+
+def validate_model(
+    coefficients: ModelCoefficients | str | Path,
+    *,
+    measured_S: np.ndarray | None = None,
+    freqs: np.ndarray | None = None,
+    validation_S: np.ndarray | None = None,
+    validation_freqs: np.ndarray | None = None,
+    simulation_frequency_range: tuple[float, float] | None = None,
+    expected_passive: bool = True,
+    expected_reciprocal: bool = True,
+    normalized_rmse: float = 0.02,
+    max_absolute_error: float = 0.05,
+    passivity_tolerance: float = 1e-9,
+) -> ModelValidationReport:
+    """Validate fitted coefficients without compiling a circuit.
+
+    Accuracy checks are performed when measured data are supplied. Independent
+    validation requires both ``validation_S`` and ``validation_freqs``.
+    Passivity is required by default; active models must opt out explicitly.
+    """
+    source = ModelCoefficients.load(coefficients) if isinstance(coefficients, (str, Path)) else coefficients
+    source = ModelCoefficients(
+        source.poles, source.residues, source.D, source.z0, source.frequency_range, source.metadata, source.port_delays
+    )
+    if (measured_S is None) != (freqs is None):
+        raise ValueError("measured_S and freqs must be supplied together")
+    if (validation_S is None) != (validation_freqs is None):
+        raise ValueError("validation_S and validation_freqs must be supplied together")
+    limits = (normalized_rmse, max_absolute_error, passivity_tolerance)
+    if not np.all(np.isfinite(limits)) or normalized_rmse <= 0 or max_absolute_error <= 0 or passivity_tolerance < 0:
+        raise ValueError("validation limits must be finite; error limits must be positive and passivity tolerance nonnegative")
+
+    ports = len(source.D)
+    training_data = None
+    validation_data = None
+    if measured_S is not None:
+        training_data = _validation_dataset(measured_S, freqs, ports, "training")
+    if validation_S is not None:
+        validation_data = _validation_dataset(validation_S, validation_freqs, ports, "held-out")
+
+    findings: list[str] = []
+    physical_grids = [data[1] for data in (training_data, validation_data) if data is not None]
+    evaluation_freqs = np.unique(np.concatenate(physical_grids)) if physical_grids else np.asarray(source.frequency_range, float)
+    response = source.evaluate(evaluation_freqs)
+    training_nrmse = training_max = validation_nrmse = validation_max = None
+    if training_data is not None:
+        training_S, training_freqs = training_data
+        training_nrmse, training_max = _validation_errors(source.evaluate(training_freqs), training_S)
+        if training_nrmse > normalized_rmse or training_max > max_absolute_error:
+            findings.append("training accuracy exceeds the requested limits")
+    else:
+        findings.append("no measured training data supplied")
+    if validation_data is not None:
+        heldout_S, heldout_freqs = validation_data
+        validation_nrmse, validation_max = _validation_errors(source.evaluate(heldout_freqs), heldout_S)
+        if validation_nrmse > normalized_rmse or validation_max > max_absolute_error:
+            findings.append("held-out accuracy exceeds the requested limits")
+    else:
+        findings.append("no independent validation data supplied")
+
+    if expected_reciprocal and np.max(np.abs(response - response.swapaxes(1, 2))) > 1e-8:
+        findings.append("model is not reciprocal")
+    maximum_singular = float(np.max(np.linalg.svd(response, compute_uv=False)))
+    if expected_passive and maximum_singular > 1 + passivity_tolerance:
+        findings.append("model fails sampled passivity")
+    maximum_s_pole = float(np.max(source.poles.real)) if len(source.poles) else -np.inf
+    if maximum_s_pole >= 0:
+        findings.append("model has unstable S poles")
+
+    n = len(source.D)
+    through = not len(source.poles) and n == 2 and np.array_equal(source.D, [[0, 1], [1, 0]])
+    maximum_y_pole = -np.inf
+    if not through:
+        if np.linalg.matrix_rank(np.eye(n) + source.D) < n:
+            findings.append("model has an unsupported singular I+D core")
+        elif len(source.poles):
+            model = VFModel(source.poles, source.residues, source.D.real, np.zeros((n, n)))
+            try:
+                ss, _ = scattering_state_space_to_admittance(vfmodel_to_ss(model, n), z0=source.z0)
+                maximum_y_pole = float(np.max(np.asarray(ss.A).real)) if len(ss.A) else -np.inf
+                if maximum_y_pole >= 0:
+                    findings.append("model has unstable Y poles")
+            except np.linalg.LinAlgError:
+                findings.append("S-to-Y realization failed")
+
+    if simulation_frequency_range is not None:
+        if len(simulation_frequency_range) != 2:
+            raise ValueError("simulation_frequency_range must contain (minimum, maximum) Hz")
+        low, high = simulation_frequency_range
+        if not np.all(np.isfinite((low, high))) or not 0 <= low <= high:
+            raise ValueError("simulation_frequency_range must be finite, nonnegative, and ordered")
+        if low < source.frequency_range[0] or high > source.frequency_range[1]:
+            findings.append("requested simulation range exceeds the fitted frequency range")
+
+    failures = tuple(item for item in findings if not item.startswith("no measured") and not item.startswith("no independent"))
+    status: Literal["pass", "warn", "fail"] = "fail" if failures else ("warn" if findings else "pass")
+    return ModelValidationReport(
+        status,
+        training_nrmse,
+        training_max,
+        validation_nrmse,
+        validation_max,
+        maximum_singular,
+        maximum_s_pole,
+        maximum_y_pole,
+        tuple(findings),
+    )
+
+
 def fit_model(
     S: np.ndarray,
     freqs: np.ndarray,
@@ -220,18 +406,18 @@ def fit_model(
         raise ValueError("frequencies must be finite, nonnegative and increasing")
     if S.ndim != 3 or S.shape[0] != len(freqs) or S.shape[1] != S.shape[2] or not S.shape[1] or not np.all(np.isfinite(S)):
         raise ValueError("S must be finite with shape (frequencies, ports, ports)")
-    if options.reciprocal and not np.allclose(S, S.swapaxes(1, 2), atol=1e-8, rtol=0):
-        raise ValueError("reciprocal fitting requires symmetric data")
     # Validate impedance before doing any potentially expensive fitting.
     ModelCoefficients(np.array([], complex), np.zeros((*S.shape[1:], 0)), np.zeros(S.shape[1:]), z0)
     if initial_poles is not None and options.vector_fit_order is not None:
         raise ValueError("Choose initial_poles or vector_fit_order, not both")
-    if options.delay_mode == "auto":
+    if options.delay_mode == "infer":
         if initial_poles is not None:
-            raise ValueError("automatic delay inference cannot be combined with supplied poles")
+            raise ValueError("delay inference cannot be combined with supplied poles")
         from .delay_selection import fit_auto_delay
 
         return fit_auto_delay(S, freqs, z0, options)
+    if options.reciprocal and not np.allclose(S, S.swapaxes(1, 2), atol=1e-8, rtol=0):
+        raise ValueError("reciprocal fitting requires symmetric data")
     fit_started = time.perf_counter()
     original = S
     delays = np.zeros(S.shape[1]) if options.port_delays is None else np.asarray(options.port_delays)
@@ -324,23 +510,6 @@ def fit_model(
         port_delays_seconds=delays.tolist(),
     )
     diagnostics.update(fitting_seconds=fitting_seconds, enforcement_seconds=enforcement_seconds, pole_count=len(model.poles))
-    if options.delay_mode != "none":
-        started = time.perf_counter()
-        realized = component_from_coefficients(result)
-        diagnostics["conversion_compilation_seconds"] = time.perf_counter() - started
-        diagnostics["realization_validated"] = True
-        diagnostics["sampled_core_peak_singular_value"] = float(
-            np.max(np.linalg.svd(result.evaluate_core(freqs), compute_uv=False))
-        )
-        diagnostics["core_state_count"] = len(model.poles) * S.shape[1]
-        diagnostics["line_algebraic_unknowns"] = 0
-        if hasattr(realized, "sys_size"):
-            diagnostics["line_algebraic_unknowns"] = 2 * sum(
-                group.var_indices.shape[0] for group in realized.groups.values() if group.has_delay
-            )
-            diagnostics["circuit_unknowns"] = realized.sys_size
-            diagnostics["real_solver_unknowns"] = realized.sys_size * (2 if realized.solver.is_complex else 1)
-        diagnostics["history_cost"] = "full solver state per accepted step; depends on transient max_steps"
     return result
 
 
@@ -384,7 +553,7 @@ def _fit_vector_fitting(S, freqs, z0, options):
     }
 
 
-def component_from_coefficients(
+def _component_from_coefficients(
     coefficients: ModelCoefficients | str | Path, *, name: str = "FittedModel", holomorphic: bool = True
 ) -> type[CircuitComponent] | Circuit:
     """Return a leaf class or a Circuit composed with exact delay lines.
@@ -420,7 +589,7 @@ def component_from_coefficients(
                 "ports": {"p1": "core,p1", "p2": "core,p2"},
             }
             return compile_circuit(net, {key: TransmissionLine}, g_leak=0)
-        core = component_from_coefficients(replace(source, port_delays=np.zeros(n)), name=name, holomorphic=holomorphic)
+        core = _component_from_coefficients(replace(source, port_delays=np.zeros(n)), name=name, holomorphic=holomorphic)
         models = {key: core, key + "_line": TransmissionLine}
         net = {"instances": {"core": {"component": key}}, "connections": {}, "ports": {}}
         for i, delay in enumerate(source.port_delays, 1):
@@ -445,3 +614,21 @@ def component_from_coefficients(
     if not all(np.all(np.isfinite(a)) for a in (ss.A, ss.B, ss.C, ss.D, ss.E)) or np.any(np.asarray(ss.A).real >= 0):
         raise ValueError("Cannot create component: nonfinite realization or unstable Y poles; reassess fitting/enforcement")
     return rational_component(ss, name=name, z0=source.z0, holomorphic=holomorphic)
+
+
+def circuit_from_coefficients(
+    coefficients: ModelCoefficients | str | Path, *, name: str = "FittedModel", holomorphic: bool = True
+) -> Circuit:
+    """Build a simulation-ready :class:`circulax.Circuit` from coefficients.
+
+    The return type is the same for rational cores, delayed models, and ideal
+    through lines. Fitting and passivity enforcement never occur here.
+    """
+    from circulax import Circuit, compile_circuit
+
+    realized = _component_from_coefficients(coefficients, name=name, holomorphic=holomorphic)
+    if isinstance(realized, Circuit):
+        return realized
+    ports = {port: f"model,{port}" for port in realized.ports}
+    net = {"instances": {"model": {"component": "model"}}, "connections": {}, "ports": ports}
+    return compile_circuit(net, {"model": realized}, g_leak=0)

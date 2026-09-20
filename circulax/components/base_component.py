@@ -88,6 +88,15 @@ class Signals:
         return Signals(self._delayed, self._names)
 
 
+class States(Signals):
+    """Legacy state-variable view retained for the Circulax 0.2.3 API.
+
+    New components may read ports and states from a unified :class:`Signals`
+    object. Components written against 0.2.3 continue to receive a separate
+    ``States`` object when they declare ``(signals, s, ...)``.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Base class
 # ---------------------------------------------------------------------------
@@ -313,9 +322,10 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
     - ``_invoke_physics`` — a bound method used by the debug ``__call__`` path.
 
     Args:
-        fn: The decorated physics function. Its signature must begin with
+        fn: The decorated physics function. New-style signatures begin with
             ``signals`` for :func:`component` or ``(signals, t)`` for
-            :func:`source`, followed by parameters with defaults.
+            :func:`source`. The 0.2.3 signatures ``(signals, s)`` and
+            ``(signals, s, t)`` remain supported.
         ports: Ordered tuple of port names matching the netlist connections.
         states: Ordered tuple of internal state variable names.
         uses_time: ``True`` when compiling a :func:`source` component whose
@@ -347,10 +357,14 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
         msg = f"{fn.__name__}: ports and states must have distinct names; duplicated: {names}"
         raise ValueError(msg)
 
-    reserved = ("signals", "t") if uses_time else ("signals",)
-
     sig = inspect.signature(fn)
     params = list(sig.parameters.values())
+
+    legacy_states = len(params) > 1 and params[1].name == "s"
+    if uses_time:
+        reserved = ("signals", "s", "t") if legacy_states else ("signals", "t")
+    else:
+        reserved = ("signals", "s") if legacy_states else ("signals",)
 
     if len(params) < len(reserved):
         msg = f"Function '{fn.__name__}' must start with arguments {reserved}"
@@ -384,13 +398,16 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
             msg = f"Parameter '{p.name}' must have a default."
             raise TypeError(msg)
 
+    n_ports = len(ports)
     full_keys = ports + states
     _dummy_signals = Signals([0.0] * len(full_keys), full_keys)
+    _dummy_legacy_signals = Signals([0.0] * len(ports), ports)
+    _dummy_states = States([0.0] * len(states), states)
     _defaults = {p.name: p.default for p in param_specs}
 
     # Dry-run validates ordinary arguments. ``init`` is registered only after
     # class construction, so setup-backed components receive a placeholder.
-    _dry_positional = [_dummy_signals]
+    _dry_positional = [_dummy_legacy_signals, _dummy_states] if legacy_states else [_dummy_signals]
     if uses_time:
         _dry_positional.append(0.0)
     if has_init_arg:
@@ -443,8 +460,15 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
         sub_kw = {k: v for k, v in kw.items() if k in accepts}
         return setup_fn(**sub_kw)
 
-    def _build_positional(signals: Any, t: float, init_value: Any) -> list[Any]:
-        positional = [signals]
+    def _build_positional(signals: Signals, t: float, init_value: Any) -> list[Any]:
+        if legacy_states:
+            delayed = signals._delayed  # noqa: SLF001
+            positional = [
+                Signals(signals._values[:n_ports], ports, delayed=delayed[:n_ports]),  # noqa: SLF001
+                States(signals._values[n_ports:], states, delayed=delayed[n_ports:]),  # noqa: SLF001
+            ]
+        else:
+            positional = [signals]
         if uses_time:
             positional.append(t)
         if has_init_arg:
@@ -572,7 +596,16 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
         values = jnp.zeros(len(full_keys))
         recorded: list[Any] = []
         signals = Signals(values, full_keys, delayed=values, delay_recorder=recorded)
-        positional = _build_positional(signals, 0.0, init_value)
+        if legacy_states:
+            positional_signals = Signals(values[:n_ports], ports, delayed=values[:n_ports], delay_recorder=recorded)
+            positional_states = States(values[n_ports:], states, delayed=values[n_ports:], delay_recorder=recorded)
+            positional = [positional_signals, positional_states]
+            if uses_time:
+                positional.append(0.0)
+            if has_init_arg:
+                positional.append(init_value)
+        else:
+            positional = _build_positional(signals, 0.0, init_value)
         _user_fn(*positional, **kw)
         return tuple(recorded)
 

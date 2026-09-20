@@ -53,9 +53,6 @@ print("JAX backend:", jax.default_backend())
 
 ```
 
-    WARNING:2026-07-31 09:59:56,831:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
     JAX backend: cpu
 
 
@@ -136,6 +133,8 @@ print(f"gm at Vgs=0, Vds=3 V: {gm*1e3:.2f} mS")
 
     Ids at Vgs=0 V,   Vds=3 V: 55.20 mA  (Idss)
     Ids at Vgs=-2.5 V (below pinch-off): 0.006 µA  (should be ~0)
+
+
     gm at Vgs=0, Vds=3 V: 55.20 mS
 
 

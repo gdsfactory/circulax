@@ -11,7 +11,7 @@ import numpy as np
 
 from circulax import Circuit, compile_circuit
 from circulax.components.electronic import Resistor, VoltageSourceAC
-from circulax.fitting import ModelCoefficients, ModelFitOptions, component_from_coefficients, fit_model
+from circulax.fitting import ModelCoefficients, ModelFitOptions, circuit_from_coefficients, fit_model
 
 
 def main() -> None:
@@ -27,7 +27,7 @@ def main() -> None:
         )
         coefficients = fit_model(data, f, options=options)
         start = time.perf_counter()
-        model = component_from_coefficients(coefficients)
+        model = circuit_from_coefficients(coefficients)
         conversion = time.perf_counter() - start
         net = {
             "instances": {

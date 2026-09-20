@@ -1,193 +1,90 @@
-# Vector Fitting of S-Parameters with Delay De-Embedding
+# S-parameter fitting
 
 ## Goal
 
-Convert frequency-domain S-parameter data into simulation-ready circulax components
-via rational approximation (AAA method), with group-delay de-embedding to reduce
-pole count for transmission-line-like data.
+Convert sampled S-parameters into a portable rational model, validate it, and
+construct a simulation-ready `Circuit`. These are separate operations so that a
+fit can be inspected or rejected before JAX compilation.
 
-## Context
+## Stable interface
 
-S-parameter data (from measurement or EM simulation) describes a linear N-port over
-frequency. To simulate this network in transient (time domain), the data must be
-converted to a rational transfer function that maps onto circulax's DAE formulation.
+The stable `circulax.fitting` namespace contains:
 
-For transmission lines, the raw S-parameters contain a large linear phase ramp from
-propagation delay. Fitting this directly requires 40-100+ poles. By de-embedding the
-group delay first, the smooth remainder fits with ~5 poles — a massive reduction that
-shrinks the Jacobian (cost scales as O(poles²)) and improves numerical conditioning.
+- `fit_model` and `ModelFitOptions`;
+- `ModelCoefficients` persistence and evaluation;
+- `validate_model` and `ModelValidationReport`;
+- `circuit_from_coefficients`;
+- `DelayInferenceOptions` and `DelayInferenceWarning`.
 
-The fitting engine is **vfitax** (separate repo, branch `scipy-aaa`). Circulax
-consumes the fitted `SSModel` to create simulation-ready components.
+The default fitting backend is scikit-rf vector fitting. AAA, pole screening,
+surface optimization, and enforcement implementation helpers remain available
+from their submodules for experimentation, but are not stable API.
 
-### Key formulas
+## Model convention
 
-| Formula | Description |
-|---------|-------------|
-| `H(s) = C·diag(1/(s-A))·B + D + s·E` | State-space transfer function |
-| `τ = -dφ(S21)/dω` | Group delay extraction (LS phase slope) |
-| `S' = P·S·P` where `P = diag(exp(+jωτ/2))` | Reference-plane de-embedding |
-| `S_full = P·S·P` where `P = diag(exp(-jπfτ))` | Reference-plane re-embedding |
-| `Y = (I-S)(z0·S + z0*·I)⁻¹` | Kurokawa S-to-Y conversion |
+The rational core is
 
-### Design decisions
+```text
+S_core(s) = D + sum_k R_k / (s - p_k),  s = j 2 pi f.
+```
 
-| Decision | Rationale |
-|----------|-----------|
-| AAA method (not VF iteration) | Automatic pole selection, fast, no initial pole guess needed |
-| De-embed before fitting | Removes linear phase → fewer poles, better conditioning of `s_to_y` |
-| Passivity on de-embedded Y | `σ_max(PSP) = σ_max(S)` for unitary P, so passivity transfers to full cascade |
-| `is_complex=True` required | Real-pair block form (`_ss_to_real_pairs`) not yet implemented; all rational circuits use complex-doubled path |
+Poles use rad/s. Conjugate pairs are stored explicitly. Optional per-port delays
+use one-way seconds:
 
----
+```text
+S_full(f) = P(f) S_core(f) P(f)
+P_ii(f) = exp(-j 2 pi f tau_i).
+```
+
+The coefficient archive is versioned NPZ data without pickled Python objects.
+
+## Delay inference
+
+Inference is intentionally narrow: passive, approximately reciprocal,
+low-reflection two-ports with a user-supplied upper delay bound. Acceptable
+reciprocity noise is projected onto `(S + S.T) / 2` and recorded.
+
+Candidate selection reserves 20% of the frequencies. The undelayed baseline and
+bounded delay candidates are fitted on the other 80%. When both the baseline
+and a delayed candidate qualify, delay is selected only if it removes at least
+one complete real pole or conjugate-pole pair without violating the
+reserved-sample error guard. A qualifying delayed fit may also be selected when
+the baseline cannot meet the error limits. The selected configuration is then
+refitted on all samples. If inference is unjustified but
+the baseline is valid, the baseline is returned with a warning and a structured
+report in `metadata["delay_inference"]`.
+
+Reflective, active, nonreciprocal, or multipath networks require supplied delays
+or a physical model. See GitHub issue 56 for the tracked scope extension.
+
+## Admission to simulation
+
+`validate_model` checks requested training and held-out errors, sampled
+passivity and reciprocity, S-pole stability, converted Y-pole stability, and
+simulation-band coverage. Passivity and reciprocity are expected by default;
+active or nonreciprocal data must opt out explicitly.
+
+`circuit_from_coefficients` performs no fitting or enforcement. It rejects
+unstable S or Y realizations and always returns a flattened `Circuit`, including
+for delay-free models.
 
 ## Acceptance criteria
 
-- [x] `fit_with_delay` returns SSModel + tau with ≥5× pole reduction vs raw fit
-- [x] Round-trip: `embed(deembed(S)) == S` to machine precision
-- [x] Over-estimated delay triggers pole-flip tripwire
-- [x] `rational_component` AC sweep matches `rational_fdomain_component` to 1e-8
-- [x] AC sweep Y matches independent pole-residue oracle to 1e-6
-- [x] DC response: `i_port = H(0) @ v` from consistent (v, x) state
-- [x] Transient: step response settles to correct divider voltage (rtol=0.01)
-- [x] `rational_delay_component` S21 group delay matches τ (rtol=0.03)
-- [x] `rational_delay_component` with τ=0 matches `rational_fdomain_component`
-- [x] Asymmetric delay: S11/S22 group delays match τ1/τ2 independently
-
----
-
-## Components
-
-| Component | Description | Repo | Depends on |
-|-----------|-------------|------|------------|
-| S-param pipeline | `extract_group_delay`, `deembed_delay`, `embed_delay`, `fit_with_delay` | vfitax | — |
-| `rational_component` | Time-domain DAE component from SSModel | circulax | S-param pipeline |
-| `rational_fdomain_component` | Fdomain oracle from SSModel (test reference) | circulax | — |
-| `rational_delay_component` | Fdomain composite: delay + rational cascade | circulax | `rational_component` |
-| `TransmissionLine` | Exact solver-independent reference-plane delay | circulax | fixed-delay solver contract |
-
----
-
-## Delegation map
-
-| Component | File scope | Constraints |
-|-----------|------------|-------------|
-| S-param pipeline | `vfitax/sparam.py`, `vfitax/tests/unit/test_sparam.py` | Duplicate `s_to_y` (5 lines) to avoid cross-dep |
-| Rational factories | `circulax/components/rational.py`, `tests/test_rational.py` | Must use `is_complex=True`; `z0` not differentiable |
-| Exports | `circulax/__init__.py`, `circulax/components/__init__.py` | — |
-
----
-
-## Implementation notes
-
-### SSModel → DAE stamp
-
-The state-space model maps directly to circulax's `F(y) + dQ/dt = 0`:
-
-```
-Port i:   f[port_i] = (C @ x + D @ v)_i       q[port_i] = (E @ v)_i
-State j:  f[x_j]    = -(A_j·x_j + (B @ v)_j)  q[x_j]    = x_j
-```
-
-The linearized `G + jωC` block is `[[D+jωE, C], [-B, jωI-A]]`, whose Schur
-complement gives exactly `H(jω)`.
-
-### Port termination subtraction
-
-AC sweep Y = s_to_y(S, z0) includes port shunt resistors. To recover the DUT's
-Y-parameters: `Y_DUT = Y_circuit - I/z0`. This is needed for oracle comparison
-tests but not for normal simulation.
-
-### circulax `s_to_y` default z0
-
-circulax uses `z0=1.0+1e-12j` (photonic convention) while vfitax uses `z0=50.0`.
-Explicit `z0=50.0` is required when converting electrical S-parameters.
-
-### Delay over-estimation guard
-
-If the LS phase slope over-estimates τ (e.g. from dispersion), the de-embedded
-remainder approximates `exp(+jωδ)` — a non-causal advance. AAA fits this with
-RHP poles, and `_collect_poles` flips them to LHP, destroying the fit. The
-`fit_with_delay` metadata includes `pole_flips` count as a tripwire.
-
-### Causality feedback
-
-`fit_with_delay(..., causality="warn")` is the default: it emits a
-`CausalityWarning` when the phase fit produced a negative raw delay (which is
-clamped to zero) or AAA discovered right-half-plane poles before stabilization.
-The `metadata["causality"]` report retains raw/extracted delay, phase-slope
-residual, RHP pole count, and maximum raw pole real part. Use
-`causality="error"` in automated fitting flows to reject either condition
-before an RHP pole is reflected into the left half-plane. `"ignore"` records
-the report without warning.
-
-### Solver-independent delay realization
-
-`rational_delay_component` remains the direct AC/HB oracle. For DC, transient,
-AC, and HB agreement, place a matched `TransmissionLine(tau=tau_i/2)` between
-each external port and port `i` of `rational_component`. This realizes
-`S_full = P @ S_reduced @ P` exactly while retaining the pole-count reduction
-from fitting only the de-embedded response. The line uses delayed wave-state
-constraints, so an ideal lossless through path never needs a singular S-to-Y
-conversion.
-
-### Active and nonreciprocal networks
-
-Use `reciprocal=False`, `enforce_passive=False` for active devices. The default
-`delay_mode="auto"` disables reference-plane delay extraction in this case,
-because one per-port factor imposes the same transmission delay in both
-directions. Request `delay_mode="port"` only when that physical assumption is
-appropriate.
-
-Validation must set `expected_reciprocal=False, expected_passive=False` for
-such models. This permits intentional gain and directionality, but still
-requires bounded fit and holdout error, stable poles, non-negative delay,
-finite evaluation, and coverage of the requested simulation band. Inspect
-each ordered S-parameter independently so forward gain cannot hide a poor
-reverse fit.
-
-The 190 GHz transmitter benchmark uses `fit_domain="s"`: AAA initializes the
-topology, the strongest conjugate pole pairs are refined against every ordered
-S response, and an exact state-space S-to-Y transformation produces the
-simulation model. With `max_poles=20`, the benchmark reaches 1.26% normalized
-complex error without requiring scikit-rf at runtime.
-
-### Vmapped pole-count screening
-
-`pole_count_candidates=(...)` retains a fixed AAA pole shape and zeroes
-coefficient columns for excluded real poles or complete conjugate pairs.
-Nested `vmap` operations refit every ordered S response for every mask, then
-reconstruct and score fixed-shape S-to-Y realizations. Shortlisted candidates
-must still be compacted, refined, and fully validated.
-
-### Real-pair block form (future)
-
-`_ss_to_real_pairs` would convert conjugate pole pairs to 2×2 real blocks,
-halving system size for electrical circuits. Currently all rational circuits
-pay 2× via `is_complex=True`. Documented as a future optimization.
-
----
-
-## Implementation files
-
-| File | Repo | Action |
-|------|------|--------|
-| `circulax/fitting/sparam.py` | circulax | Delay de-embedding and S-parameter fit pipeline |
-| `tests/fitting/test_sparam.py` | circulax | Round-trip, pole reduction, tripwire tests |
-| `circulax/components/rational.py` | circulax | New — SSModel → component factories |
-| `tests/test_delay_contract.py` | circulax | New — analysis-independent fixed-delay contract tests |
-| `tests/test_rational.py` | circulax | Updated — includes exact-line/reduced-core equivalence |
-| `circulax/components/__init__.py` | circulax | Updated exports |
-| `circulax/__init__.py` | circulax | Updated imports |
-
----
+- The public workflow fits, validates, saves, loads, and constructs a circuit.
+- Construction has one return type and does not compile during fitting.
+- Default vector fitting works from a normal core installation.
+- Inferred delay is selected using held-out frequencies and complete pole groups.
+- Noisy, irregular, approximately reciprocal data are covered by seeded tests.
+- Unjustified inference falls back with a warning and structured reason.
+- Circulax 0.2.3 component signatures remain supported.
 
 ## Verification
 
-```bash
-# fitting and time-delay integration
-pytest tests/fitting -v
-pytest tests/test_delay_contract.py -v
-pytest tests/test_delay.py -v
-pytest tests/test_fdomain.py tests/test_rational.py -v
+Use the repository tasks:
+
+```text
+pixi run pytest_run
+pixi run nbrun
+pixi run nbdocs
+pixi run docs-build
 ```
