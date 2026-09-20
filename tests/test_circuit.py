@@ -287,3 +287,112 @@ def test_sax_circuit_inside_model_no_concretization_error():
 
 def test_backend_default_is_klu_split_linear():
     assert backends["default"] is backends["klu_split_linear"]
+
+
+@pytest.fixture
+def pure_sax_netlist():
+    """A coupler + straight waveguide netlist: all-SAX, no sources."""
+    from sax.models import coupler, straight
+
+    net_dict = {
+        "instances": {
+            "c1": {"component": "coupler", "settings": {}},
+            "wg": {"component": "straight", "settings": {}},
+        },
+        "connections": {"c1,out0": "wg,in0"},
+        "ports": {"in0": "c1,in0", "in1": "c1,in1", "out0": "wg,out0", "out1": "c1,out1"},
+    }
+    models = {"coupler": coupler, "straight": straight}
+    return net_dict, models
+
+
+def test_pure_sax_circuit_detected(pure_sax_netlist):
+    net_dict, models = pure_sax_netlist
+    circuit = compile_circuit(net_dict, models, is_complex=True)
+    assert circuit._is_pure_sax is True  # noqa: SLF001
+
+
+def test_pure_sax_dc_matches_native_sax_scalar(pure_sax_netlist):
+    import sax
+
+    net_dict, models = pure_sax_netlist
+    sax_model, _ = sax.circuit(net_dict, models=models)
+    S_native = sax_model(wl=1.55)
+
+    circuit = compile_circuit(net_dict, models, is_complex=True)
+    S = circuit.dc(wl=1.55)
+
+    assert isinstance(S, dict)
+    for key, native_val in S_native.items():
+        assert jnp.allclose(S[key], native_val, atol=1e-9), key
+
+
+def test_pure_sax_dc_matches_native_sax_batched(pure_sax_netlist):
+    import sax
+
+    net_dict, models = pure_sax_netlist
+    sax_model, _ = sax.circuit(net_dict, models=models)
+
+    circuit = compile_circuit(net_dict, models, is_complex=True)
+    wls = jnp.array([1.5, 1.55, 1.6])
+    S_batched = circuit.dc(wl=wls)
+
+    assert S_batched[("in0", "out0")].shape == (3,)
+    for i, wl in enumerate(wls):
+        S_native_i = sax_model(wl=float(wl))
+        for key, native_val in S_native_i.items():
+            assert jnp.allclose(S_batched[key][i], native_val, atol=1e-9), (i, key)
+
+
+def test_pure_sax_dc_rejects_newton_only_args(pure_sax_netlist):
+    net_dict, models = pure_sax_netlist
+    circuit = compile_circuit(net_dict, models, is_complex=True)
+    with pytest.raises(ValueError, match="ignores y_guess"):
+        circuit.dc(y_guess=jnp.zeros(1))
+    with pytest.raises(ValueError, match="ignores y_guess"):
+        circuit.dc(rtol=1e-3)
+
+
+def test_pure_sax_dc_rejects_missing_ports(pure_sax_netlist):
+    net_dict, models = pure_sax_netlist
+    circuit = compile_circuit(net_dict, models, is_complex=True)
+    stripped = circuit.with_groups(circuit.groups)
+    with pytest.raises(ValueError, match="no known external ports"):
+        stripped.dc()
+
+
+def test_mixed_circuit_dc_still_returns_array():
+    """A circuit with a non-SAX component (resistor/GND) must keep returning an array."""
+    import sax
+    from sax.models import straight
+
+    from circulax.s_transforms import sax_component
+
+    def composite_model(wl=1.55, length=100.0, neff=2.34):
+        netlist = {
+            "instances": {"wg": {"component": "straight", "settings": {"length": length, "neff": neff}}},
+            "connections": {},
+            "ports": {"o1": "wg,in0", "o2": "wg,out0"},
+        }
+        circuit_fn, _ = sax.circuit(netlist, {"straight": straight}, backend="klu")
+        return circuit_fn(wl=wl)
+
+    CompositeComp = sax_component(composite_model)
+    net_dict = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "R1": {"component": "resistor", "settings": {"R": 1.0}},
+            "comp": {"component": "composite"},
+        },
+        "connections": {
+            "GND,p1": ("R1,p2", "comp,o2"),
+            "R1,p1": "comp,o1",
+        },
+    }
+    models_map = {"resistor": Resistor, "composite": CompositeComp, "ground": lambda: 0}
+    circuit = compile_circuit(net_dict, models_map, is_complex=True)
+
+    assert circuit._is_pure_sax is False  # noqa: SLF001
+    y = circuit.dc()
+    assert isinstance(y, jax.Array)
+    assert jnp.all(jnp.isfinite(y))
