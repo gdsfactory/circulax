@@ -29,16 +29,37 @@ Agilent Technologies E5071B network analyzer on 2012-04-05.
 The Touchstone header identifies the device as an active transmitter measured
 from 140 to 220 GHz on 2018-06-13.
 
-## Synthetic noisy transmission line
+## Synthetic noisy cable
 
 `noisy_transmission_line.s2p` is generated in the
 [time-delay notebook](../../electrical/time_delay.ipynb); it is not measured or
-third-party data. It contains 501 points from 1 MHz to 2 GHz for a matched 50 Ω
-line with a 1 ns transmission delay and voltage-wave attenuation of 0.9.
+third-party data. It uses a matched 50 Ω, skin-effect-inspired model:
 
-Complex Gaussian noise has RMS magnitude 0.001 per independent S entry, using
-NumPy's `default_rng(2026)`. Real and imaginary standard deviations are
-`0.001 / sqrt(2)`. The transmissions share the same noise to preserve reciprocity;
-reflection noises are independent. Holdout samples have zero-based indices
-`0, 5, 10, ...`. The notebook estimates delay using only the remaining samples,
-compares ordinary and delay-aware fits, and runs the fitted model in transient.
+```text
+S21(s) = S12(s) = A0 * exp(-s*tau - k*sqrt(s))
+S11 = S22 = 0
+A0 = 10**(-0.1/20)
+tau = 5e-9 seconds
+k = (11.9 * ln(10) / 20) / sqrt(pi * 40e9)
+```
+
+The principal square root supplies attenuation and the associated phase lag.
+Insertion loss is `0.1 + 11.9*sqrt(f/40e9)` dB: 0.1595 dB at 1 MHz, about
+1.982 dB at 1 GHz, 6.05 dB at 10 GHz, and 12 dB at 40 GHz. This simplified
+model omits dielectric loss, impedance variation, and the low-frequency
+transition from skin effect to DC conductor behavior.
+
+The 4,201 frequencies are the sorted unique union of
+`geomspace(1e6, 1e9, 301)` and `linspace(1e9, 40e9, 3901)`. Extra low-frequency
+samples resolve the loss curvature. Complex Gaussian noise has RMS magnitude
+0.001 per independent S entry, using NumPy's `default_rng(2026)`. Real and
+imaginary standard deviations are `0.001/sqrt(2)`. Transmission noise is shared
+to preserve reciprocity; reflection noises are independent.
+
+Holdout samples have zero-based indices `0, 5, 10, ...`. The notebook supplies
+the known 5 ns propagation delay, split equally between ports. It fits the
+remaining attenuation and dispersion using only training samples and reports
+held-out errors. Targets are 0.8% NRMSE and 0.005 maximum absolute S error.
+An independent time-domain convolution checks the fitted pulse against the
+analytic cable response. The dispersive phase is not treated as a pure-delay
+estimate.
