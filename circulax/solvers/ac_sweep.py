@@ -46,8 +46,74 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-from circulax.solvers.assembly import assemble_gc_complex, assemble_gc_complex_2n, assemble_gc_real
+from circulax.solvers.assembly import (
+    assemble_gc_complex,
+    assemble_gc_complex_2n,
+    assemble_gc_real,
+)
 from circulax.solvers.linear import GROUND_STIFFNESS, _build_index_arrays
+
+
+def _delay_admittance(group: Any, y_dc: Array, f: Array, *, is_complex: bool) -> Array:
+    """Small-signal local admittance of ``physics(v, hist(v(t-tau)))``.
+
+    Direct and delayed derivatives are kept separate, then the latter is
+    multiplied by the exact frequency-domain delay. This is the AC analogue
+    of including the interpolation derivative in transient Newton steps.
+    """
+    if is_complex:
+        half = y_dc.shape[0] // 2
+        v = y_dc[group.var_indices] + 1j * y_dc[group.var_indices + half]
+
+        def _one(v_i: Array, p_i: Any, tau_i: Array) -> Array:
+            def fq(v_arg: Array, h_arg: Array) -> tuple[Array, Array]:
+                fv, qv = group.physics_func(y=v_arg, args=p_i, t=0.0, hist=h_arg)
+                return fv.astype(v_arg.dtype), qv.astype(v_arg.dtype)
+
+            df_v, dq_v = jax.jacfwd(lambda x: fq(x, v_i), holomorphic=True)(v_i)
+            df_h, dq_h = jax.jacfwd(lambda x: fq(v_i, x), holomorphic=True)(v_i)
+            phase = jnp.exp(-2j * jnp.pi * f * tau_i)
+            return df_v + phase * df_h + 2j * jnp.pi * f * (dq_v + phase * dq_h)
+
+    else:
+        v = y_dc[group.var_indices]
+
+        def _one(v_i: Array, p_i: Any, tau_i: Array) -> Array:
+            def fq(v_arg: Array, h_arg: Array) -> tuple[Array, Array]:
+                return group.physics_func(y=v_arg, args=p_i, t=0.0, hist=h_arg)
+
+            df_v, dq_v = jax.jacfwd(lambda x: fq(x, v_i))(v_i)
+            df_h, dq_h = jax.jacfwd(lambda x: fq(v_i, x))(v_i)
+            phase = jnp.exp(-2j * jnp.pi * f * tau_i)
+            return df_v + phase * df_h + 2j * jnp.pi * f * (dq_v + phase * dq_h)
+
+    tau = jax.vmap(group.tau_func)(group.params)
+    return jax.vmap(_one)(v, group.params, tau)
+
+
+def _delay_admittance_2n(group: Any, y_dc: Array, f: Array) -> Array:
+    """Full real-block small-signal admittance for non-holomorphic models."""
+    half = y_dc.shape[0] // 2
+    vr = y_dc[group.var_indices]
+    vi = y_dc[group.var_indices + half]
+    u = jnp.concatenate([vr, vi], axis=-1)
+
+    def _one(u_i: Array, p_i: Any, tau_i: Array) -> Array:
+        width = u_i.shape[0] // 2
+
+        def fq(u_arg: Array, h_arg: Array) -> tuple[Array, Array]:
+            v = u_arg[:width] + 1j * u_arg[width:]
+            h = h_arg[:width] + 1j * h_arg[width:]
+            fv, qv = group.physics_func(y=v, args=p_i, t=0.0, hist=h)
+            return jnp.concatenate([fv.real, fv.imag]), jnp.concatenate([qv.real, qv.imag])
+
+        df_v, dq_v = jax.jacfwd(lambda x: fq(x, u_i))(u_i)
+        df_h, dq_h = jax.jacfwd(lambda x: fq(u_i, x))(u_i)
+        phase = jnp.exp(-2j * jnp.pi * f * tau_i)
+        return df_v + phase * df_h + 2j * jnp.pi * f * (dq_v + phase * dq_h)
+
+    tau = jax.vmap(group.tau_func)(group.params)
+    return jax.vmap(_one)(u, group.params, tau)
 
 
 def _normalize_z0(z0: float | Array, n_ports: int) -> Array:
@@ -160,10 +226,10 @@ def setup_ac_sweep(
         A callable ``run_ac(y_dc, freqs) -> S`` where:
 
         - **y_dc** — DC operating point, shape ``(num_vars,)`` for real
-          circuits or ``(2 * num_vars,)`` for complex circuits.
+        circuits or ``(2 * num_vars,)`` for complex circuits.
         - **freqs** — frequencies in Hz, shape ``(N_freqs,)``.
-        - **S** — S-parameter matrix, shape ``(N_freqs, N_ports, N_ports)``
-            complex128.
+        - **S** — complex128 S-parameter matrix with shape
+        ``(N_freqs, N_ports, N_ports)``.
 
         Compatible with :func:`jax.jit` and :func:`jax.vmap` over ``y_dc``.
 
@@ -192,6 +258,14 @@ def setup_ac_sweep(
         for gk in sorted(groups)
         if groups[gk].is_fdomain
     }
+    delay_scatter: dict[str, tuple[Array, Array]] = {
+        gk: (
+            jnp.array(groups[gk].jac_rows).reshape(-1),
+            jnp.array(groups[gk].jac_cols).reshape(-1),
+        )
+        for gk in sorted(groups)
+        if groups[gk].has_delay
+    }
 
     gc_assemble = assemble_gc_complex if is_complex else assemble_gc_real
 
@@ -218,6 +292,10 @@ def setup_ac_sweep(
                 group_fd = groups[gk]
                 Y_mats = jax.vmap(functools.partial(group_fd.physics_func, f))(group_fd.params)
                 Y = Y.at[rows_fd, cols_fd].add(Y_mats.reshape(-1))
+
+            for gk, (rows_delay, cols_delay) in delay_scatter.items():
+                Y_delay = _delay_admittance(groups[gk], y_dc, f, is_complex=is_complex)
+                Y = Y.at[rows_delay, cols_delay].add(Y_delay.reshape(-1))
 
             Y = Y.at[port_nodes_arr, port_nodes_arr].add(1.0 / z0_arr)
             Y = Y.at[ground_indices, ground_indices].add(GROUND_STIFFNESS)
@@ -257,6 +335,14 @@ def _setup_ac_sweep_2n(
         for gk in sorted(groups)
         if groups[gk].is_fdomain
     }
+    delay_scatter: dict[str, tuple[Array, Array]] = {
+        gk: (
+            jnp.array(groups[gk].jac_rows).reshape(-1),
+            jnp.array(groups[gk].jac_cols).reshape(-1),
+        )
+        for gk in sorted(groups)
+        if groups[gk].has_delay
+    }
 
     z0_arr = _normalize_z0(z0, N_ports)
 
@@ -282,6 +368,20 @@ def _setup_ac_sweep_2n(
                 Y = Y.at[rows_fd + N, cols_fd + N].add(Y_flat.real)
                 Y = Y.at[rows_fd, cols_fd + N].add(-Y_flat.imag)
                 Y = Y.at[rows_fd + N, cols_fd].add(Y_flat.imag)
+
+            for gk, (rows_delay, cols_delay) in delay_scatter.items():
+                group_delay = groups[gk]
+                Y_delay = _delay_admittance_2n(group_delay, y_dc, f)
+                width = group_delay.var_indices.shape[-1]
+                Y_delay = Y_delay.reshape(-1, 2 * width, 2 * width)
+                rr = Y_delay[:, :width, :width].reshape(-1)
+                ri = Y_delay[:, :width, width:].reshape(-1)
+                ir = Y_delay[:, width:, :width].reshape(-1)
+                ii = Y_delay[:, width:, width:].reshape(-1)
+                Y = Y.at[rows_delay, cols_delay].add(rr)
+                Y = Y.at[rows_delay, cols_delay + N].add(ri)
+                Y = Y.at[rows_delay + N, cols_delay].add(ir)
+                Y = Y.at[rows_delay + N, cols_delay + N].add(ii)
 
             Y = Y.at[port_nodes_arr, port_nodes_arr].add(1.0 / z0_arr)
             Y = Y.at[port_nodes_arr + N, port_nodes_arr + N].add(1.0 / z0_arr)

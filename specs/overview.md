@@ -41,6 +41,8 @@ compile_netlist(net_dict, models) → [ComponentGroup, ...]
 | Spec | Status | What it covers |
 |------|--------|----------------|
 | [hierarchy.md](hierarchy.md) | **Done** | Hierarchical subcircuit composition — `RecursiveNetlist` support, netlist-level flattening, `Circuit`-as-subcircuit (V1, PR #39) |
+| [time-delay.md](time-delay.md) | **In progress** | Solver-aligned fixed delay for delay-deembedded, pole-reduced S-parameter models |
+| [vector-fitting.md](vector-fitting.md) | **Done** | S-parameter vector fitting with delay de-embedding — `rational_component`, `rational_fdomain_component`, `rational_delay_component` (branch `feat-time-delay`) |
 | Physics — `circulax/components/` | **Planned** | <!-- FILL --> |
 | Topology — `circulax/compiler.py`, `circulax/netlist.py` | **Planned** | <!-- FILL --> |
 | Analysis — `circulax/solvers/` | **Planned** | <!-- FILL --> |

@@ -26,9 +26,6 @@ from circulax.components.electronic import Capacitor, Inductor, Resistor, Voltag
 
 ```
 
-    WARNING:2026-06-24 18:02:31,901:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 
 ```python
 net_dict = {
@@ -179,14 +176,12 @@ plt.show()
       Sample Var Indices:[[2 0 5]]
       Jacobian Rows Length: 1
     2. Solving DC Operating Point...
-
-
     3. Running Simulation...
 
 
 
 
-![png](lcr_transient_files/lcr_transient_6_3.png)
+![png](lcr_transient_files/lcr_transient_6_2.png)
 
 
 

@@ -8,9 +8,9 @@ This notebook demonstrates `circuit.sp(...)` on three circuits:
 
 AC analysis linearises the circuit DAE at the DC operating point and sweeps a range of frequencies:
 
-$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial yig|_{y_	ext{dc}}, \quad C = \partial Q/\partial yig|_{y_	ext{dc}}$$
+$$Y(j\omega) = G + j\omega C, \qquad G = \partial F/\partial y\big|_{y_\text{dc}}, \quad C = \partial Q/\partial y\big|_{y_\text{dc}}$$
 
-With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N	imes N$ S-matrix at once.
+With $N$ port excitations as columns of the RHS, a single `jnp.linalg.solve` per frequency yields the full $N\times N$ S-matrix at once.
 
 
 
@@ -28,9 +28,6 @@ from circulax.components.electronic import Capacitor, Resistor
 jax.config.update("jax_enable_x64", True)
 
 ```
-
-    WARNING:2026-06-24 18:02:23,719:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
 
 ---
 ## Part 1: Parallel RC — Single Port
@@ -363,21 +360,19 @@ print(f"S11 at 10 GHz: {float(jnp.abs(S11_sk[-1])):.4f}  (expected {float(jnp.ab
 
 ```
 
-    /home/cdaunt/code/circulax/circulax/circulax/circuit.py:468: UserWarning: Complex-mode auto-detection failed for group (TypeError('_build_fdomain_component.<locals>.solver_call() takes 3 positional arguments but 4 were given')); defaulting to real. Pass is_complex=True to compile_circuit() if this is a photonic/complex-valued circuit.
-      if _group_outputs_complex(group):
-
-
     Max |ΔS11| (skin effect) = 1.78e-11
 
 
 
 
-![png](ac_sweep_files/ac_sweep_11_2.png)
+![png](ac_sweep_files/ac_sweep_11_1.png)
 
 
 
 
     S11 at DC   (1.0 MHz): 0.3332  (expected 0.3332)
+
+
     S11 at 10 GHz: 0.3158  (expected 0.3158)
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -78,6 +78,7 @@ class Circuit:
         max_steps: int = 100,
         _source_netlist: dict | None = None,
         _source_models: dict | None = None,
+        _is_pure_sax: bool = False,  # noqa: FBT001, FBT002
     ) -> None:
         self.solver = solver
         self.groups = groups
@@ -88,6 +89,7 @@ class Circuit:
         self.max_steps = max_steps
         self._source_netlist = _source_netlist
         self._source_models = _source_models
+        self._is_pure_sax = _is_pure_sax
 
     @property
     def ports(self) -> tuple[str, ...]:
@@ -163,6 +165,61 @@ class Circuit:
             raise KeyError(msg)
         return self.port_map[port]
 
+    def _batched_solve(
+        self,
+        params: dict[str, Any] | None,
+        param_updates: dict[str, Any],
+        solve_fn: Callable[[dict], Any],
+    ) -> Any:
+        """Apply ``solve_fn(groups)`` over parameter updates.
+
+        Scalar params produce a single call. Array-valued params trigger
+        ``jax.vmap`` over their shared leading dimension, so ``solve_fn``'s
+        return value (an ``Array`` or a pytree such as a SAX ``SDict``) comes
+        back with an extra leading batch axis.
+        """
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._as_arrays(updates)
+        batch_keys = [k for k, v in arrays.items() if v.ndim > 0]
+
+        if not batch_keys:
+            return solve_fn(self._with_param_values(arrays))
+
+        batch_sizes = {k: arrays[k].shape[0] for k in batch_keys}
+        if len(set(batch_sizes.values())) > 1:
+            msg = f"All batched params must share the same leading dim. Got: {batch_sizes}"
+            raise ValueError(msg)
+
+        scalar_params = {k: v for k, v in arrays.items() if k not in batch_keys}
+
+        def solve_single(*batch_vals: jax.Array) -> Any:
+            kw = dict(zip(batch_keys, batch_vals, strict=True))
+            kw.update(scalar_params)
+            return solve_fn(self._with_param_values(kw))
+
+        return jax.vmap(solve_single)(*[arrays[k] for k in batch_keys])
+
+    def _solve_sparams_sdict(self, groups: dict) -> dict[tuple[str, str], jax.Array]:
+        """Return the circuit's S-parameters as a native SAX ``SDict``.
+
+        Only valid for an all-SAX, source-free circuit (``self._is_pure_sax``):
+        such a circuit has no reactive (``dQ/dt``) terms, so its small-signal
+        admittance is frequency-independent and the DC operating point is
+        exactly zero — a single linear solve at ``z0=1.0`` (SAX's own
+        reference impedance convention, not circulax's electrical 50 Ohm
+        default) fully determines the S-matrix.
+        """
+        from circulax.solvers import setup_ac_sweep
+
+        port_nodes = [self._resolve_port_node(p) for p in self.ports]
+        holomorphic = _infer_holomorphic(groups)
+        run_ac = setup_ac_sweep(
+            groups, self.sys_size, port_nodes, z0=1.0, is_complex=self.solver.is_complex, holomorphic=holomorphic
+        )
+        S = run_ac(jnp.zeros(self._n()), jnp.zeros(1))[0]
+        idx = {p: i for i, p in enumerate(self.ports)}
+        return {(a, b): S[idx[b], idx[a]] for a in self.ports for b in self.ports}
+
     def dc(
         self,
         y_guess: jax.Array | None = None,
@@ -205,30 +262,59 @@ class Circuit:
         rtol = self.rtol if rtol is None else rtol
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
-
-        updates = self._coerce_param_updates(params, param_updates)
-        arrays = self._as_arrays(updates)
-        batch_keys = [k for k, v in arrays.items() if v.ndim > 0]
-
         if y_guess is None:
             y_guess = self._zero_guess()
 
-        if not batch_keys:
-            return self.solver.solve_dc(self._with_param_values(arrays), y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
+        def solve_fn(groups: dict) -> jax.Array:
+            return self.solver.solve_dc(groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
 
-        batch_sizes = {k: arrays[k].shape[0] for k in batch_keys}
-        if len(set(batch_sizes.values())) > 1:
-            msg = f"All batched params must share the same leading dim. Got: {batch_sizes}"
+        return self._batched_solve(params, param_updates, solve_fn)
+
+    def check_sax_compatibility(self) -> bool:
+        """Return True if this circuit can be represented as a pure SAX S-parameter network.
+
+        A circuit qualifies when every component group is a SAX-wrapped
+        model (:func:`sax_component`) and none is a source — i.e. a passive
+        photonic (or RF) mesh with no reactive (``dQ/dt``) terms and no
+        driving term. Such a circuit's DC operating point is provably
+        all-zero, and :meth:`to_sax_circuit` can extract its S-parameters
+        directly.
+        """
+        return self._is_pure_sax
+
+    def to_sax_circuit(self) -> Callable[..., dict[tuple[str, str], jax.Array]]:
+        """Convert this circuit into a native SAX model function.
+
+        Only valid when :meth:`check_sax_compatibility` is True. Returns a
+        callable ``model(**params) -> sax.SDict`` matching the calling
+        convention of :func:`sax.circuit`'s own returned model: scalar
+        params produce one ``SDict``; array-valued params trigger
+        ``jax.vmap`` and return an ``SDict`` whose values are stacked
+        arrays, e.g. ``model(wl=jnp.linspace(1500, 1600, 101))``.
+
+        Raises:
+            ValueError: If this circuit is not all-SAX/source-free, or has
+                no known external ports (e.g. built via :meth:`with_groups`).
+
+        """
+        if not self._is_pure_sax:
+            msg = (
+                "Circuit.to_sax_circuit() requires an all-SAX, source-free circuit "
+                "(check_sax_compatibility() is False for this circuit)."
+            )
+            raise ValueError(msg)
+        if not self.ports:
+            msg = (
+                "This all-SAX, source-free circuit has no known external ports "
+                "(e.g. built via with_groups(), which drops the source netlist), "
+                "so it cannot be converted to a SAX circuit."
+            )
             raise ValueError(msg)
 
-        scalar_params = {k: v for k, v in arrays.items() if k not in batch_keys}
+        def model(*, params: dict[str, Any] | None = None, **param_updates: Any) -> dict[tuple[str, str], jax.Array]:
+            return self._batched_solve(params, param_updates, self._solve_sparams_sdict)
 
-        def solve_single(*batch_vals: jax.Array) -> jax.Array:
-            kw = dict(zip(batch_keys, batch_vals, strict=True))
-            kw.update(scalar_params)
-            return self.solver.solve_dc(self._with_param_values(kw), y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
-
-        return jax.vmap(solve_single)(*[arrays[k] for k in batch_keys])
+        return model
 
     def __call__(
         self,
@@ -484,6 +570,7 @@ class Circuit:
             A new :class:`Circuit` with the updated groups.
 
         """
+        is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) for g in groups.values())
         return Circuit(
             self.solver,
             groups,
@@ -492,6 +579,7 @@ class Circuit:
             rtol=self.rtol,
             atol=self.atol,
             max_steps=self.max_steps,
+            _is_pure_sax=is_pure_sax,
         )
 
 
@@ -583,6 +671,7 @@ def compile_circuit(
         source_netlist = net_dict.get(next(iter(net_dict)))
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
         net_dict = flatten_recursive_netlist(net_dict)
+        source_netlist = net_dict
     elif isinstance(net_dict, dict):
         source_netlist = net_dict
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
@@ -596,6 +685,7 @@ def compile_circuit(
     if is_complex:
         _validate_holomorphic_flags(groups)
     solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak)
+    is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) for g in groups.values())
     return Circuit(
         solver=solver,
         groups=groups,
@@ -606,6 +696,7 @@ def compile_circuit(
         max_steps=max_steps,
         _source_netlist=source_netlist,
         _source_models=source_models,
+        _is_pure_sax=is_pure_sax,
     )
 
 

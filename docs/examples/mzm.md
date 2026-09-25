@@ -27,9 +27,6 @@ from circulax.components.electronic import Resistor
 from circulax.components.photonic import Grating, OpticalSource, OpticalWaveguide, Splitter
 ```
 
-    WARNING:2026-06-24 18:07:23,601:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 
 ```python
 net_dict = {
@@ -130,7 +127,7 @@ plt.show()
     Sweeping Wavelength...
 
 
-    Sweep time: 1.122s
+    Sweep time: 0.936s
 
 
 

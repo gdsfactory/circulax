@@ -7549,6 +7549,8 @@ packages:
   - matplotlib
   - numpy
   - sax>=0.15.15
+  - scikit-rf>=1.8,<2
+  - scipy>=1.12
   - typing-extensions>=4.13.2
   - black ; extra == 'dev'
   - bosdi>=0.1.3 ; extra == 'dev'

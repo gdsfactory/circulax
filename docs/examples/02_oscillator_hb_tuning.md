@@ -54,7 +54,7 @@ import plotly.io as pio
 from plotly.subplots import make_subplots
 
 from circulax import compile_circuit
-from circulax.components.base_component import PhysicsReturn, Signals, States, component
+from circulax.components.base_component import PhysicsReturn, Signals, component
 from circulax.components.electronic import Capacitor, Inductor, Resistor
 
 # 64-bit precision is important: HB Newton requires accurate Jacobians, and
@@ -67,9 +67,6 @@ pio.renderers.default = "png"
 
 ```
 
-    WARNING:2026-06-24 18:02:52,804:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 ## Defining the Van der Pol component
 
 Custom components are plain Python functions decorated with `@component`. The decorator
@@ -79,7 +76,7 @@ making the component compatible with `jax.vmap`, `jax.jacfwd`, and `jax.grad`.
 
 ```python
 @component(ports=("p1", "p2"))
-def VanDerPolElement(signals: Signals, s: States, mu: float = 2.0, G0: float = 0.01) -> PhysicsReturn:
+def VanDerPolElement(signals: Signals, mu: float = 2.0, G0: float = 0.01) -> PhysicsReturn:
     """Nonlinear two-terminal element with cubic I-V characteristic.
 
     I(V) = -mu*G0*V + (G0/3)*V^3
@@ -571,14 +568,10 @@ print(f"\nFinal: f={f_opt/1e6:.4f} MHz  (target {f_target/1e6:.1f} MHz),  L={L_o
 
 
       Step   0: loss=3.80062,  f=5.033 MHz,  L=0.951 µH,  C=1.051 nF,  mu=1.902
-
-
       Step  50: loss=0.08338,  f=8.245 MHz,  L=0.235 µH,  C=1.588 nF,  mu=0.413
 
 
       Step 100: loss=0.02942,  f=8.013 MHz,  L=0.223 µH,  C=1.769 nF,  mu=0.305
-
-
       Step 150: loss=0.00059,  f=8.001 MHz,  L=0.221 µH,  C=1.787 nF,  mu=0.268
 
 

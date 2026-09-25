@@ -14,7 +14,8 @@ No autodiff through OSDI FFI calls is required.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
@@ -77,10 +78,7 @@ def _resolve_param_cols(
         for pname in param_names:
             col = name_to_col.get(pname.lower())
             if col is None:
-                msg = (
-                    f"Parameter {pname!r} not found in param_to_col "
-                    f"(available: {list(param_to_col.keys())})."
-                )
+                msg = f"Parameter {pname!r} not found in param_to_col (available: {list(param_to_col.keys())})."
                 raise ValueError(msg)
             result.append(col)
         return result
@@ -95,10 +93,7 @@ def _resolve_param_cols(
                 col = name_to_col.get(pname.lower())
                 if col is None:
                     avail = list(nti.keys())
-                    msg = (
-                        f"Parameter {pname!r} not in OSDI model descriptor "
-                        f"(available: {avail})."
-                    )
+                    msg = f"Parameter {pname!r} not in OSDI model descriptor (available: {avail})."
                     raise ValueError(msg)
                 result.append(col)
             return result
@@ -108,6 +103,7 @@ def _resolve_param_cols(
     # Try bosdi's module-level model registry if available.
     try:
         from bosdi.osdi_registry import get_model  # type: ignore[import]
+
         osdi_model = get_model(group.model_id)
         name_to_col = {n.lower(): i for i, n in enumerate(osdi_model.param_names)}
     except (ImportError, Exception):
@@ -131,10 +127,7 @@ def _resolve_param_cols(
         col = name_to_col.get(pname.lower())
         if col is None:
             avail = list(name_to_col.keys())
-            msg = (
-                f"Parameter {pname!r} not found in OSDI model "
-                f"(available: {avail})."
-            )
+            msg = f"Parameter {pname!r} not found in OSDI model (available: {avail})."
             raise ValueError(msg)
         result.append(col)
     return result
@@ -229,11 +222,11 @@ def dc_parameter_sensitivity(
     component_groups: dict,
     solver: CircuitLinearSolver,
     y_star: jax.Array,
-    loss_fn,
+    loss_fn: Callable[[jax.Array], jax.Array],
     *,
     osdi_group_key: str,
     param_names: list[str],
-    model_descriptor=None,
+    model_descriptor: Any | None = None,
     param_to_col: dict[str, int] | None = None,
     eps: float = 1e-6,
 ) -> dict[str, jax.Array]:
@@ -315,9 +308,7 @@ def dc_parameter_sensitivity(
         raise TypeError(msg)
 
     # Resolve param names to column indices
-    param_cols = _resolve_param_cols(
-        group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col
-    )
+    param_cols = _resolve_param_cols(group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col)
 
     # -----------------------------------------------------------------------
     # Step 1: ∂L/∂y  (via JAX autodiff — loss_fn must be JAX-differentiable)
@@ -327,9 +318,7 @@ def dc_parameter_sensitivity(
     # -----------------------------------------------------------------------
     # Step 2: Assemble J(y*) and coalesce into KLU format
     # -----------------------------------------------------------------------
-    _, _, all_vals = assemble_system_real(
-        y_star, component_groups, t1=0.0, dt=DC_DT
-    )
+    _, _, all_vals = assemble_system_real(y_star, component_groups, t1=0.0, dt=DC_DT)
     coalesced_vals = _build_klu_matrix_vals(solver, all_vals)
 
     # -----------------------------------------------------------------------
@@ -349,9 +338,7 @@ def dc_parameter_sensitivity(
     # -----------------------------------------------------------------------
     # Step 4+5: FD ∂F/∂p and compute -λᵀ · ∂F/∂p for each param
     # -----------------------------------------------------------------------
-    return _compute_fd_gradients(
-        group, y_star, lam, param_names, param_cols, eps, model_id_override=None
-    )
+    return _compute_fd_gradients(group, y_star, lam, param_names, param_cols, eps, model_id_override=None)
 
 
 def dc_parameter_sensitivity_dense(
@@ -395,9 +382,7 @@ def dc_parameter_sensitivity_dense(
         raise TypeError(msg)
 
     # Resolve param names to column indices
-    param_cols = _resolve_param_cols(
-        group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col
-    )
+    param_cols = _resolve_param_cols(group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col)
 
     sys_size = y_star.shape[0]
 
@@ -439,9 +424,7 @@ def dc_parameter_sensitivity_dense(
     # -----------------------------------------------------------------------
     # Step 4+5: FD ∂F/∂p and compute -λᵀ · ∂F/∂p for each param
     # -----------------------------------------------------------------------
-    return _compute_fd_gradients(
-        group, y_star, lam, param_names, param_cols, eps, model_id_override=None
-    )
+    return _compute_fd_gradients(group, y_star, lam, param_names, param_cols, eps, model_id_override=None)
 
 
 __all__ = ["dc_parameter_sensitivity", "dc_parameter_sensitivity_dense"]

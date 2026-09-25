@@ -6,9 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **fitting**: Stable fit, validation, persistence, and circuit-construction workflow for sampled S-parameters.
+- **delay**: Solver-independent fixed propagation delay and conservative two-port delay inference with an internal 20% validation reservation.
+
 ### Changed
 
-- **ac-sweep**: Default `setup_ac_sweep()` to the safe non-holomorphic 2N×2N path for complex circuits
+- **dependencies**: Make scikit-rf a core dependency for the default vector-fitting backend.
+- **fitting**: Keep experimental AAA, reduction, and enforcement helpers in implementation submodules rather than the stable namespace.
+- **ac-sweep**: Default `setup_ac_sweep()` to the safe non-holomorphic 2N×2N path for complex circuits.
+
+### Fixed
+
+- **components**: Preserve the Circulax 0.2.3 `(signals, states, ...)` component and source signatures.
 
 ## [0.2.3] - 2026-07-30
 
