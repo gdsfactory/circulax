@@ -127,6 +127,7 @@ class CircuitComponent(eqx.Module):
     _uses_time: ClassVar[bool] = False
     _is_fdomain: ClassVar[bool] = False
     _holomorphic: ClassVar[bool] = False
+    _is_sax_wrapped: ClassVar[bool] = False
 
     _n_ports: ClassVar[int] = 0
 
