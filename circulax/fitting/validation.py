@@ -101,8 +101,7 @@ class FitValidationReport:
             f"Minimum D/E margins: {self.minimum_D_margin:.3e} / {self.minimum_E_margin:.3e}",
             f"Maximum pole real part: {self.maximum_pole_real_part:.3e} rad/s",
             f"Minimum delay: {self.minimum_delay_seconds:.3e} s",
-            "Validated frequency range: "
-            f"{self.validated_frequency_range_hz[0]:.6g}--{self.validated_frequency_range_hz[1]:.6g} Hz",
+            f"Validated frequency range: {self.validated_frequency_range_hz[0]:.6g}--{self.validated_frequency_range_hz[1]:.6g} Hz",
         ]
         lines.extend(f"{item.severity.upper()} [{item.code}]: {item.message}" for item in self.findings)
         return "\n".join(lines)
@@ -265,17 +264,13 @@ def validate_surface_fit(
             )
         )
     if maximum_pole_real >= -limits.stability_tolerance:
-        findings.append(
-            ValidationFinding("fail", "unstable", f"maximum pole real part is {maximum_pole_real:.3e} rad/s")
-        )
+        findings.append(ValidationFinding("fail", "unstable", f"maximum pole real part is {maximum_pole_real:.3e} rad/s"))
     if minimum_delay < -limits.delay_tolerance_seconds:
         findings.append(ValidationFinding("fail", "negative_delay", f"minimum delay is {minimum_delay:.3e} s"))
 
     z0_scale = max(float(np.real(np.asarray(model.z0))), 1.0)
     if expected_passive and z0_scale * passivity_margin < -limits.passivity_tolerance:
-        findings.append(
-            ValidationFinding("fail", "passivity", f"minimum normalized Y margin is {z0_scale * passivity_margin:.3e}")
-        )
+        findings.append(ValidationFinding("fail", "passivity", f"minimum normalized Y margin is {z0_scale * passivity_margin:.3e}"))
     if expected_passive and z0_scale * D_margin < -limits.passivity_tolerance:
         findings.append(ValidationFinding("fail", "D_passivity", f"minimum normalized D margin is {z0_scale * D_margin:.3e}"))
     if expected_passive and E_margin < -limits.slope_tolerance:

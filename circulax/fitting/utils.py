@@ -248,11 +248,7 @@ def compute_weights(H: jnp.ndarray, weightparam: int, *, reciprocal: bool = True
 
     """
     Nc, _, Ns = H.shape
-    idx = (
-        _upper_triangle_indices(Nc)
-        if reciprocal
-        else [(row, col) for row in range(Nc) for col in range(Nc)]
-    )
+    idx = _upper_triangle_indices(Nc) if reciprocal else [(row, col) for row in range(Nc) for col in range(Nc)]
 
     if weightparam == 1:
         return jnp.ones((1, Ns))

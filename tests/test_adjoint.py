@@ -40,15 +40,14 @@ def _bosdi_available() -> bool:
         from bosdi.circulax import OsdiComponentGroup  # noqa: F401
         from osdi_jax import osdi_residual_eval  # noqa: F401
         from osdi_loader import load_osdi_model
+
         load_osdi_model(RESISTOR_OSDI)
         return True
     except (ImportError, RuntimeError, OSError):
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _bosdi_available(), reason="bosdi/osdi_jax not available"
-)
+pytestmark = pytest.mark.skipif(not _bosdi_available(), reason="bosdi/osdi_jax not available")
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +113,7 @@ def _find_osdi_key(groups: dict, name_hint: str) -> str:
     by instance name (e.g. 'R1', 'C1').  Use the model key substring as hint.
     """
     from bosdi.circulax import OsdiComponentGroup
+
     for k, g in groups.items():
         if isinstance(g, OsdiComponentGroup) and name_hint.lower() in k.lower():
             return k
@@ -166,6 +166,7 @@ def _fd_transient_ground_truth(
 
     def _loss_at_param(p_new: float) -> float:
         import numpy as _np
+
         new_params = _np.array(jax.device_get(group.params))
         new_params[device_idx, pcol] = p_new
         new_group = group.with_params(jnp.array(new_params))
@@ -208,7 +209,7 @@ def test_adjoint_dense_resistor_R(rc_osdi_circuit) -> None:
     # Use n_saves = n_steps + 1 so checkpoints coincide with BE steps.
     # The discrete adjoint is exact only when every BE step is a checkpoint.
     n_steps = 100
-    t0, t1 = 0.0, 1e-6   # 1 µs = 1 RC (R=1kΩ, C=1nF) — full transient charging
+    t0, t1 = 0.0, 1e-6  # 1 µs = 1 RC (R=1kΩ, C=1nF) — full transient charging
     dt0 = t1 / n_steps
     n_saves = n_steps + 1
 
@@ -241,8 +242,19 @@ def test_adjoint_dense_resistor_R(rc_osdi_circuit) -> None:
 
     r_col = OsdiResistor._name_to_idx["r"]
     fd_grad = _fd_transient_ground_truth(
-        groups, sys_size, y0, t0, t1, dt0, n_saves,
-        loss_fn, r_key, "R", r_col, device_idx=0, eps_fd=1e-4,
+        groups,
+        sys_size,
+        y0,
+        t0,
+        t1,
+        dt0,
+        n_saves,
+        loss_fn,
+        r_key,
+        "R",
+        r_col,
+        device_idx=0,
+        eps_fd=1e-4,
     )
 
     print("\n[R gradient (dense)]")
@@ -253,9 +265,7 @@ def test_adjoint_dense_resistor_R(rc_osdi_circuit) -> None:
         print(f"  RelErr:  {rel_err:.4e}")
 
     # Accept < 1% relative error (FD has O(h^2) error with h=1e-4)
-    assert abs(adjoint_grad - fd_grad) < 0.01 * abs(fd_grad) + 1e-20, (
-        f"Adjoint {adjoint_grad:.6e} disagrees with FD {fd_grad:.6e}"
-    )
+    assert abs(adjoint_grad - fd_grad) < 0.01 * abs(fd_grad) + 1e-20, f"Adjoint {adjoint_grad:.6e} disagrees with FD {fd_grad:.6e}"
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +283,7 @@ def test_adjoint_dense_capacitor_C(rc_osdi_circuit) -> None:
     c_key = _find_osdi_key(groups, "osdi_c")
 
     n_steps = 100
-    t0, t1 = 0.0, 1e-6   # 1 µs (RC = 1 µs)
+    t0, t1 = 0.0, 1e-6  # 1 µs (RC = 1 µs)
     dt0 = t1 / n_steps
     n_saves = n_steps + 1
 
@@ -304,8 +314,19 @@ def test_adjoint_dense_capacitor_C(rc_osdi_circuit) -> None:
 
     c_col = OsdiCapacitor._name_to_idx["c"]
     fd_grad = _fd_transient_ground_truth(
-        groups, sys_size, y0, t0, t1, dt0, n_saves,
-        loss_fn, c_key, "c", c_col, device_idx=0, eps_fd=1e-4,
+        groups,
+        sys_size,
+        y0,
+        t0,
+        t1,
+        dt0,
+        n_saves,
+        loss_fn,
+        c_key,
+        "c",
+        c_col,
+        device_idx=0,
+        eps_fd=1e-4,
     )
 
     print("\n[C gradient (dense, reactive)]")
@@ -316,9 +337,7 @@ def test_adjoint_dense_capacitor_C(rc_osdi_circuit) -> None:
         print(f"  RelErr:  {rel_err:.4e}")
 
     # Accept < 1% relative error
-    assert abs(adjoint_grad - fd_grad) < 0.01 * abs(fd_grad) + 1e-20, (
-        f"Adjoint {adjoint_grad:.6e} disagrees with FD {fd_grad:.6e}"
-    )
+    assert abs(adjoint_grad - fd_grad) < 0.01 * abs(fd_grad) + 1e-20, f"Adjoint {adjoint_grad:.6e} disagrees with FD {fd_grad:.6e}"
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +386,19 @@ def test_adjoint_dense_final_state_loss(rc_osdi_circuit) -> None:
 
     r_col = OsdiResistor._name_to_idx["r"]
     fd_grad = _fd_transient_ground_truth(
-        groups, sys_size, y0, t0, t1, dt0, n_saves,
-        loss_fn_2, r_key, "R", r_col, device_idx=0, eps_fd=1e-4,
+        groups,
+        sys_size,
+        y0,
+        t0,
+        t1,
+        dt0,
+        n_saves,
+        loss_fn_2,
+        r_key,
+        "R",
+        r_col,
+        device_idx=0,
+        eps_fd=1e-4,
     )
 
     adjoint_grad = float(grad["R"][0])
@@ -382,9 +412,7 @@ def test_adjoint_dense_final_state_loss(rc_osdi_circuit) -> None:
 
     # Accept < 2% relative error (slightly more generous for final-state-only loss,
     # which uses a shorter sim with more BE discretisation error in the coupling term)
-    assert abs(adjoint_grad - fd_grad) < 0.02 * abs(fd_grad) + 1e-20, (
-        f"Adjoint {adjoint_grad:.6e} disagrees with FD {fd_grad:.6e}"
-    )
+    assert abs(adjoint_grad - fd_grad) < 0.02 * abs(fd_grad) + 1e-20, f"Adjoint {adjoint_grad:.6e} disagrees with FD {fd_grad:.6e}"
 
 
 # ---------------------------------------------------------------------------
@@ -444,9 +472,7 @@ def test_adjoint_klu_matches_dense(rc_osdi_circuit) -> None:
     print(f"  KLU:   {klu_val:.8e}")
     print(f"  Dense: {dense_val:.8e}")
 
-    assert jnp.allclose(grad_klu["R"], grad_dense["R"], rtol=1e-5), (
-        f"KLU gradient {klu_val:.6e} differs from dense {dense_val:.6e}"
-    )
+    assert jnp.allclose(grad_klu["R"], grad_dense["R"], rtol=1e-5), f"KLU gradient {klu_val:.6e} differs from dense {dense_val:.6e}"
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +491,9 @@ def test_adjoint_wrong_key_raises(rc_osdi_circuit) -> None:
 
     with pytest.raises(ValueError, match="not found"):
         transient_parameter_sensitivity_dense(
-            groups, y_traj, ts,
+            groups,
+            y_traj,
+            ts,
             lambda yt, t: jnp.sum(yt),
             osdi_group_key="nonexistent",
             param_names=["R"],
@@ -485,7 +513,9 @@ def test_adjoint_wrong_param_raises(rc_osdi_circuit) -> None:
 
     with pytest.raises(ValueError, match="not"):
         transient_parameter_sensitivity_dense(
-            groups, y_traj, ts,
+            groups,
+            y_traj,
+            ts,
             lambda yt, t: jnp.sum(yt),
             osdi_group_key=r_key,
             param_names=["NONEXISTENT"],

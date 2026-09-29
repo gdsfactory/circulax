@@ -20,10 +20,7 @@ import sys
 try:
     import bosdi.va
 except ImportError as _err:
-    raise ImportError(
-        "circulax.va requires the 'bosdi' package. "
-        "Install it with: pip install circulax[verilog-a]"
-    ) from _err
+    raise ImportError("circulax.va requires the 'bosdi' package. Install it with: pip install circulax[verilog-a]") from _err
 
 # Re-export the public API at the top level (``from circulax.va import lower``).
 # Submodule aliases so ``from circulax.va.lowering import _BINOP_FOLDS`` and
@@ -75,7 +72,6 @@ from bosdi.va import (  # noqa: F401  — explicit names so linters / IDEs see t
     write_source,
 )
 
-for _sub in ("dump_parser", "emitter", "ir_client", "lowering",
-             "mir", "sccp", "uniform_params", "va_defaults"):
+for _sub in ("dump_parser", "emitter", "ir_client", "lowering", "mir", "sccp", "uniform_params", "va_defaults"):
     sys.modules[f"circulax.va.{_sub}"] = sys.modules[f"bosdi.va.{_sub}"]
 del _sub

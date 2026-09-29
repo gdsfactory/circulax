@@ -35,9 +35,7 @@ def _solve_masked_responses(
 
     def solve_candidate(mask: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
         active_basis = basis * mask[None, :]
-        prediction, coefficients = jax.vmap(
-            lambda response: solve_response(active_basis, response)
-        )(responses)
+        prediction, coefficients = jax.vmap(lambda response: solve_response(active_basis, response))(responses)
         error = prediction - responses
         normalized_error = jnp.sqrt(jnp.sum(jnp.abs(error) ** 2) / target_energy)
         return normalized_error, jnp.max(jnp.abs(error)), coefficients
@@ -64,10 +62,7 @@ class PoleCountSweep:
         max_absolute_error: float,
     ) -> int | None:
         """Return the smallest screened pole count satisfying both limits."""
-        passing = np.asarray(
-            (self.normalized_rmse <= normalized_rmse)
-            & (self.max_absolute_error <= max_absolute_error)
-        )
+        passing = np.asarray((self.normalized_rmse <= normalized_rmse) & (self.max_absolute_error <= max_absolute_error))
         if not np.any(passing):
             return None
         counts = np.asarray(self.retained_counts)
@@ -91,9 +86,7 @@ def _contribution_ordered_groups(
         # residue solve still determines whether it is useful.
         indices = [index] if cindex[index] == 0 or index + 1 == len(poles) else [index, index + 1]
         contribution = sum(
-            residues[:, :, pole_index][None, ...]
-            / (sample_points[:, None, None] - poles[pole_index])
-            for pole_index in indices
+            residues[:, :, pole_index][None, ...] / (sample_points[:, None, None] - poles[pole_index]) for pole_index in indices
         )
         groups.append((float(np.linalg.norm(contribution)), indices))
         index += len(indices)

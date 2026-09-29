@@ -141,8 +141,8 @@ def fdomain_model(fn: callable, *, ports: tuple[str, ...], z0: complex = 1.0 + 1
     :func:`sax_component`, e.g.::
 
         @sax_component
-        def my_rf_model(f=1e9, R0=50.0):
-            ...  # returns a Y-matrix
+        def my_rf_model(f=1e9, R0=50.0): ...  # returns a Y-matrix
+
 
         RfComp = sax_component(fdomain_model(my_rf_model, ports=("p1", "p2")))
 

@@ -8,18 +8,40 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **fitting**: Stable fit, validation, persistence, and circuit-construction workflow for sampled S-parameters.
-- **delay**: Solver-independent fixed propagation delay and conservative two-port delay inference with an internal 20% validation reservation.
+- **solvers**: Add fixed time-delay support for circuit components ([`bc47867`](https://github.com/gdsfactory/circulax/commit/bc478674c383a24d46c0d21e16b9edade053cbc7))
+- **solvers**: Add adaptive step-size support for time-delayed circuits ([`0b70a75`](https://github.com/gdsfactory/circulax/commit/0b70a754853f32076fb89d8a0182072137dd653c))
+- **components**: Add rational factory functions for vector fitting ([`6e1aca1`](https://github.com/gdsfactory/circulax/commit/6e1aca1c57a9f731b3e54b36fdd2efed70877924))
+- **components**: Add rational_delay_component for vector fitting with delay ([`4cea3e3`](https://github.com/gdsfactory/circulax/commit/4cea3e3d149b8bef8a76d69f275617187cf568bc))
+- **solvers**: Align fixed delay across analyses ([`df9b00a`](https://github.com/gdsfactory/circulax/commit/df9b00abbabd4ff65b47f889af1dd67cd75d67c5))
+- Add rational S-parameter fitting ([`24dc959`](https://github.com/gdsfactory/circulax/commit/24dc9593795a9252711523f81e2a11a0436e388a))
+- **fitting**: Report causality risks ([`5723327`](https://github.com/gdsfactory/circulax/commit/5723327cce44b007edd2144dbb6c41ede705e9f7))
+- **fitting**: Add delay-aware models and noisy line tutorial ([`198e49c`](https://github.com/gdsfactory/circulax/commit/198e49cbe4fbb0e636afbc50da79e190e5e62118))
+- Stabilize fitting and delay APIs ([`0bb4127`](https://github.com/gdsfactory/circulax/commit/0bb41279e331ee31a223656bda650462c5467fc4))
+- **circuit**: Return S-parameters for passive SAX-wrapped circuits ([`d1a1caa`](https://github.com/gdsfactory/circulax/commit/d1a1caae4b2a7e90fa25fd4d7abfa1dc0bdae397))
+- Add live frequency SAX component adapter ([`0fbe927`](https://github.com/gdsfactory/circulax/commit/0fbe927cef9aff18fbae2d01620f1a655d504802))
 
 ### Changed
 
-- **dependencies**: Make scikit-rf a core dependency for the default vector-fitting backend.
-- **fitting**: Keep experimental AAA, reduction, and enforcement helpers in implementation submodules rather than the stable namespace.
-- **ac-sweep**: Default `setup_ac_sweep()` to the safe non-holomorphic 2N×2N path for complex circuits.
+- Unify component signals and inline delays ([`e3397fe`](https://github.com/gdsfactory/circulax/commit/e3397fe5d0c0db49280fc1339c568901adfefd73))
+- Stabilize Circuit return types and add explicit SAX export API ([`0645976`](https://github.com/gdsfactory/circulax/commit/064597699b24fe1e4b0252238b713ba8b1a032a2))
+
+### Documentation
+
+- **specs**: Add vector-fitting spec, update time-delay for Phase 4 ([`b762a91`](https://github.com/gdsfactory/circulax/commit/b762a917787d8a7e7814f2e54350da892cffebf9))
+- **specs**: Add baseband-envelope spec for carrier-relative spectral effects ([`0bfade3`](https://github.com/gdsfactory/circulax/commit/0bfade3133f6261961fb84d6f644dbac836e4297))
+- **specs**: Add WDM multi-channel simulation future work section ([`e43d87e`](https://github.com/gdsfactory/circulax/commit/e43d87e20b60c7d576662e002bb3ddb505a7eb2f))
+- **specs**: Add physics risks and mitigations to baseband-envelope spec ([`efd8e7d`](https://github.com/gdsfactory/circulax/commit/efd8e7dbbe0cc1d8ca280584f3ee01c69a74e052))
+- **examples**: Demonstrate fixed delay across analyses ([`d5c198d`](https://github.com/gdsfactory/circulax/commit/d5c198d08911e662a0f1ea0bc10acc00704bc54f))
+- **photonics**: Combine TPA with bidirectional delay ([`4b2162f`](https://github.com/gdsfactory/circulax/commit/4b2162f024dafcad68e72a0014151d8d8c59b296))
+- **photonics**: Name delayed model as waveguide ([`6cf30ab`](https://github.com/gdsfactory/circulax/commit/6cf30abac81502f6f2f896d6ea6c5a3cb9d7353c))
+- **notebooks**: Fix S-parameter API and MathJax escaping ([`0e9f790`](https://github.com/gdsfactory/circulax/commit/0e9f79078309a795d1474bd973a8dac3e4b310f7))
+- Remove fitting planning notes ([`3edc62c`](https://github.com/gdsfactory/circulax/commit/3edc62c400afa63206cb7b4571faa53400f15239))
 
 ### Fixed
 
-- **components**: Preserve the Circulax 0.2.3 `(signals, states, ...)` component and source signatures.
+- **ac_sweep**: Fix port impedance and complex voltage reconstruction in 2N solver ([@cdaunt](https://github.com/cdaunt)) ([`b3d8451`](https://github.com/gdsfactory/circulax/commit/b3d8451e90d908ba4b0210cefa6fcfbb300e0176))
+- **ac-sweep**: Default to safe non-holomorphic solve ([@cdaunt](https://github.com/cdaunt)) ([`8c872b4`](https://github.com/gdsfactory/circulax/commit/8c872b447c1c9f302bf8d11485269eefdd8b6438))
+- Stabilize passivity enforcement on Windows ([`dbd9c01`](https://github.com/gdsfactory/circulax/commit/dbd9c01e1f97c0acc7ad7fbf06bfc4034ea28679))
 
 ## [0.2.3] - 2026-07-30
 

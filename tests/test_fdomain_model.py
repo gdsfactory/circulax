@@ -59,9 +59,7 @@ def test_fdomain_model_matches_frozen_constant_resistor():
     S_b = circuit_b.sp(ports=["in"], freqs=sweep_freqs, z0=1.0)[:, 0, 0]
 
     net_ref = _rc_netlist("resistor", {"R": r_frozen})
-    circuit_ref = compile_circuit(
-        net_ref, {"resistor": Resistor, "capacitor": Capacitor, "ground": lambda: 0}, is_complex=True
-    )
+    circuit_ref = compile_circuit(net_ref, {"resistor": Resistor, "capacitor": Capacitor, "ground": lambda: 0}, is_complex=True)
     S_ref = circuit_ref.sp(ports=["in"], freqs=sweep_freqs, z0=1.0)[:, 0, 0]
 
     assert jnp.allclose(S_b, S_ref, atol=1e-9)
@@ -76,16 +74,12 @@ def test_fdomain_model_does_not_track_ac_sweep_unlike_native_fdomain_component()
 
     skin_native = fdomain_component(ports=("p1", "p2"))(_skin_effect_Y)
     net_a = _rc_netlist("skinres", {"R0": 1.0, "a": 0.1})
-    circuit_a = compile_circuit(
-        net_a, {"skinres": skin_native, "capacitor": Capacitor, "ground": lambda: 0}, is_complex=True
-    )
+    circuit_a = compile_circuit(net_a, {"skinres": skin_native, "capacitor": Capacitor, "ground": lambda: 0}, is_complex=True)
     S_a = circuit_a.sp(ports=["in"], freqs=sweep_freqs, z0=1.0)[:, 0, 0]
 
     r_frozen = float(_skin_effect_R(freq0))
     net_ref = _rc_netlist("resistor", {"R": r_frozen})
-    circuit_ref = compile_circuit(
-        net_ref, {"resistor": Resistor, "capacitor": Capacitor, "ground": lambda: 0}, is_complex=True
-    )
+    circuit_ref = compile_circuit(net_ref, {"resistor": Resistor, "capacitor": Capacitor, "ground": lambda: 0}, is_complex=True)
     S_ref = circuit_ref.sp(ports=["in"], freqs=sweep_freqs, z0=1.0)[:, 0, 0]
 
     # Native fdomain tracks the sweep: it matches the frozen reference only at freq0...

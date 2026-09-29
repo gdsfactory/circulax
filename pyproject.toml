@@ -200,7 +200,7 @@ build-wheel      = { cmd = "uv build --wheel", description = "Build wheel only" 
 build-sdist      = { cmd = "uv build --sdist", description = "Build sdist only" }
 build-conda      = { cmd = "pixi build", description = "Build conda package" }
 clean-dist       = { cmd = ["python", "scripts/clean_dist.py"],    description = "Remove build artefacts" }
-changelog        = { cmd = "git cliff --output CHANGELOG.md", description = "Regenerate full CHANGELOG.md from git history" }
+changelog        = { cmd = ["python", "scripts/update_changelog.py"], description = "Regenerate the Unreleased changelog section from git history" }
 changelog-unreleased = { cmd = "git cliff --unreleased", description = "Preview changelog entries since the last tag" }
 bench_list       = { cmd = ["python", "benchmarks/run.py", "list"],                 description = "List benchmark cases" }
 bench_release    = { cmd = ["python", "benchmarks/run.py", "run", "release"],       description = "Run release benchmark suite" }
@@ -254,6 +254,7 @@ line-length = 132
 
 [tool.ruff.format]
 docstring-code-format = true
+line-ending = "lf"
 
 [tool.ruff.lint]  # see https://docs.astral.sh/ruff/rules
 ignore = [

@@ -464,9 +464,7 @@ class Circuit:
 
         """
         warnings.warn("Circuit.ac() is deprecated, use Circuit.sp() instead.", DeprecationWarning, stacklevel=2)
-        return self.sp(
-            ports=ports, freqs=freqs, z0=z0, y_dc=y_dc, holomorphic=holomorphic, params=params, **param_updates
-        )
+        return self.sp(ports=ports, freqs=freqs, z0=z0, y_dc=y_dc, holomorphic=holomorphic, params=params, **param_updates)
 
     def hb(
         self,

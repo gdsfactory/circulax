@@ -24,8 +24,8 @@ body = """
 - {% if commit.breaking %}**BREAKING** {% endif %}\
   {% if commit.scope %}**{{ commit.scope }}**: {% endif %}\
   {{ commit.message | upper_first }}\
-  {% if commit.github.username %} ([@{{ commit.github.username }}](https://github.com/{{ commit.github.username }})){% endif %}\
-  ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/gdsfactory/circulax/commit/{{ commit.id }}))\
+  {% if commit.remote.username %} ([@{{ commit.remote.username }}](https://github.com/{{ commit.remote.username }})){% endif %}\
+  {{ " " }}([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/gdsfactory/circulax/commit/{{ commit.id }}))\
 {% endfor %}
 {% endfor %}
 """

@@ -525,15 +525,11 @@ def test_non_holomorphic_matches_holomorphic_for_waveguide(waveguide_complex_set
     solver = analyze_circuit(groups, num_vars, is_complex=True)
     sys_size = num_vars * 2
     y_dc_2 = solver.solve_dc(groups, jnp.zeros(sys_size))
-    run_ac_2n = setup_ac_sweep(
-        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False
-    )
+    run_ac_2n = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False)
     S_2n = run_ac_2n(y_dc_2, freqs)
 
     assert S_2n.shape == S_wirtinger.shape
-    assert jnp.allclose(S_2n, S_wirtinger, atol=1e-6), (
-        f"Max complex error: {jnp.max(jnp.abs(S_2n - S_wirtinger)):.2e}"
-    )
+    assert jnp.allclose(S_2n, S_wirtinger, atol=1e-6), f"Max complex error: {jnp.max(jnp.abs(S_2n - S_wirtinger)):.2e}"
 
 
 def test_non_holomorphic_via_circuit():
@@ -558,9 +554,7 @@ def test_non_holomorphic_via_circuit():
     assert jnp.isfinite(jnp.abs(S)).all()
 
     S_std = circuit.sp(ports="in", freqs=freqs, z0=_OPT_Z0)
-    assert jnp.allclose(S, S_std, atol=1e-6), (
-        f"Max complex error: {jnp.max(jnp.abs(S - S_std)):.2e}"
-    )
+    assert jnp.allclose(S, S_std, atol=1e-6), f"Max complex error: {jnp.max(jnp.abs(S - S_std)):.2e}"
 
 
 def test_non_holomorphic_lossy_waveguide():
@@ -573,8 +567,14 @@ def test_non_holomorphic_lossy_waveguide():
             "GND": {"component": "ground"},
             "WG1": {
                 "component": "waveguide",
-                "settings": {"length_um": 500.0, "loss_dB_cm": 3.0, "neff": 2.4, "n_group": 4.0,
-                              "center_wavelength_nm": 1310.0, "wavelength_nm": 1310.0},
+                "settings": {
+                    "length_um": 500.0,
+                    "loss_dB_cm": 3.0,
+                    "neff": 2.4,
+                    "n_group": 4.0,
+                    "center_wavelength_nm": 1310.0,
+                    "wavelength_nm": 1310.0,
+                },
             },
         },
         "connections": {"WG1,p2": "GND,p1"},
@@ -586,20 +586,14 @@ def test_non_holomorphic_lossy_waveguide():
     y_dc = solver.solve_dc(groups, jnp.zeros(sys_size))
     freqs = jnp.logspace(6, 10, 20)
 
-    run_ac_w = setup_ac_sweep(
-        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=True
-    )
+    run_ac_w = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=True)
     S_wirtinger = run_ac_w(y_dc, freqs)
 
-    run_ac_2n = setup_ac_sweep(
-        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False
-    )
+    run_ac_2n = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False)
     S_2n = run_ac_2n(y_dc, freqs)
 
     assert jnp.any(jnp.abs(S_2n[:, 0, 0]) < 0.99), "Lossy waveguide should have |S11| < 1"
-    assert jnp.allclose(S_2n, S_wirtinger, atol=1e-6), (
-        f"Max complex error: {jnp.max(jnp.abs(S_2n - S_wirtinger)):.2e}"
-    )
+    assert jnp.allclose(S_2n, S_wirtinger, atol=1e-6), f"Max complex error: {jnp.max(jnp.abs(S_2n - S_wirtinger)):.2e}"
 
 
 def test_non_holomorphic_jit(waveguide_netlist):
@@ -608,9 +602,7 @@ def test_non_holomorphic_jit(waveguide_netlist):
     groups, num_vars, pmap = compile_netlist(net_dict, models_map)
     solver = analyze_circuit(groups, num_vars, is_complex=True)
     y_dc = solver.solve_dc(groups, jnp.zeros(num_vars * 2))
-    run_ac = setup_ac_sweep(
-        groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False
-    )
+    run_ac = setup_ac_sweep(groups, num_vars, [pmap["WG1,p1"]], z0=_OPT_Z0, is_complex=True, holomorphic=False)
     freqs = jnp.logspace(6, 10, 10)
     S_eager = run_ac(y_dc, freqs)
     S_jit = jax.jit(run_ac)(y_dc, freqs)

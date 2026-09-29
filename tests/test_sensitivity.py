@@ -29,15 +29,14 @@ def _bosdi_available() -> bool:
         from bosdi.circulax import OsdiComponentGroup  # noqa: F401
         from osdi_jax import osdi_residual_eval  # noqa: F401
         from osdi_loader import load_osdi_model
+
         load_osdi_model(RESISTOR_OSDI)
         return True
     except (ImportError, RuntimeError, OSError):
         return False
 
 
-pytestmark = pytest.mark.skipif(
-    not _bosdi_available(), reason="bosdi/osdi_jax not available"
-)
+pytestmark = pytest.mark.skipif(not _bosdi_available(), reason="bosdi/osdi_jax not available")
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +162,7 @@ def diode_osdi_circuit():
 def _find_osdi_key(groups: dict) -> str:
     """Return the key of the first OsdiComponentGroup in groups."""
     from bosdi.circulax import OsdiComponentGroup
+
     for k, g in groups.items():
         if isinstance(g, OsdiComponentGroup):
             return k
@@ -203,6 +203,7 @@ def _fd_ground_truth(
 
     def _solve_with_param(p_new: float) -> float:
         import numpy as _np
+
         new_params = _np.array(jax.device_get(group.params))
         new_params[device_idx, col] = p_new
         new_group = group.with_params(jnp.array(new_params))
@@ -267,9 +268,7 @@ def test_sensitivity_dense_resistor(resistor_osdi_circuit) -> None:
     adjoint_grad = float(grad["R"][0])
 
     # FD ground truth: re-run DC with perturbed R
-    fd_grad = _fd_ground_truth(
-        groups, sys_size, loss_fn, osdi_key, descriptor, "R", device_idx=0, eps_fd=1e-4
-    )
+    fd_grad = _fd_ground_truth(groups, sys_size, loss_fn, osdi_key, descriptor, "R", device_idx=0, eps_fd=1e-4)
 
     print("\nResistor R sensitivity:")
     print(f"  Adjoint gradient: {adjoint_grad:.8e}")
@@ -296,7 +295,7 @@ def test_sensitivity_dense_diode_Is(diode_osdi_circuit) -> None:
     y_star = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     def loss_fn(y):
-        return jnp.sum(y ** 2)
+        return jnp.sum(y**2)
 
     grad = dc_parameter_sensitivity_dense(
         groups,
@@ -312,9 +311,7 @@ def test_sensitivity_dense_diode_Is(diode_osdi_circuit) -> None:
 
     adjoint_grad = float(grad["Is"][0])
 
-    fd_grad = _fd_ground_truth(
-        groups, sys_size, loss_fn, osdi_key, descriptor, "Is", device_idx=0, eps_fd=1e-4
-    )
+    fd_grad = _fd_ground_truth(groups, sys_size, loss_fn, osdi_key, descriptor, "Is", device_idx=0, eps_fd=1e-4)
 
     print("\nDiode Is sensitivity:")
     print(f"  Adjoint gradient: {adjoint_grad:.8e}")
@@ -339,7 +336,7 @@ def test_sensitivity_dense_diode_N(diode_osdi_circuit) -> None:
     y_star = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     def loss_fn(y):
-        return jnp.sum(y ** 2)
+        return jnp.sum(y**2)
 
     grad = dc_parameter_sensitivity_dense(
         groups,
@@ -355,9 +352,7 @@ def test_sensitivity_dense_diode_N(diode_osdi_circuit) -> None:
 
     adjoint_grad = float(grad["N"][0])
 
-    fd_grad = _fd_ground_truth(
-        groups, sys_size, loss_fn, osdi_key, descriptor, "N", device_idx=0, eps_fd=1e-4
-    )
+    fd_grad = _fd_ground_truth(groups, sys_size, loss_fn, osdi_key, descriptor, "N", device_idx=0, eps_fd=1e-4)
 
     print("\nDiode N sensitivity:")
     print(f"  Adjoint gradient: {adjoint_grad:.8e}")
@@ -413,9 +408,7 @@ def test_sensitivity_klu_matches_dense(resistor_osdi_circuit) -> None:
     dense_val = float(grad_dense["R"][0])
     print(f"\nR gradient: KLU={klu_val:.8e}, dense={dense_val:.8e}")
 
-    assert jnp.allclose(grad_klu["R"], grad_dense["R"], rtol=1e-5), (
-        f"KLU gradient {klu_val:.6e} differs from dense {dense_val:.6e}"
-    )
+    assert jnp.allclose(grad_klu["R"], grad_dense["R"], rtol=1e-5), f"KLU gradient {klu_val:.6e} differs from dense {dense_val:.6e}"
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +428,7 @@ def test_sensitivity_multi_param(resistor_osdi_circuit) -> None:
     y_star = solver.solve_dc(groups, jnp.zeros(sys_size))
 
     def loss_fn(y):
-        return jnp.sum(y ** 2)
+        return jnp.sum(y**2)
 
     grad = dc_parameter_sensitivity_dense(
         groups,

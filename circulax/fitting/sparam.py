@@ -209,11 +209,7 @@ def _aaa_all_elements(
     bigH_np = np.asarray(bigH, dtype=np.complex128)
     s_np = np.asarray(s, dtype=np.complex128)
 
-    idx = (
-        _upper_triangle_indices(Nc)
-        if reciprocal
-        else [(row, col) for row in range(Nc) for col in range(Nc)]
-    )
+    idx = _upper_triangle_indices(Nc) if reciprocal else [(row, col) for row in range(Nc) for col in range(Nc)]
     elem_poles = []
     elem_nsupport = []
 
@@ -281,11 +277,7 @@ def _aaa_all_elements(
     if len(poles_np) == 0:
         raise RuntimeError("All AAA poles were outside the data bandwidth.")
 
-    f_full = (
-        stack_upper_triangle(bigH)
-        if reciprocal
-        else jnp.stack([bigH[row, col, :] for row, col in idx], axis=0)
-    )
+    f_full = stack_upper_triangle(bigH) if reciprocal else jnp.stack([bigH[row, col, :] for row, col in idx], axis=0)
     w_full = compute_weights(bigH, opts.weightparam, reciprocal=reciprocal)
     C_flat, D_vec, E_vec = identify_residues(f_full, s, poles_np, w_full, opts)
 
@@ -478,11 +470,7 @@ def fit_with_delay(
             residues = jnp.zeros((Nc, Nc, N), dtype=jnp.complex128)
             D_mat = jnp.zeros((Nc, Nc), dtype=jnp.float64)
             E_mat = jnp.zeros((Nc, Nc), dtype=jnp.float64)
-            idx = (
-                _upper_triangle_indices(Nc)
-                if reciprocal
-                else [(row, col) for row in range(Nc) for col in range(Nc)]
-            )
+            idx = _upper_triangle_indices(Nc) if reciprocal else [(row, col) for row in range(Nc) for col in range(Nc)]
             for k, (row, col) in enumerate(idx):
                 residues = residues.at[row, col, :].set(C_flat[k])
                 D_mat = D_mat.at[row, col].set(float(D_vec[k]))

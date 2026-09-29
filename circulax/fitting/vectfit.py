@@ -69,11 +69,7 @@ def vectfit_iteration(
 
     # --- Reconstruct full (Nc, Nc, N) residue tensor and (Nc, Nc) D, E ---
     nnn = f.shape[0]
-    idx = (
-        _upper_triangle_indices(Nc)
-        if reciprocal
-        else [(row, col) for row in range(Nc) for col in range(Nc)]
-    )
+    idx = _upper_triangle_indices(Nc) if reciprocal else [(row, col) for row in range(Nc) for col in range(Nc)]
     Ns = s.shape[0]
 
     residues = jnp.zeros((Nc, Nc, N), dtype=jnp.complex128)

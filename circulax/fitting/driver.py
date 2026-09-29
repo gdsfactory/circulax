@@ -66,11 +66,7 @@ def vfdriver(
     poles = np.asarray(poles, dtype=np.complex128)
 
     # --- Selected response stack and weights ---
-    f_full = (
-        stack_upper_triangle(bigH)
-        if reciprocal
-        else bigH.reshape(Nc * Nc, Ns)
-    )
+    f_full = stack_upper_triangle(bigH) if reciprocal else bigH.reshape(Nc * Nc, Ns)
     w_full = compute_weights(bigH, opts.weightparam, reciprocal=reciprocal)
 
     # --- Diagonal-only data and weights (for phase 1) ---

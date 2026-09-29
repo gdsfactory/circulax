@@ -57,7 +57,7 @@ def aaa_scalar_jax(f, z, tol=1e-10, mmax=100) -> AAAResult:
         cauchy = jnp.where(valid, 1 / jnp.where(valid, delta, 1), 0)
         loewner = cauchy * (f[:, None] - values[None, :])
         scale = jnp.maximum(jnp.linalg.norm(loewner), jnp.finfo(jnp.float64).tiny)
-        padded = jnp.concatenate([loewner / scale, jnp.diag(jnp.where(active, 0., 2.))])
+        padded = jnp.concatenate([loewner / scale, jnp.diag(jnp.where(active, 0.0, 2.0))])
 
         def solve(_):
             _, _, vh = jnp.linalg.svd(padded, full_matrices=False)

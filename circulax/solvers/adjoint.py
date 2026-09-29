@@ -121,6 +121,7 @@ def _build_jq_total(
     """
     try:
         from bosdi.circulax import OsdiComponentGroup
+
         _has_osdi = True
     except ImportError:
         _has_osdi = False
@@ -148,15 +149,18 @@ def _build_jq_total(
             # Get cap from OSDI eval
             try:
                 from osdi_jax import osdi_eval, osdi_eval_with_handle
+
                 _has_handle = True
             except ImportError:
                 from osdi_jax import osdi_eval
+
                 _has_handle = False
 
             v_all = y[g.var_indices].astype(jnp.float64)
             try:
                 if _has_handle and g.handle is not None:
                     from osdi_jax import osdi_eval_with_handle
+
                     _, _, _, cap, _ = osdi_eval_with_handle(g.handle, v_all, g.states)
                 else:
                     _, _, _, cap, _ = osdi_eval(g.model_id, v_all, g.params, g.states)
@@ -195,6 +199,7 @@ def _jq_matvec_klu(
 
     try:
         from bosdi.circulax import OsdiComponentGroup
+
         _has_osdi = True
     except ImportError:
         _has_osdi = False
@@ -211,9 +216,7 @@ def _jq_matvec_klu(
     static_cols = jnp.concatenate(all_cols_list)
 
     # sparse C^T · v for non-OSDI (c_vals_all already has OSDI = 0)
-    result = jax.ops.segment_sum(
-        c_vals_all * v[static_rows], static_cols, num_segments=sys_size
-    )
+    result = jax.ops.segment_sum(c_vals_all * v[static_rows], static_cols, num_segments=sys_size)
 
     # OSDI contributions: add cap contributions directly
     if _has_osdi:
@@ -223,8 +226,10 @@ def _jq_matvec_klu(
                 continue
             try:
                 from osdi_jax import osdi_eval
+
                 try:
                     from osdi_jax import osdi_eval_with_handle
+
                     if g.handle is not None:
                         _, _, _, cap, _ = osdi_eval_with_handle(g.handle, y[g.var_indices].astype(jnp.float64), g.states)
                     else:
@@ -238,9 +243,7 @@ def _jq_matvec_klu(
             cols = jnp.array(g.jac_cols).reshape(-1)
             cap_flat = cap.reshape(-1)
             # C^T · v: result[cols] += cap_flat * v[rows]
-            result = result + jax.ops.segment_sum(
-                cap_flat * v[rows], cols, num_segments=sys_size
-            )
+            result = result + jax.ops.segment_sum(cap_flat * v[rows], cols, num_segments=sys_size)
 
     return result / dt
 
@@ -293,6 +296,7 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
 
     try:
         from osdi_jax import osdi_residual_eval_with_handle
+
         _has_handle = True
     except ImportError:
         _has_handle = False
@@ -300,7 +304,7 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
     mid = group.model_id
     params_np = np.array(jax.device_get(group.params))  # (N, num_params)
 
-    v_all_cur = y_cur[group.var_indices].astype(jnp.float64)   # (N, num_nodes)
+    v_all_cur = y_cur[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
     v_all_prev = y_prev[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
 
     # Base F(y[k]) and Q(y[k]) and Q(y[k-1])
@@ -472,9 +476,7 @@ def transient_parameter_sensitivity(
         )
         raise TypeError(msg)
 
-    param_cols = _resolve_param_cols(
-        group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col
-    )
+    param_cols = _resolve_param_cols(group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col)
 
     import klujax
 
@@ -483,17 +485,14 @@ def transient_parameter_sensitivity(
     n_devices = group.params.shape[0]
 
     import inspect
+
     sig = inspect.signature(loss_fn)
     _loss_takes_two_args = len(sig.parameters) >= 2
 
     # Precompute ∂L/∂y[k] for ALL checkpoints in a single jax.grad call.
     # The old per-checkpoint approach called jax.grad N times with different
     # compile-time constants, triggering N separate JIT compilations per step.
-    dL_dy_all = (
-        jax.grad(loss_fn)(y_trajectory, ts)
-        if _loss_takes_two_args
-        else jax.grad(lambda yt: loss_fn(yt[-1]))(y_trajectory)
-    )
+    dL_dy_all = jax.grad(loss_fn)(y_trajectory, ts) if _loss_takes_two_args else jax.grad(lambda yt: loss_fn(yt[-1]))(y_trajectory)
 
     if shared_params:
         grad_accum = np.zeros((len(param_names),), dtype=np.float64)
@@ -524,8 +523,16 @@ def transient_parameter_sensitivity(
         )
 
         _compute_transient_fd_gradients(
-            group, y_cur, y_prev, lam_k, dt, sys_size,
-            param_names, param_cols, eps, grad_accum,
+            group,
+            y_cur,
+            y_prev,
+            lam_k,
+            dt,
+            sys_size,
+            param_names,
+            param_cols,
+            eps,
+            grad_accum,
             shared_params=shared_params,
         )
 
@@ -584,23 +591,18 @@ def transient_parameter_sensitivity_dense(
         msg = f"Group {osdi_group_key!r} is not an OsdiComponentGroup (got {type(group).__name__})."
         raise TypeError(msg)
 
-    param_cols = _resolve_param_cols(
-        group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col
-    )
+    param_cols = _resolve_param_cols(group, param_names, model_descriptor=model_descriptor, param_to_col=param_to_col)
 
     sys_size = y_trajectory.shape[1]
     n_checkpoints = y_trajectory.shape[0]
     n_devices = group.params.shape[0]
 
     import inspect
+
     sig = inspect.signature(loss_fn)
     _loss_takes_two_args = len(sig.parameters) >= 2
 
-    dL_dy_all = (
-        jax.grad(loss_fn)(y_trajectory, ts)
-        if _loss_takes_two_args
-        else jax.grad(lambda yt: loss_fn(yt[-1]))(y_trajectory)
-    )
+    dL_dy_all = jax.grad(loss_fn)(y_trajectory, ts) if _loss_takes_two_args else jax.grad(lambda yt: loss_fn(yt[-1]))(y_trajectory)
 
     if shared_params:
         grad_accum = np.zeros((len(param_names),), dtype=np.float64)
@@ -625,8 +627,16 @@ def transient_parameter_sensitivity_dense(
         lam_k = jnp.linalg.solve(J.T, psi_k)
 
         _compute_transient_fd_gradients(
-            group, y_cur, y_prev, lam_k, dt, sys_size,
-            param_names, param_cols, eps, grad_accum,
+            group,
+            y_cur,
+            y_prev,
+            lam_k,
+            dt,
+            sys_size,
+            param_names,
+            param_cols,
+            eps,
+            grad_accum,
             shared_params=shared_params,
         )
 

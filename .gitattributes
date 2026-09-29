@@ -1,2 +1,3 @@
 # SCM syntax highlighting & preventing 3-way merges
+* text=auto eol=lf
 pixi.lock merge=binary linguist-language=YAML linguist-generated=true
