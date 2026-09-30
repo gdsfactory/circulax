@@ -18,6 +18,8 @@ from typing import Any
 
 import kfnetlist as kfnl
 
+from circulax.netlist import prune_unreachable_instances
+
 
 def _attach_testbench_kfnetlist(
     device: kfnl.Netlist,
@@ -134,6 +136,14 @@ def attach_testbench(
     sources = sources or {}
     loads = loads or {}
     gnd_list = list(gnd or [])
+
+    # A device's own ports are still declared here (attach_testbench is the
+    # last stage that knows them — it rewrites every device port into a
+    # concrete source/load/GND connection below). An inert, unmodeled
+    # structural instance (die frame, logo, ...) must be dropped now, not
+    # after: the wrapped netlist this function returns exposes no top-level
+    # ports at all, so compile_netlist's own prune guard is a no-op on it.
+    device = prune_unreachable_instances(device)
 
     if isinstance(device, kfnl.Netlist):
         return _attach_testbench_kfnetlist(

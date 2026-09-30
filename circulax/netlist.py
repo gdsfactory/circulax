@@ -7,6 +7,7 @@ node-index assignment.
 
 from __future__ import annotations
 
+import itertools
 import json
 from collections import defaultdict
 from typing import Annotated, Any, NotRequired, TypeAlias
@@ -86,6 +87,185 @@ def build_net_map_kfnetlist(nl: kfnl.Netlist) -> tuple[dict[str, int], int]:
             current_idx += 1
 
     return port_to_idx, current_idx
+
+
+def prune_unreachable_instances(netlist: kfnl.Netlist | dict) -> kfnl.Netlist | dict:
+    """Drop instances that cannot influence the circuit's exposed ports.
+
+    An instance only matters to the simulation if some signal path connects
+    it (directly or transitively, through shared nets) to one of its
+    circuit's top-level ports. Structural/decorative cells (die frames,
+    logos, marker rectangles) are typically wired to nothing — ``"ports": []``
+    and no nets — so they take part in no signal path. Left in place, such a
+    cell can abort compilation (or, upstream, an unmodeled-component walk
+    that treats "no model" as "must be a composite to expand") with a
+    spurious "Model not found" error for a component nobody asked to
+    simulate. See gdsfactory/circulax#60.
+
+    Accepts a ``kfnl.Netlist``, a flat SAX-format dict, or a
+    ``RecursiveNetlist`` (dict of SAX dicts, i.e. subcircuit bodies keyed by
+    name). For a flat netlist (kfnetlist or dict), the whole prune is skipped
+    if it declares no top-level ports at all — with none, every instance
+    would look unreachable, and a netlist driven purely by an internal source
+    (e.g. a lone oscillator with no ``ports`` declared) would be emptied out.
+
+    For a RecursiveNetlist, that same guard applies only to the top circuit
+    (the first key); once it passes, every sub-netlist — top included — is
+    pruned against its own declared ports with no further guard, so a
+    sub-netlist with no ports of its own is emptied out entirely. This
+    matches ``sax.netlists.remove_unused_instances``, and the already-shipped
+    downstream fix in gdsfactoryplus#4883 relies on exactly this recursive
+    emptying for nested inert cells.
+
+    Reimplemented natively here (rather than delegating to
+    ``sax.netlists.remove_unused_instances``) because circulax's own
+    ``connections`` values may be a tuple/list of targets (one shared net for
+    several refs), which sax's dict-oriented helper does not support.
+
+    Returns:
+        A new netlist of the same type as *netlist*, with unreachable
+        instances (and the connections/nets that only touched them) removed.
+        The input is not mutated.
+
+    """
+    if isinstance(netlist, kfnl.Netlist):
+        return _prune_unreachable_kfnetlist(netlist)
+
+    if "instances" in netlist:
+        if not netlist.get("ports"):
+            return netlist
+        return _prune_unreachable_sax_dict(netlist)
+
+    top_name = next(iter(netlist), None)
+    if top_name is None:
+        return netlist
+    top = netlist.get(top_name) or {}
+    if not top.get("ports"):
+        return netlist
+
+    return {name: _prune_unreachable_sax_dict(net) for name, net in netlist.items()}
+
+
+def _sax_ref_key(ref: str) -> str:
+    """Union-find key for a SAX port reference string (e.g. ``"R1,p1"`` -> ``"R1"``).
+
+    The part before the comma identifies the electrical bridge: either a
+    declared instance, or a hierarchy-stub label (e.g. ``"vdd,p1"``) that
+    isn't a real instance at all. Either way, all ports sharing that prefix
+    are electrically the same component for reachability purposes.
+    """
+    return ref.split(",", 1)[0] if "," in ref else ref
+
+
+def _prune_unreachable_sax_dict(net: dict) -> dict:
+    """Prune one flat SAX dict against its own declared ports.
+
+    No "skip if portless" guard: a netlist with no ``ports`` has every
+    instance marked unreachable and is emptied out, matching
+    ``sax.netlists.remove_unused_instances``. Callers that want to protect a
+    portless *top* circuit from this must guard before calling in (see
+    :func:`prune_unreachable_instances`).
+    """
+    uf = _UnionFind()
+    port_roots = {_sax_ref_key(target) for target in net.get("ports", {}).values()}
+    for root in port_roots:
+        uf.find(root)
+
+    for src, targets in net.get("connections", {}).items():
+        if not isinstance(targets, (list, tuple)):
+            targets = (targets,)
+        src_key = _sax_ref_key(src)
+        for tgt in targets:
+            uf.union(src_key, _sax_ref_key(tgt))
+
+    for entry in net.get("nets", []):
+        uf.union(_sax_ref_key(entry["p1"]), _sax_ref_key(entry["p2"]))
+
+    reachable = {uf.find(root) for root in port_roots}
+
+    def _is_live(key: str) -> bool:
+        return uf.find(key) in reachable
+
+    unreachable = {name for name in net.get("instances", {}) if not _is_live(name)}
+
+    if not unreachable:
+        return net
+
+    pruned = dict(net)
+    pruned["instances"] = {k: v for k, v in net["instances"].items() if k not in unreachable}
+    if "connections" in net:
+        # Filtered by the *root* of the source key (not "is this an instance
+        # name in `unreachable`"), so a connection off a hierarchy-stub hub
+        # label (e.g. "n1,p1": ("X1,p1", "X2,p1")) is dropped too when that
+        # hub's whole clique is unreachable — not just the instances in it.
+        pruned["connections"] = {src: targets for src, targets in net["connections"].items() if _is_live(_sax_ref_key(src))}
+    if "nets" in net:
+        pruned["nets"] = [entry for entry in net["nets"] if _is_live(_sax_ref_key(entry["p1"]))]
+    return pruned
+
+
+class _UnionFind:
+    """Minimal union-find over string keys, local to reachability walks."""
+
+    def __init__(self) -> None:
+        self._parent: dict[str, str] = {}
+
+    def find(self, x: str) -> str:
+        if x not in self._parent:
+            self._parent[x] = x
+        while self._parent[x] != x:
+            self._parent[x] = self._parent[self._parent[x]]
+            x = self._parent[x]
+        return x
+
+    def union(self, a: str, b: str) -> None:
+        ra, rb = self.find(a), self.find(b)
+        if ra != rb:
+            self._parent[ra] = rb
+
+
+def _kfnetlist_member_key(member: kfnl.PortRef | kfnl.NetlistPort) -> str:
+    """Union-find key for a net member: the owning instance, or the port name."""
+    if isinstance(member, kfnl.PortRef):
+        return member.instance
+    return f"\0port\0{member.name}"
+
+
+def _drop_kfnetlist_instances(nl: kfnl.Netlist, names: set[str]) -> kfnl.Netlist:
+    """Remove *names* from a copy of *nl*, along with any now-empty nets."""
+    pruned = kfnl.Netlist.from_dict(nl.to_dict())
+    pruned.remove_instances(sorted(names))
+    cleaned = pruned.to_dict()
+    cleaned["nets"] = [n for n in cleaned["nets"] if n]
+    return kfnl.Netlist.from_dict(cleaned)
+
+
+def _prune_unreachable_kfnetlist(nl: kfnl.Netlist) -> kfnl.Netlist:
+    """kfnetlist-native half of :func:`prune_unreachable_instances`."""
+    # sax_to_kfnetlist synthesizes a top-level port (named "inst,port") for
+    # any connection that targets an unknown instance — a hierarchy-stub
+    # label, not something the original netlist actually declared as a port.
+    # If every port on `nl` looks synthetic, treat it the same as "no ports"
+    # rather than pruning against those stub labels.
+    if not nl.ports or all("," in p.name for p in nl.ports):
+        return nl
+
+    uf = _UnionFind()
+    port_roots = {_kfnetlist_member_key(p) for p in nl.ports}
+    for root in port_roots:
+        uf.find(root)
+
+    for net in nl.nets:
+        keys = [_kfnetlist_member_key(m) for m in net]
+        for a, b in itertools.pairwise(keys):
+            uf.union(a, b)
+
+    reachable = {uf.find(root) for root in port_roots}
+    unreachable = {name for name in nl.instances if uf.find(name) not in reachable}
+
+    if not unreachable:
+        return nl
+    return _drop_kfnetlist_instances(nl, unreachable)
 
 
 # ---------------------------------------------------------------------------
