@@ -12,7 +12,7 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.components.base_component import PhysicsReturn, Signals
-from circulax.netlist import build_net_map_kfnetlist, sax_to_kfnetlist
+from circulax.netlist import build_net_map_kfnetlist, prune_unreachable_instances, sax_to_kfnetlist
 
 try:
     from bosdi.circulax import _BOSDI_AVAILABLE, OsdiComponentGroup, OsdiModelDescriptor
@@ -210,6 +210,11 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
     models_map = {k: _maybe_normalize(k, v) for k, v in models_map.items() if k not in _RESERVED}
 
     # --- 1. Normalize to kfnetlist.Netlist ---
+    # Pruned before the dict -> kfnetlist conversion so the "no declared
+    # ports" guard sees the netlist's own ports, not the synthetic top-level
+    # ports sax_to_kfnetlist adds for cross-hierarchy stub references.
+    netlist = prune_unreachable_instances(netlist)
+
     settings_override: dict[str, dict[str, Any]] = {}
     if isinstance(netlist, dict):
         netlist, settings_override = sax_to_kfnetlist(netlist)

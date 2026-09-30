@@ -9,6 +9,7 @@ from circulax.netlist import (
     build_net_map_kfnetlist,
     flatten_recursive_netlist,
     netlist,
+    prune_unreachable_instances,
     sax_to_kfnetlist,
 )
 from circulax.netlist import circulaxNetlist as Netlist
