@@ -24,6 +24,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 - Unify component signals and inline delays ([`e3397fe`](https://github.com/gdsfactory/circulax/commit/e3397fe5d0c0db49280fc1339c568901adfefd73))
 - Stabilize Circuit return types and add explicit SAX export API ([`0645976`](https://github.com/gdsfactory/circulax/commit/064597699b24fe1e4b0252238b713ba8b1a032a2))
+- **deps**: Pin core dependencies with compatible ceilings aligned to sax 0.18.2 ([`5be4095`](https://github.com/gdsfactory/circulax/commit/5be40953c6b211374f9d402e1cfc0b2f30f5b838))
 
 ### Documentation
 

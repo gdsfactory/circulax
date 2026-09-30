@@ -45,6 +45,7 @@ commit_parsers = [
   { message = "^fix",      group = "Fixed"      },
   { message = "^refactor", group = "Changed"    },
   { message = "^perf",     group = "Changed"    },
+  { message = "^build[(]deps[)]", group = "Changed" },
   { message = "^docs",     group = "Documentation" },
   { message = "^test",     group = "Testing",   skip = true },
   { message = "^chore",    skip = true          },
