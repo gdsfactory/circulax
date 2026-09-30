@@ -30,7 +30,6 @@ import jax.numpy as jnp
 from circulax.components.base_component import (
     PhysicsReturn,
     Signals,
-    States,
     component,
 )
 
@@ -38,7 +37,6 @@ from circulax.components.base_component import (
 @component(ports=("D", "G", "S", "B"))
 def MosfetSimple(
     signals: Signals,
-    s: States,
     # Sign convention: +1 for NMOS, −1 for PMOS (PSP103 TYPE parameter).
     type: float = 1.0,
     # Geometry.
@@ -48,11 +46,11 @@ def MosfetSimple(
     # scripts/fit_mosfet_params.py at Vds=1.0/Vgs=0.7, Vds=0.6/Vgs=1.2,
     # Vds=0.6/Vgs=0.3 biases; within 13 % of PSP103 on all three).
     Vt: float = 0.171,
-    KP: float = 530e-6,       # A/V²  NMOS fit; PMOS ≈ 590e-6
-    LAMBDA: float = 0.0,      # 1/V channel-length modulation (fit picked 0)
-    THETA: float = 0.0,       # 1/V mobility degradation (fit picked 0)
+    KP: float = 530e-6,  # A/V²  NMOS fit; PMOS ≈ 590e-6
+    LAMBDA: float = 0.0,  # 1/V channel-length modulation (fit picked 0)
+    THETA: float = 0.0,  # 1/V mobility degradation (fit picked 0)
     # Sub-threshold smoothing (soft step near Vt).
-    N_SMOOTH: float = 0.04,   # V — softplus scale; smaller → sharper transition
+    N_SMOOTH: float = 0.04,  # V — softplus scale; smaller → sharper transition
     # Gate capacitance (Meyer-like, single-piece).  8.5e-3 F/m² ≈ 4 nm oxide;
     # empirically tuned so the 9-stage ring oscillates near PSP103's 289 MHz
     # with the calibrated Id above.  Real PSP103 Cox (TOXO=1.5 nm) is higher
@@ -85,8 +83,8 @@ def MosfetSimple(
     Vgs_eff = N_SMOOTH * jnn.softplus((Vgs - Vt) / N_SMOOTH)
 
     # tanh-smoothed saturation (0 → 1 as Vds grows past Vdsat ≈ Vgs_eff).
-    Vdsat_plus = Vgs_eff + 1e-3                   # avoid /0 near cutoff
-    sat_ramp = jnp.tanh(Vds / Vdsat_plus)         # smooth linear→sat
+    Vdsat_plus = Vgs_eff + 1e-3  # avoid /0 near cutoff
+    sat_ramp = jnp.tanh(Vds / Vdsat_plus)  # smooth linear→sat
 
     # Canonical strong-inversion sat current with channel-length modulation
     # and mobility-degradation factor 1/(1+THETA·Vgs_eff).
@@ -112,10 +110,10 @@ def MosfetSimple(
 
     # KCL currents at each port: drain sinks I_ds, source sources it, gate/bulk zero DC.
     f = {
-        "D":  I_ds,
-        "G":  jnp.zeros_like(I_ds),
+        "D": I_ds,
+        "G": jnp.zeros_like(I_ds),
         "S": -I_ds,
-        "B":  jnp.zeros_like(I_ds),
+        "B": jnp.zeros_like(I_ds),
     }
     q = {
         "D": Q_D,

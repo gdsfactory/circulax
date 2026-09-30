@@ -4,6 +4,7 @@ Replaces the old Unix-only:
   find examples -name '*.ipynb' ... | xargs -P4 -I NB papermill NB NB -k circulax
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,10 +19,7 @@ except ImportError:
 _NEEDS_OSDI = {"ring_oscillator_osdi.ipynb", "05_psp103_ring_param_fitting.ipynb"}
 
 ROOT = Path(__file__).parent.parent
-notebooks = sorted(
-    p for p in (ROOT / "examples").rglob("*.ipynb")
-    if ".ipynb_checkpoints" not in p.parts
-)
+notebooks = sorted(p for p in (ROOT / "examples").rglob("*.ipynb") if ".ipynb_checkpoints" not in p.parts)
 
 if not notebooks:
     print("No notebooks found in examples/")
@@ -37,11 +35,14 @@ if skipped:
 
 print(f"Running {len(to_run)} notebooks…")
 failed = []
+notebook_env = os.environ.copy()
+notebook_env.setdefault("JAX_PLATFORMS", "cpu")
 for nb in to_run:
     print(f"  {nb.relative_to(ROOT)}")
     result = subprocess.run(
         [sys.executable, "-m", "papermill", str(nb), str(nb), "-k", "circulax"],
         check=False,
+        env=notebook_env,
     )
     if result.returncode != 0:
         failed.append(nb)

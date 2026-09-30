@@ -29,7 +29,6 @@ import pytest
 
 from circulax.components.base_component import (
     Signals,
-    States,
     component,
 )
 
@@ -45,7 +44,7 @@ def test_existing_component_without_init_still_works() -> None:
     """Components without an ``init`` arg behave exactly as before."""
 
     @component(ports=("p1", "p2"))
-    def PlainResistor(signals: Signals, s: States, R: float = 1.0):  # noqa: N802
+    def PlainResistor(signals: Signals, R: float = 1.0):  # noqa: N802
         i = (signals.p1 - signals.p2) / R
         return {"p1": i, "p2": -i}, {}
 
@@ -67,7 +66,7 @@ def test_setup_dict_return() -> None:
     """A component with ``init`` and a dict-returning ``.setup`` evaluates correctly."""
 
     @component(ports=("p1", "p2"))
-    def TempResistor(signals: Signals, s: States, init, R: float = 1.0, T: float = 300.0):  # noqa: N802
+    def TempResistor(signals: Signals, init, R: float = 1.0, T: float = 300.0):  # noqa: N802
         g = init["g"]
         i = g * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
@@ -90,7 +89,7 @@ def test_setup_via_solver_call() -> None:
     """The classmethod path (used by transient/dc solvers) injects init too."""
 
     @component(ports=("p1", "p2"))
-    def Foo(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def Foo(signals: Signals, init, R: float = 1.0):  # noqa: N802
         g = init["g"]
         i = g * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
@@ -115,7 +114,6 @@ def test_setup_via_solver_call() -> None:
 @component(ports=("in_", "thru", "drop"))
 def RingModulator(  # noqa: N802
     signals: Signals,
-    s: States,
     init,
     kappa: float = 0.3,
     neff: float = 2.4,
@@ -176,7 +174,7 @@ def test_grad_through_setup_matches_finite_difference() -> None:
     """
 
     @component(ports=("p1", "p2"))
-    def G(signals: Signals, s: States, init, R: float = 1.0, T: float = 300.0):  # noqa: N802
+    def G(signals: Signals, init, R: float = 1.0, T: float = 300.0):  # noqa: N802
         g = init["g"]
         i = g * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
@@ -211,7 +209,7 @@ def test_grad_through_setup_with_jit() -> None:
     params must not sever AD when the param is differentiated."""
 
     @component(ports=("p1", "p2"))
-    def G(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def G(signals: Signals, init, R: float = 1.0):  # noqa: N802
         i = init["g"] * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
 
@@ -240,7 +238,7 @@ def test_re_registration_raises() -> None:
     """Registering ``.setup`` twice on the same class raises (catches typos)."""
 
     @component(ports=("p1", "p2"))
-    def H(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def H(signals: Signals, init, R: float = 1.0):  # noqa: N802
         return {"p1": init["g"], "p2": -init["g"]}, {}
 
     @H.setup
@@ -258,7 +256,7 @@ def test_setup_returns_class_for_chaining() -> None:
     """``@MyComponent.setup`` returns the class so it can be chained."""
 
     @component(ports=("p1", "p2"))
-    def J(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def J(signals: Signals, init, R: float = 1.0):  # noqa: N802
         return {"p1": init["g"], "p2": -init["g"]}, {}
 
     def setup_fn(R: float = 1.0):
@@ -272,7 +270,7 @@ def test_setup_on_component_without_init_arg_raises() -> None:
     """Trying to register ``.setup`` on a component that lacks ``init`` raises."""
 
     @component(ports=("p1", "p2"))
-    def K(signals: Signals, s: States, R: float = 1.0):  # noqa: N802
+    def K(signals: Signals, R: float = 1.0):  # noqa: N802
         return {"p1": 1.0 / R, "p2": -1.0 / R}, {}
 
     with pytest.raises(TypeError, match="requires the physics function to declare"):
@@ -286,7 +284,7 @@ def test_setup_rejects_non_callable() -> None:
     """``.setup`` must be given a callable."""
 
     @component(ports=("p1", "p2"))
-    def L(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def L(signals: Signals, init, R: float = 1.0):  # noqa: N802
         return {"p1": init["g"], "p2": -init["g"]}, {}
 
     with pytest.raises(TypeError, match="expects a callable"):
@@ -302,7 +300,7 @@ def test_missing_setup_raises_at_eval() -> None:
     """A component with ``init`` but no registered ``.setup`` raises clearly."""
 
     @component(ports=("p1", "p2"))
-    def M(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def M(signals: Signals, init, R: float = 1.0):  # noqa: N802
         return {"p1": init["g"], "p2": -init["g"]}, {}
 
     inst = M(R=5.0)
@@ -320,7 +318,7 @@ def test_setup_returns_namedtuple() -> None:
     Cache = namedtuple("Cache", ["g"])  # noqa: PYI024
 
     @component(ports=("p1", "p2"))
-    def NT(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def NT(signals: Signals, init, R: float = 1.0):  # noqa: N802
         i = init.g * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
 
@@ -340,7 +338,7 @@ def test_setup_returns_eqx_module() -> None:
         g: jax.Array
 
     @component(ports=("p1", "p2"))
-    def EM(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def EM(signals: Signals, init, R: float = 1.0):  # noqa: N802
         i = init.g * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
 
@@ -357,7 +355,7 @@ def test_setup_returns_jnp_array() -> None:
     """A jnp.ndarray return is handed straight through; physics uses indexing."""
 
     @component(ports=("p1", "p2"))
-    def AR(signals: Signals, s: States, init, R: float = 1.0):  # noqa: N802
+    def AR(signals: Signals, init, R: float = 1.0):  # noqa: N802
         i = init[0] * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
 
@@ -379,7 +377,7 @@ def test_setup_fn_accepting_subset_of_params() -> None:
     """The setup function only needs to accept params it uses."""
 
     @component(ports=("p1", "p2"))
-    def S(signals: Signals, s: States, init, R: float = 1.0, T: float = 300.0, alpha: float = 1.0):  # noqa: N802
+    def S(signals: Signals, init, R: float = 1.0, T: float = 300.0, alpha: float = 1.0):  # noqa: N802
         i = init["g"] * (signals.p1 - signals.p2)
         return {"p1": i, "p2": -i}, {}
 

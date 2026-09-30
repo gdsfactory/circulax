@@ -47,6 +47,43 @@ from circulax.solvers.linear import (
 __all__ = ["setup_harmonic_balance"]
 
 
+def _periodic_delay_histories(
+    y_time: Array,
+    component_groups: dict,
+    fundamental: float,
+    *,
+    is_complex: bool,
+) -> dict[str, Array]:
+    """Return each delayed group's local waveform shifted by its fixed delay.
+
+    A periodic delay is diagonal in the Fourier basis. A full FFT is used so
+    this is also correct for complex envelopes, whose negative-frequency
+    coefficients need not be inferred from positive-frequency coefficients.
+    """
+    K, sys_size = y_time.shape
+    sample_dt = 1.0 / (fundamental * K)
+    bins = jnp.fft.fftfreq(K, d=sample_dt)
+    half_size = sys_size // 2 if is_complex else sys_size
+    histories: dict[str, Array] = {}
+
+    for key in sorted(component_groups):
+        group = component_groups[key]
+        if not getattr(group, "has_delay", False):
+            continue
+        tau = jax.vmap(group.tau_func)(group.params)
+        if is_complex:
+            local = y_time[:, group.var_indices] + 1j * y_time[:, group.var_indices + half_size]
+        else:
+            local = y_time[:, group.var_indices]
+
+        spectrum = jnp.fft.fft(local, axis=0)
+        phase = jnp.exp(-2j * jnp.pi * bins[:, None, None] * tau[None, :, None])
+        shifted = jnp.fft.ifft(spectrum * phase, axis=0)
+        histories[group.name] = shifted if is_complex else shifted.real
+
+    return histories
+
+
 def _hb_residual(
     y_time: Array,
     component_groups: dict,
@@ -82,7 +119,14 @@ def _hb_residual(
     # Evaluate (f, q) at all K time points simultaneously.
     # The dt argument is unused for residual-only assembly.
     assemble_fn = assemble_residual_only_complex if is_complex else assemble_residual_only_real
-    f_time, q_time = jax.vmap(lambda y_t, t: assemble_fn(y_t, component_groups, t, 1.0))(y_time, t_points)
+    f0 = omega / (2.0 * jnp.pi)
+    delay_hist = _periodic_delay_histories(y_time, component_groups, f0, is_complex=is_complex)
+    if delay_hist:
+        f_time, q_time = jax.vmap(lambda y_t, t, h: assemble_fn(y_t, component_groups, t, 1.0, delay_hist=h))(
+            y_time, t_points, delay_hist
+        )
+    else:
+        f_time, q_time = jax.vmap(lambda y_t, t: assemble_fn(y_t, component_groups, t, 1.0))(y_time, t_points)
     # f_time, q_time: shape (K, sys_size)
 
     # Transform to frequency domain.
@@ -101,20 +145,31 @@ def _hb_residual(
     fdomain_keys = [gk for gk in sorted(component_groups.keys()) if component_groups[gk].is_fdomain]
     if fdomain_keys:
         sys_size = y_time.shape[1]
-        f0 = omega / (2.0 * jnp.pi)
+        physical_size = sys_size // 2 if is_complex else sys_size
         freqs = jnp.arange(N_harm + 1, dtype=jnp.float64) * f0  # (N_harm+1,)
         y_freq = jnp.fft.rfft(y_time, axis=0)  # (N_harm+1, sys_size) complex
 
         for gk in fdomain_keys:
             group = component_groups[gk]
 
-            def _fdomain_contrib(v_k: jax.Array, f_k: float) -> jax.Array:
+            def _fdomain_contrib(v_k: jax.Array, f_k: float, _group=group) -> jax.Array:
                 """Compute f-domain current contribution at a single harmonic."""
-                v_ports = v_k[group.var_indices]  # (N, n_ports) complex
-                Y_mats = jax.vmap(lambda p: group.physics_func(f_k, p))(group.params)
-                i_ports = jnp.einsum("nij,nj->ni", Y_mats, v_ports)  # (N, n_ports) complex
+                Y_mats = jax.vmap(lambda p: _group.physics_func(f_k, p))(_group.params)
                 contrib = jnp.zeros(sys_size, dtype=jnp.complex128)
-                return contrib.at[group.eq_indices].add(i_ports)
+                if is_complex:
+                    # Each quadrature waveform has complex Fourier
+                    # coefficients. Apply the real 2x2 block representation
+                    # of complex multiplication without conflating the field
+                    # quadrature with Fourier phase.
+                    v_r = v_k[_group.var_indices]
+                    v_i = v_k[_group.var_indices + physical_size]
+                    i_r = jnp.einsum("nij,nj->ni", Y_mats.real, v_r) - jnp.einsum("nij,nj->ni", Y_mats.imag, v_i)
+                    i_i = jnp.einsum("nij,nj->ni", Y_mats.imag, v_r) + jnp.einsum("nij,nj->ni", Y_mats.real, v_i)
+                    return contrib.at[_group.eq_indices].add(i_r).at[_group.eq_indices + physical_size].add(i_i)
+
+                v_ports = v_k[_group.var_indices]
+                i_ports = jnp.einsum("nij,nj->ni", Y_mats, v_ports)
+                return contrib.at[_group.eq_indices].add(i_ports)
 
             fdomain_R_k = jax.vmap(_fdomain_contrib)(y_freq, freqs)  # (N_harm+1, sys_size)
             R_k = R_k + fdomain_R_k
@@ -168,9 +223,7 @@ def setup_harmonic_balance(
     t_points = jnp.linspace(0.0, 1.0 / freq, K, endpoint=False)
 
     _amplitude_tries: Array = (
-        amplitude_tries
-        if amplitude_tries is not None
-        else jnp.array([0.3, 0.7, 1.5, 3.0, 7.0, 20.0], dtype=jnp.float64)
+        amplitude_tries if amplitude_tries is not None else jnp.array([0.3, 0.7, 1.5, 3.0, 7.0, 20.0], dtype=jnp.float64)
     )
     _phase = 2.0 * jnp.pi * jnp.arange(K, dtype=jnp.float64) / K  # (K,)
 
@@ -209,9 +262,7 @@ def setup_harmonic_balance(
 
         def newton_step(y_flat: Array, grps: Any) -> Array:
             def _res(y: Array) -> Array:
-                return _hb_residual(
-                    y.reshape(K, sys_size), grps, t_points, omega, ground_indices, is_complex=is_complex
-                ).flatten()
+                return _hb_residual(y.reshape(K, sys_size), grps, t_points, omega, ground_indices, is_complex=is_complex).flatten()
 
             r = _res(y_flat)
             J = jax.jacobian(_res)(y_flat)
@@ -230,8 +281,12 @@ def setup_harmonic_balance(
             # only through explicit args; closure-captured variables give zero gradients.
             hb_solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
             sol = optx.fixed_point(
-                newton_step, hb_solver, y_flat, args=groups,
-                max_steps=max_steps, throw=False,
+                newton_step,
+                hb_solver,
+                y_flat,
+                args=groups,
+                max_steps=max_steps,
+                throw=False,
             )
             y_flat_sol = sol.value
             y_time_sol = y_flat_sol.reshape(K, sys_size)
@@ -243,9 +298,9 @@ def setup_harmonic_balance(
         # so low-amplitude starts converge to zero. Try several amplitudes and keep
         # the one with the largest fundamental — at least one will be above the basin.
         if osc_node is not None and y_flat_init is None:
+
             def _single_start(A: Array) -> tuple[Array, Array]:
-                y0 = (jnp.zeros(K * sys_size, dtype=jnp.float64)
-                      .at[jnp.arange(K) * sys_size + osc_node].set(A * jnp.sin(_phase)))
+                y0 = jnp.zeros(K * sys_size, dtype=jnp.float64).at[jnp.arange(K) * sys_size + osc_node].set(A * jnp.sin(_phase))
                 return _solve(y0)
 
             y_times, y_freqs = jax.vmap(_single_start)(_amplitude_tries)

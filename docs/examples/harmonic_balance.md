@@ -23,9 +23,6 @@ jax.config.update("jax_enable_x64", True)
 
 ```
 
-    WARNING:2026-06-24 18:01:35,444:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
-
 ---
 ## Part 1: Series LCR Resonator
 
@@ -427,10 +424,6 @@ print(f"y_time_fd shape: {y_time_fd.shape}")
     Time-domain LCR  →  system size = 6 variables  (nodes + i_L + i_src)
     F-domain LCR     →  system size = 5 variables  (nodes + i_src, no i_L state)
 
-
-
-    /home/cdaunt/code/circulax/circulax/circulax/circuit.py:468: UserWarning: Complex-mode auto-detection failed for group (TypeError('_build_fdomain_component.<locals>.solver_call() takes 3 positional arguments but 4 were given')); defaulting to real. Pass is_complex=True to compile_circuit() if this is a photonic/complex-valued circuit.
-      if _group_outputs_complex(group):
 
 
     DC operating point (f-domain): max|y_dc| = 0.00e+00 V

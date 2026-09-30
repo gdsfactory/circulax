@@ -21,7 +21,7 @@ Components are pure Python functions with a decorator. They are automatically co
 Every component computes the instantaneous balance equations for its ports and states:
 
 ```python
-def MyComponent(signals, s, [t], **params):
+def MyComponent(signals, [t], **params):
     # 1. Calculate physics
     # 2. Return (Flows, Storage)
 ```
@@ -32,13 +32,14 @@ def MyComponent(signals, s, [t], **params):
 
 ### Arguments
 
- 1) ```signals``` (Ports): A NamedTuple containing the potential (Voltage) at every port defined in the decorator. Accessed via dot notation (e.g., signals.p, signals.gate).
+ 1) ```signals```: A unified view of every port and internal state declared by
+ the decorator. Current values use attribute access (for example,
+ `signals.p1` or `signals.i_L`), and delayed values use
+ `signals.at_delay(tau)`.
 
- 2) ```s``` (States): A NamedTuple containing internal state variables (e.g., current through an inductor, internal node voltages).
+ 2) ```t``` (Time): Optional. Only present if you use the `@source` decorator.
 
- 3) ```t``` (Time): Optional. Only present if you use the @source decorator.
-
- 4) ```**params```: Keyword arguments defining the physical properties (Resistance, Length, Refractive Index).
+ 3) ```**params```: Keyword arguments defining the physical properties (Resistance, Length, Refractive Index).
 
 ### Return Values
 
@@ -48,7 +49,7 @@ The function must return a tuple of two dictionaries: ```(f_dict, q_dict)```.
 
     * For Ports: Represents the "Flow" (Current) entering the node.
 
-    * For States: Represents the algebraic constraint (should sum to 0).
+    * For internal state variables: Represents the algebraic constraint (should sum to 0).
 
 * ```q_dict``` (The Storage Vector):
 
@@ -66,10 +67,10 @@ For components that do not depend explicitly on time (resistors, transistors, di
 
 ```python
 import jax.numpy as jnp
-from circulax.components.base_component import component, Signals, States
+from circulax.components.base_component import component, Signals
 
 @component(ports=("p1", "p2"))
-def Resistor(signals: Signals, s: States, R: float = 1e3):
+def Resistor(signals: Signals, R: float = 1e3):
     """Ohm's Law: I = V / R"""
     i = (signals.p1 - signals.p2) / (R + 1e-12)
     return {"p1": i, "p2": -i}, {}
@@ -81,7 +82,7 @@ Reactive components use `q_dict` for the quantity differentiated with respect to
 
 ```python
 @component(ports=("p1", "p2"))
-def Capacitor(signals: Signals, s: States, C: float = 1e-12):
+def Capacitor(signals: Signals, C: float = 1e-12):
     """I = C * dV/dt  →  I = dQ/dt"""
     v_drop = signals.p1 - signals.p2
     q_val = C * v_drop
@@ -94,14 +95,14 @@ When a component requires a state variable not directly tied to a port voltage (
 
 ```python
 @component(ports=("p1", "p2"), states=("i_L",))
-def Inductor(signals: Signals, s: States, L: float = 1e-9):
+def Inductor(signals: Signals, L: float = 1e-9):
     """V = L * di/dt  →  flux φ = L * i_L"""
     v_drop = signals.p1 - signals.p2
     # f_dict: KCL at ports, algebraic constraint on i_L
     # q_dict: flux = L * i_L  →  solver computes V = dφ/dt
     return (
-        {"p1": s.i_L, "p2": -s.i_L, "i_L": v_drop},
-        {"i_L": -L * s.i_L},
+        {"p1": signals.i_L, "p2": -signals.i_L, "i_L": v_drop},
+        {"i_L": -L * signals.i_L},
     )
 ```
 
@@ -109,7 +110,7 @@ def Inductor(signals: Signals, s: States, L: float = 1e-9):
 
 ## `@source` — Time-Dependent Sources
 
-For components that vary with time (AC sources, pulse generators, modulated optical sources). Injects `t` as the third argument.
+For components that vary with time (AC sources, pulse generators, modulated optical sources). Injects `t` as the second argument.
 
 Voltage sources need an internal state `i_src` — the voltage is prescribed, so the current is the unknown.
 
@@ -119,7 +120,6 @@ from circulax.components.base_component import source
 @source(ports=("p1", "p2"), states=("i_src",))
 def VoltageSourceAC(
     signals: Signals,
-    s: States,
     t: float,
     V: float = 1.0,
     freq: float = 1e6,
@@ -128,7 +128,7 @@ def VoltageSourceAC(
     """Sinusoidal voltage source: V_s(t) = V · sin(2πf·t + φ)"""
     v_target = V * jnp.sin(2 * jnp.pi * freq * t + phase)
     constraint = (signals.p1 - signals.p2) - v_target
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 ```
 
 ---
@@ -137,11 +137,11 @@ def VoltageSourceAC(
 
 When a component has expensive derived quantities that depend only on a subset of its parameters (e.g. round-trip coefficients in a ring resonator), use `@Component.setup` to compute them separately. The setup function runs inside the JAX trace, so gradients flow through it.
 
-Declare `init` as the third positional argument in the physics function, then register a setup function:
+Declare `init` immediately after `signals`, then register a setup function:
 
 ```python
 @component(ports=("in_", "thru", "drop"))
-def RingMod(signals, s, init, kappa=0.3, neff=2.4, L=62.8, V_pi=2.0, V=0.0):
+def RingMod(signals, init, kappa=0.3, neff=2.4, L=62.8, V_pi=2.0, V=0.0):
     phi = init["phi"] * (1.0 + V / V_pi)
     # ... use init["a"], init["t"], phi in CMT equations
 
@@ -153,6 +153,33 @@ def _(kappa=0.3, neff=2.4, L=62.8):
 ```
 
 The setup function only needs to declare the parameters it uses — extra physics params are silently dropped. See the [Ring Modulator example](examples/ring_modulator.md) for a full worked example with gradient verification.
+
+---
+
+## Fixed propagation delay
+
+Use `signals.at_delay(tau)` to read every component-local port and state at
+`t - tau`. The delay is a non-negative duration in seconds and may depend on
+differentiable component parameters.
+
+```python
+@component(ports=("p1", "p2"), states=("a1", "a2"))
+def TransmissionLine(signals: Signals, tau: float = 1e-9, z0: float = 50.0):
+    past = signals.at_delay(tau)
+    b1 = past.a2
+    b2 = past.a1
+    return {
+        "p1": (signals.a1 - b1) / z0,
+        "p2": (signals.a2 - b2) / z0,
+        "a1": signals.p1 - signals.a1 - b1,
+        "a2": signals.p2 - signals.a2 - b2,
+    }, {}
+```
+
+The same declaration is interpreted as an identity at DC, accepted-history
+interpolation in transient analysis, and an exact spectral phase shift in AC
+and harmonic balance. A component may currently use one unique delay; reuse
+the returned snapshot when reading several values.
 
 ---
 
@@ -172,7 +199,7 @@ By default, components are marked `holomorphic=False`. This means any circuit co
 
 ```python
 @component(ports=("p1", "p2", "v_e"), states=("a", "i_out"))
-def RingModulator(signals, s, ...):
+def RingModulator(signals, ...):
     voltage = jnp.real(signals.v_e)  # non-holomorphic operation
     ...
 ```
@@ -183,7 +210,7 @@ When you know your component only uses holomorphic operations, set `holomorphic=
 
 ```python
 @component(ports=("p1", "p2"), holomorphic=True)
-def Resistor(signals, s, R=1e3):
+def Resistor(signals, R=1e3):
     i = (signals.p1 - signals.p2) / R
     return {"p1": i, "p2": -i}, {}
 ```
@@ -274,7 +301,6 @@ from circulax.s_transforms import s_to_y
 @component(ports=("p1", "p2"))
 def OpticalWaveguide(
     signals: Signals,
-    s: States,
     length_um: float = 100.0,
     neff: float = 2.4,
     wavelength_nm: float = 1310.0,
@@ -351,7 +377,7 @@ When you write:
 
 ```python
 @component(ports=("a", "b"))
-def MyResistor(signals, s, R=100.0):
+def MyResistor(signals, R=100.0):
 ```
 
 The decorator:

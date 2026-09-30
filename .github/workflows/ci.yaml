@@ -30,7 +30,7 @@ jobs:
   #       run: pixi run lint_format --check
 
   test:
-    name: "test / ${{ matrix.os }} / py${{ matrix.env }}"
+    name: "test / ${{ matrix.os }} / ${{ matrix.env }}"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

@@ -9,6 +9,7 @@ This notebook covers four progressively more complex analyses:
 
 - **Part 1 Optical impulse response**: Step-on/off pulse excites the ring, revealing the photon lifetime $\tau$.
 - **Part 2 Small-signal EO bandwidth (time-domain sweep)**: AC voltage drives a PN junction; transient simulation extracts the EO 3-dB bandwidth.
+- **Part 2b Small-signal EO bandwidth (AC analysis)**: Same bandwidth extracted via linearised AC analysis — one matrix solve per frequency, ~300× faster.
 - **Part 3 EO bandwidth via Harmonic Balance**: Same bandwidth measurement using `jax.vmap` over frequency in a single JIT call.
 - **Part 4 Large-signal NRZ eye diagram**: 128-bit PRBS pattern at 56 GBaud reveals ISI from photon-lifetime memory.
 - **Part 5 $V_\mathrm{bias}$ sweep via `jax.vmap`**: Four eye diagrams at different bias voltages, computed in a single vmapped transient call.
@@ -22,7 +23,7 @@ $$\frac{da}{dt} = -j\sqrt{\frac{2}{\tau_e}}\,E_i(t)
    - \frac{a(t)}{\tau}$$
 
 where $\Delta\omega = 2\pi(f_{\rm op} - f_r) + V_{\rm wr}\,V$ is the
-laser\u2013resonance detuning, and $1/\tau = 1/\tau_e + 1/\tau_l$ combines the
+laser–resonance detuning, and $1/\tau = 1/\tau_e + 1/\tau_l$ combines the
 coupling ($\tau_e$) and loss ($\tau_l$) photon lifetimes. The transmitted
 field is
 
@@ -37,7 +38,7 @@ The `RingModulator` component below carries two internal states:
 | `a`   | $j\sqrt{2/\tau_e}\,V_{p1} - j\Delta\omega\,a + a/\tau$ | $a$ | Ring energy ODE |
 | `i_out` | $V_{p2}-(V_{p1}-j\sqrt{2/\tau_e}\,a)$ | -- | Output field constraint |
 
-Port `p1` (input) contributes zero current \u2014 the ring is transparent at the
+Port `p1` (input) contributes zero current — the ring is transparent at the
 input (S11 = 0), so the source drives the input field directly. Port `p2`
 (output) is driven by the auxiliary state `i_out`, which enforces the output
 field relation algebraically.
@@ -58,14 +59,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from circulax import compile_circuit
-from circulax.components.base_component import PhysicsReturn, Signals, States, component, source
+from circulax.components.base_component import PhysicsReturn, Signals, component, source
 from circulax.components.electronic import Resistor
 
 jax.config.update("jax_enable_x64", True)
 ```
-
-    WARNING:2026-06-24 18:07:37,862:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-
 
 ## Component definitions
 
@@ -74,7 +72,6 @@ jax.config.update("jax_enable_x64", True)
 @source(ports=("p1", "p2"), states=("i_src",))
 def OpticalSourcePulseOnOff(
     signals: Signals,
-    s: States,
     t: float,
     power: float = 1.0,
     phase: float = 0.0,
@@ -103,13 +100,12 @@ def OpticalSourcePulseOnOff(
     sigmoid_off = jax.nn.sigmoid((t - t_off) / rise)
     amp = jnp.sqrt(power) * jnp.exp(1j * phase) * (sigmoid_on - sigmoid_off)
     constraint = (signals.p1 - signals.p2) - amp
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @component(ports=("p1", "p2"), states=("a", "i_out"))
 def RingModulator(
     signals: Signals,
-    s: States,
     ng: float = 3.8,
     L: float = 3.14159265e-5,
     gamma: float = 0.976,
@@ -167,18 +163,18 @@ def RingModulator(
     delta_omega = 2.0 * jnp.pi * (f_operating - f_resonance) + v_to_wr * voltage
 
     # Ring energy ODE RHS: da/dt = -j*coupling*E_i + j*delta_omega*a - a/tau
-    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * s.a - s.a / tau
+    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * signals.a - signals.a / tau
 
     # Output field from the ring: E_o = E_i - j*coupling*a
-    E_o_expected = signals.p1 - 1j * coupling * s.a
+    E_o_expected = signals.p1 - 1j * coupling * signals.a
 
     f = {
         "p1": 0.0 + 0.0j,  # ring is transparent at input (S11=0)
-        "p2": s.i_out,
+        "p2": signals.i_out,
         "i_out": signals.p2 - E_o_expected,  # enforce E_o = E_i - j*coupling*a
         "a": -rhs_a,  # ring energy ODE (negated RHS)
     }
-    q = {"a": s.a}
+    q = {"a": signals.a}
     return f, q
 ```
 
@@ -193,7 +189,7 @@ inside `.setup`.
 
 ```python
 @component(ports=("in_", "thru"))
-def RingMod(signals, s, init, kappa=0.3, neff=2.4, alpha=1e-3, L=..., V_pi=2.0, V=0.0):
+def RingMod(signals, init, kappa=0.3, neff=2.4, alpha=1e-3, L=..., V_pi=2.0, V=0.0):
     # init["a"], init["t"], init["phi"] were computed by the round-trip model below
     phi = init["phi"] * (1.0 + V / V_pi)
     H = (init["t"] - init["a"] * jnp.exp(1j * phi)) / (1 - init["t"] * init["a"] * jnp.exp(1j * phi))
@@ -221,7 +217,6 @@ The full runnable example and gradient tests are in `tests/test_setup_decorator.
 @component(ports=("in_", "thru"))
 def RingModSetup(
     signals: Signals,
-    s: States,
     init,
     kappa: float = 0.3,
     neff: float = 2.4,
@@ -537,8 +532,8 @@ print(f"Analytic  steady-state |T|: {T_ss:.3f}")
 > **Note — time-domain is overkill here.**
 > A proper small-signal AC analysis or a Harmonic Balance (HB) solver would
 > extract the EO frequency response in a single solve at each frequency, without
-> integrating through many AC periods.  circulax already has a Harmonic Balance
-> solver and small-signal AC analysis is a planned feature.
+> integrating through many AC periods.  circulax has both: see **Part 2b** (AC
+> analysis) and **Part 3** (Harmonic Balance) below.
 > The purpose of this section is to verify that the **time-domain DAE equations
 > are equivalent** to the analytic transfer function — i.e. the equations are
 > correct — not to advocate transient simulation as the right tool for bandwidth
@@ -571,7 +566,6 @@ from circulax.components.electronic import Capacitor
 @source(ports=("p1", "p2"), states=("i_src",))
 def OpticalSourceStep(
     signals: Signals,
-    s: States,
     t: float,
     power: float = 1.0,
     phase: float = 0.0,
@@ -579,13 +573,12 @@ def OpticalSourceStep(
     """Constant-amplitude optical CW source (always on, no time dependence)."""
     amp = jnp.sqrt(power) * jnp.exp(1j * phase)
     constraint = (signals.p1 - signals.p2) - amp
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @source(ports=("p1", "p2"), states=("i_src",))
 def BiasedACSource(
     signals: Signals,
-    s: States,
     t: float,
     V_bias: float = -2.0,
     V_ac: float = 0.1,
@@ -604,13 +597,12 @@ def BiasedACSource(
     ac_enable = jax.nn.sigmoid((t - t_ac_start) / rise_ac)
     v_total = V_bias + v_ac * ac_enable
     constraint = (signals.p1 - signals.p2) - v_total
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 @component(ports=("p1", "p2", "v_e"), states=("a", "i_out"))
 def RingModulatorEO(
     signals: Signals,
-    s: States,
     ng: float = 3.8,
     L: float = 3.14159265e-5,
     gamma: float = 0.976,
@@ -640,17 +632,17 @@ def RingModulatorEO(
 
     delta_omega = 2.0 * jnp.pi * (f_operating - f_resonance) + v_to_wr * voltage
 
-    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * s.a - s.a / tau
-    E_o_expected = signals.p1 - 1j * coupling * s.a
+    rhs_a = -1j * coupling * signals.p1 + 1j * delta_omega * signals.a - signals.a / tau
+    E_o_expected = signals.p1 - 1j * coupling * signals.a
 
     f = {
         "p1": 0.0 + 0.0j,
-        "p2": s.i_out,
+        "p2": signals.i_out,
         "v_e": 0.0 + 0.0j,  # high-impedance electrical port
         "i_out": signals.p2 - E_o_expected,
         "a": -rhs_a,
     }
-    q = {"a": s.a}
+    q = {"a": signals.a}
     return f, q
 ```
 
@@ -916,6 +908,191 @@ plt.show()
 
 
 ---
+## Part 2b: EO Bandwidth via AC Small-Signal Analysis
+
+The transient sweep in Part 2 runs one simulation per frequency — each
+integrating through many AC periods to reach steady state.
+**AC small-signal analysis** achieves the same result by linearising the DAE
+at the DC operating point and solving
+$Y(j\omega)\,\delta\mathbf{v} = \mathbf{b}$
+at each frequency — one matrix factorisation per frequency, no time stepping.
+
+### Why the 2N block system?
+
+The ring modulator reads the electrical voltage via `jnp.real(v_e)`, which is
+a **non-holomorphic** operation: it treats the real and imaginary parts of the
+complex port voltage differently.  This means the optical field perturbation
+$\delta E$ and its conjugate $\delta E^*$ respond differently to a real
+voltage perturbation, and the power modulation
+$\delta |E|^2 \approx 2\,\mathrm{Re}(E_{\rm dc}^*\,\delta E)$
+depends on both.
+
+The standard N×N complex (Wirtinger) AC system captures only $\delta E$; to
+recover $\delta E^*$ as well, we use the full $2N \times 2N$ real-block system,
+which splits the Jacobian into four blocks (RR, RI, IR, II) and solves for
+both $\delta y_R$ and $\delta y_I$ simultaneously.  From these, the power
+modulation amplitude at the output is:
+
+$$\Delta P(\omega) = \bigl|E_{\rm dc}^*\,H_+(\omega)
+  + E_{\rm dc}\,H_-^*(\omega)\bigr|$$
+
+where $H_+ = \delta y_R + j\,\delta y_I$ and
+$H_-^* = \delta y_R - j\,\delta y_I$ at the output node.
+
+
+```python
+import time
+
+from circulax.solvers.assembly import assemble_system_complex
+from circulax.solvers.linear import GROUND_STIFFNESS, _build_index_arrays
+
+# ── Extract G and C Jacobian blocks at the DC operating point ─────────────
+groups = circuit_ss.groups
+N = circuit_ss.sys_size
+pmap = circuit_ss.port_map
+
+# Two evaluations with different alpha extract G and C separately:
+#   alpha=0 → G blocks only;  alpha=1, dt=1 → G + C blocks
+_, _, jac_g = assemble_system_complex(y0_ss, groups, t1=0.0, dt=1.0, alpha=0.0)
+_, _, jac_gc = assemble_system_complex(y0_ss, groups, t1=0.0, dt=1.0, alpha=1.0)
+jac_c = jac_gc - jac_g  # C = (G + C) − G
+
+# COO indices (N-sized) and split into RR/RI/IR/II blocks
+rows_n, cols_n, gidxs_n, _ = _build_index_arrays(groups, N, is_complex=False)
+total_nnz = len(rows_n)
+G_blocks = [jac_g[i * total_nnz : (i + 1) * total_nnz] for i in range(4)]
+C_blocks = [jac_c[i * total_nnz : (i + 1) * total_nnz] for i in range(4)]
+
+rows_j = jnp.array(rows_n)
+cols_j = jnp.array(cols_n)
+gidxs_2N = jnp.concatenate([jnp.array(gidxs_n), jnp.array(gidxs_n) + N])
+
+# Forcing: unit voltage perturbation at the source constraint equation
+drive_idx = pmap["Vsrc,i_src"]
+probe_idx = pmap["out"]
+E_dc_ac = y0_ss[probe_idx] + 1j * y0_ss[probe_idx + N]
+rhs_2N = jnp.zeros(2 * N, dtype=jnp.complex128).at[drive_idx].set(1.0)
+
+# Block offsets: RR=(0,0), RI=(0,N), IR=(N,0), II=(N,N)
+_offsets = jnp.array([[0, 0], [0, N], [N, 0], [N, N]])
+
+
+def eo_power_mod(f):
+    """Solve the 2N block system at frequency f, return power modulation amplitude."""
+    w = 2.0 * jnp.pi * f
+    Y = jnp.zeros((2 * N, 2 * N), dtype=jnp.complex128)
+    for k in range(4):
+        ro, co = _offsets[k]
+        Y = Y.at[rows_j + ro, cols_j + co].add(
+            (G_blocks[k] + 1j * w * C_blocks[k]).astype(jnp.complex128)
+        )
+    Y = Y.at[gidxs_2N, gidxs_2N].add(GROUND_STIFFNESS)
+    x = jnp.linalg.solve(Y, rhs_2N)
+    dy_R, dy_I = x[:N], x[N:]
+    H_plus = dy_R[probe_idx] + 1j * dy_I[probe_idx]
+    H_minus_conj = dy_R[probe_idx] - 1j * dy_I[probe_idx]
+    return jnp.abs(jnp.conj(E_dc_ac) * H_plus + E_dc_ac * H_minus_conj)
+
+
+# ── Sweep all frequencies in a single JIT call ───────────────────────────
+freqs_hz_ac = jnp.array(freqs_GHz * 1e9)
+
+t0_ac = time.perf_counter()
+dP_ac = jax.jit(jax.vmap(eo_power_mod))(freqs_hz_ac)
+dP_ac.block_until_ready()
+t_ac_jit = time.perf_counter() - t0_ac
+
+# Warm run (JIT already compiled)
+t0_ac2 = time.perf_counter()
+dP_ac2 = jax.jit(jax.vmap(eo_power_mod))(freqs_hz_ac)
+dP_ac2.block_until_ready()
+t_ac_warm = time.perf_counter() - t0_ac2
+
+dP_ac_norm = np.array(dP_ac / dP_ac[0])
+dP_ac_dB = 20.0 * np.log10(dP_ac_norm)
+
+print(f"AC sweep: {len(freqs_GHz)} frequencies")
+print(f"  JIT compile + run : {t_ac_jit * 1e3:.0f} ms")
+print(f"  Warm run           : {t_ac_warm * 1e3:.1f} ms")
+```
+
+    AC sweep: 10 frequencies
+      JIT compile + run : 124 ms
+      Warm run           : 136.1 ms
+
+
+
+```python
+fig, ax = plt.subplots(figsize=(9, 5))
+
+ax.plot(
+    freqs_GHz,
+    amps_dB,
+    "o-",
+    ms=7.5,
+    linewidth=2.0,
+    zorder=3,
+    label="Transient (Part 2)",
+)
+ax.plot(
+    freqs_GHz,
+    dP_ac_dB,
+    "s--",
+    ms=6,
+    linewidth=1.5,
+    zorder=4,
+    color="tab:green",
+    label=f"AC analysis ({t_ac_warm * 1e3:.0f} ms, one JIT call)",
+)
+ax.plot(freqs_GHz, H_dB, "w-", linewidth=2.0, alpha=0.7, label="Analytic: RC × optical")
+ax.plot(
+    freqs_GHz,
+    H_opt_dB,
+    ":",
+    linewidth=2.0,
+    alpha=0.6,
+    label=r"Optical alone: $(j\omega\!+\!2/\tau_l)/(…)$",
+)
+ax.plot(
+    freqs_GHz,
+    H_RC_dB,
+    ":",
+    linewidth=2.0,
+    alpha=0.6,
+    label=f"RC alone  [$f_{{RC}}$ = {f_RC / 1e9:.0f} GHz]",
+)
+
+ax.axhline(-3.0, color="gray", linestyle=":", linewidth=0.9, label="−3 dB")
+
+ax.set_xlabel("Modulation frequency (GHz)")
+ax.set_ylabel("Normalised EO response (dB)")
+ax.set_title(
+    f"Part 2b — AC analysis vs transient vs analytic  "
+    f"($V_{{bias}}$={V_bias:.0f} V, $\\Delta\\omega\\cdot\\tau$={delta_omega_dc * tau:.1f})"
+)
+ax.set_xlim(freqs_GHz[0], freqs_GHz[-1])
+ax.set_ylim(-15.0, 12.0)
+ax.legend(fontsize=8, loc="lower left")
+fig.tight_layout()
+plt.show()
+
+# ── Numerical comparison ──────────────────────────────────────────────────
+max_err = np.max(np.abs(dP_ac_dB - amps_dB))
+print(f"Max |AC − transient| : {max_err:.2f} dB")
+print(f"Max |AC − analytic|  : {np.max(np.abs(dP_ac_dB - H_dB)):.2f} dB")
+```
+
+
+
+![png](ring_modulator_files/ring_modulator_23_0.png)
+
+
+
+    Max |AC − transient| : 0.00 dB
+    Max |AC − analytic|  : 0.00 dB
+
+
+---
 ## Part 3: EO Bandwidth via Harmonic Balance
 
 The transient sweep above runs independent simulations — one per frequency.
@@ -951,7 +1128,6 @@ amps_hb = jax.jit(jax.vmap(hb_sweep_point))(sweep_freqs)
 @source(ports=("p1", "p2"), states=("i_src",))
 def BiasedSinSource(
     signals: Signals,
-    s: States,
     t: float,
     V_bias: float = -2.0,
     V_ac: float = 0.1,
@@ -963,7 +1139,7 @@ def BiasedSinSource(
     :class:`BiasedACSource` with the AC component disabled.
     """
     v = V_bias + V_ac * jnp.sin(2.0 * jnp.pi * freq * t)
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": (signals.p1 - signals.p2) - v}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": (signals.p1 - signals.p2) - v}, {}
 
 
 models_map_hb = {
@@ -1073,7 +1249,7 @@ print(f"P_out oscillation amplitude: {amp_demo:.4e} W  (peak-to-peak power modul
 
 
 
-![png](ring_modulator_files/ring_modulator_23_1.png)
+![png](ring_modulator_files/ring_modulator_26_1.png)
 
 
 
@@ -1167,7 +1343,7 @@ for f, a_tr, a_hb, a_an in zip(freqs_GHz[::5], amps_dB[::5], amps_hb_dB[::5], H_
 
 
 
-![png](ring_modulator_files/ring_modulator_24_2.png)
+![png](ring_modulator_files/ring_modulator_27_2.png)
 
 
 
@@ -1190,7 +1366,7 @@ and distortion that the frequency response alone cannot capture:
    $\tau \approx 7.3\,\text{ps}$, comparable to the 56 GBaud bit period
    $T_{\rm bit} \approx 17.9\,\text{ps}$ (ratio $T_{\rm bit}/\tau \approx 2.4$).
    Consecutive bits see different initial ring states — a "1" after many "0"s opens
-   differently from a "1" after many "1"s. The electrical RC bandwidth is set to
+   differently from a "1" after many "1"signals. The electrical RC bandwidth is set to
    $f_{\rm RC} \approx 72\,\text{GHz} \gg f_{\rm opt} \approx 22\,\text{GHz}$
    so the photon lifetime is the sole bandwidth-limiting mechanism.
 
@@ -1214,7 +1390,6 @@ pattern.
 @source(ports=("p1", "p2"), states=("i_src",))
 def NRZSource(
     signals: Signals,
-    s: States,
     t: float,
     V_low: float = -2.5,
     V_high: float = -1.5,
@@ -1237,7 +1412,7 @@ def NRZSource(
     v_norm = jnp.sum(delta_bits * jax.nn.sigmoid((t - bit_times) / rise))
     v = V_low + (V_high - V_low) * v_norm
     constraint = (signals.p1 - signals.p2) - v
-    return {"p1": s.i_src, "p2": -s.i_src, "i_src": constraint}, {}
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
 # ── NRZ signal parameters ──────────────────────────────────────────────────────
@@ -1494,13 +1669,13 @@ plt.show()
 
 
 
-![png](ring_modulator_files/ring_modulator_28_0.png)
+![png](ring_modulator_files/ring_modulator_31_0.png)
 
 
 
 
 
-![png](ring_modulator_files/ring_modulator_28_1.png)
+![png](ring_modulator_files/ring_modulator_31_1.png)
 
 
 
@@ -1605,4 +1780,4 @@ plt.show()
 
 
 
-![png](ring_modulator_files/ring_modulator_31_0.png)
+![png](ring_modulator_files/ring_modulator_34_0.png)

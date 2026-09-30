@@ -20,33 +20,16 @@ import re
 from functools import cache
 from pathlib import Path
 
-PSP103_OSDI = str(
-    Path(__file__).resolve().parents[2]
-    / "circulax"
-    / "components"
-    / "osdi"
-    / "compiled"
-    / "psp103v4_psp103.osdi"
-)
+PSP103_OSDI = str(Path(__file__).resolve().parents[2] / "circulax" / "components" / "osdi" / "compiled" / "psp103v4_psp103.osdi")
 
-PSP103_MODELS_INC = Path(
-    "/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/models.inc"
-)
+PSP103_MODELS_INC = Path("/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/models.inc")
 
-PSP103_VA_SOURCE_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "circulax"
-    / "components"
-    / "osdi"
-    / "psp103v4"
-)
+PSP103_VA_SOURCE_DIR = Path(__file__).resolve().parents[2] / "circulax" / "components" / "osdi" / "psp103v4"
 PSP103_VA_SOURCE = PSP103_VA_SOURCE_DIR / "PSP103_module.include"
 
 
 _PARAM_DEF_RE = re.compile(r"`(?:MPR|MPI|IPR|IPI)\w*\(\s*(\w+)\s*,\s*([^,\)]+)")
-_MODEL_BLOCK_RE = re.compile(
-    r"model\s+(\S+)\s+psp103va\s*\((?P<body>[^)]*)\)", re.DOTALL
-)
+_MODEL_BLOCK_RE = re.compile(r"model\s+(\S+)\s+psp103va\s*\((?P<body>[^)]*)\)", re.DOTALL)
 _KV_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([+\-]?[\d.eE+\-]+)")
 
 
@@ -85,10 +68,7 @@ def _extract_va_defaults(path: Path, seen: set[str] | None = None) -> dict[str, 
 
 def _parse_models_inc() -> tuple[dict[str, float], dict[str, float]]:
     text = PSP103_MODELS_INC.read_text()
-    blocks = {
-        match.group(1): match.group("body")
-        for match in _MODEL_BLOCK_RE.finditer(text)
-    }
+    blocks = {match.group(1): match.group("body") for match in _MODEL_BLOCK_RE.finditer(text)}
     n = {k.upper(): _to_float(v) for k, v in _KV_RE.findall(blocks["psp103n"])}
     p = {k.upper(): _to_float(v) for k, v in _KV_RE.findall(blocks["psp103p"])}
     return n, p
@@ -140,9 +120,7 @@ def make_psp103_descriptors():
     return psp103n, psp103p
 
 
-def geom_settings(
-    w: float, length: float, ld: float = 0.5e-6, ls: float = 0.5e-6
-) -> dict[str, float]:
+def geom_settings(w: float, length: float, ld: float = 0.5e-6, ls: float = 0.5e-6) -> dict[str, float]:
     """Per-instance geometry settings matching VACASK's nmos/pmos subckt."""
     return {
         "W": w,

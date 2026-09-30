@@ -64,7 +64,7 @@ Common analyses use the same compiled object:
 ```python
 op = circuit.dc()
 op_sweep = circuit.dc(params={"R1.R": 20.0, "wavelength_nm": 1310.0})
-S = circuit.ac(ports=["C1,p1"], freqs=jnp.logspace(6, 10, 101), y_dc=op)
+S = circuit.sp(ports=["C1,p1"], freqs=jnp.logspace(6, 10, 101), y_dc=op)
 y_time, y_freq = circuit.hb(freq=1e6, harmonics=5, y0=op)
 v_out = circuit.port(op, "C1,p1")
 ```
@@ -117,6 +117,8 @@ Straight = sax_component(sax.models.straight)   # that's it — ready to simulat
 - **DC operating point** — Newton-Raphson root-finding via [Optimistix](https://github.com/patrick-kidger/optimistix).
 - **Harmonic Balance** — periodic steady state directly in the frequency domain.
 - **AC sweep** — linearise at DC op-point, sweep frequency, return S-parameters.
+- **S-parameter fitting** — fit sampled networks, validate the model, and build a simulation-ready circuit.
+- **Exact time delay** — use fixed propagation delays consistently in transient, AC, and harmonic balance.
 - **OSDI compact models** — load OpenVAF-compiled Verilog-A models through bosdi.
 - **Automatic differentiation** — differentiate through the solver for gradient-based inverse design.
 - **Hardware-agnostic** — CPU, GPU, or TPU with no code changes.

@@ -160,9 +160,8 @@ def test_sax_component_nested_partials() -> None:
 
 
 def test_sax_component_numeric_port_names_are_sanitized() -> None:
-    """Some SAX PDKs label ports numerically ('1', '2'); namedtuple field
-    names must be valid identifiers, so the decorator prefixes digits with
-    ``'p'``.
+    """Some SAX PDKs label ports numerically ('1', '2'); attribute names must
+    be valid identifiers, so the decorator prefixes digits with ``'p'``.
 
     Regression: previously raised ``ValueError: Type names and field names
     must be valid identifiers: '1'``.
