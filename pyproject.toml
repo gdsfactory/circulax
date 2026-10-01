@@ -48,7 +48,7 @@ netlists = [
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
 # so it stays on jax 0.7.2 until bosdi widens its compatibility.
 verilog-a = [
-    "bosdi @ git+https://github.com/gdsfactory/bosdi.git@9980da98f8248d701a168b6b2334d3c0ee84da5c",
+    "bosdi @ git+https://github.com/gdsfactory/bosdi.git@5595fc331e28dadadd8bbc1c0292c8e35f0e627f",
 ]
 docs = [
     "ipykernel>=6.29.5",
