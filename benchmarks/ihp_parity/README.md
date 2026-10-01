@@ -9,18 +9,23 @@ The runner and reader dependency are outside the installed Circulax package.
 
 ## Development installation
 
-Use Python 3.12 or 3.13, Rust, OpenVAF and a built VACASK installation.
+The existing `benchmark` environment uses Python 3.13 and contains the
+native integration dependencies plus the reference reader on Linux. Its own solve group keeps
+InSpice out of development and ordinary CI environments. Rust, OpenVAF and a built
+VACASK installation must be available separately.
 
 ```sh
-uv pip install -e '.[verilog-a,netlists]'
-uv pip install -r benchmarks/requirements-reference.txt
+pixi install -e benchmark
 ```
+
+Run the native integration checks with `pixi run -e benchmark native-tests`.
+Set `VACASK_MODULE_PATH` to the native module directory to include module-dependent checks.
 
 The NetlistParse dependency is temporarily pinned to the exact fork commit in
 [parser PR #6](https://github.com/NyanCAD/NetlistParse.rs/pull/6). The Verilog-A
 extra pins bosdi's setup, temperature, collapse and integral evaluation fixes to an exact development commit.
 These are source builds and require Rust and a C++ compiler. Installing the
-extras above includes the fixes; no manual patch or local checkout override is
+benchmark environment includes the fixes; no manual patch or local checkout override is
 needed. Replace these development pins with upstream releases once available.
 
 This exposes `parse_spectre(source)` and the explicit extension mode
@@ -43,7 +48,7 @@ Separate registrations of the same binary may use different temperatures.
 From the Circulax checkout:
 
 ```sh
-PYTHONPATH=. python benchmarks/ihp_parity/run.py \
+pixi run -e benchmark ihp-parity \
   --pdk /path/to/ihp-parity-pdk \
   --vacask /path/to/VACASK/build/simulator/vacask \
   --module-path /path/to/VACASK/build/lib/vacask/mod \

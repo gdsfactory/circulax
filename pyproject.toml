@@ -168,8 +168,10 @@ uv = ">=0.6"
 git-cliff = ">=2"
 schemdraw = ">=0.18"
 
-# Benchmark feature — NGSpice accuracy comparison
+# Benchmark feature — NGSpice and VACASK accuracy comparisons
 [tool.pixi.feature.benchmark.dependencies]
+# Keep typing_extensions explicitly requested when solving the mixed Conda/PyPI environment.
+typing_extensions = ">=4.13"
 scipy = ">=1.13"
 matplotlib = ">=3.9"
 tqdm = ">=4.67"
@@ -179,8 +181,16 @@ tqdm = ">=4.67"
 ngspice = "*"
 
 [tool.pixi.feature.benchmark.pypi-dependencies]
+pytest = ">=8"
 circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
+[tool.pixi.feature.benchmark.target.linux-64.pypi-dependencies]
+InSpice = ">=1.7.0.7"
+
+[tool.pixi.feature.benchmark.tasks]
+ihp-parity = { cmd = ["python", "-m", "benchmarks.ihp_parity.run"], description = "Compare IHP against native VACASK; supply simulator and PDK paths" }
+gf180-parity = { cmd = ["python", "-m", "benchmarks.gf180_parity.run"], description = "Compare GF180 compact-model cards against native VACASK" }
+native-tests = { cmd = ["pytest", "tests/netlist_io/test_osdi_analysis.py", "tests/netlist_io/test_osdi_compilation.py"], description = "Native OSDI compilation and public analysis tests" }
 
 # ---------------------------------------------------------------------------
 # Tasks
@@ -227,8 +237,8 @@ default = { features = ["py313", "dev"], solve-group = "py313" }
 py312 = { features = ["py312", "test"], solve-group = "py312" }
 py313 = { features = ["py313", "dev"],  solve-group = "py313" }
 
-# Benchmark environment — includes NGSpice for accuracy comparisons
-benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }
+# Benchmark environment — separate solve group keeps reference dependencies isolated
+benchmark = { features = ["py313", "benchmark"], solve-group = "benchmark" }
 
 # ---------------------------------------------------------------------------
 # Pytest

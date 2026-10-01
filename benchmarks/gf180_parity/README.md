@@ -53,17 +53,16 @@ paths, and DC/AC/transient modes in the integration branch. See bosdi PRs
 
 ## Reproduce
 
-From the Circulax integration checkout, using an environment with its Verilog-A
-extra installed, and the separate benchmark reader dependencies:
+From the Circulax integration checkout, install the existing benchmark environment. Its dependencies are isolated from development and normal CI:
 
 ```bash
-uv pip install -r benchmarks/requirements-reference.txt
+pixi install -e benchmark
 ```
 
 Then run:
 
 ```bash
-PYTHONPATH=. python benchmarks/gf180_parity/run.py \
+pixi run -e benchmark gf180-parity \
   --pdk /home/cdaunt/code/gdsfactory/pdks/gf180mcu \
   --vacask-root /home/cdaunt/code/vacask/VACASK \
   --output benchmarks/gf180_parity/results.json
@@ -76,7 +75,7 @@ compare one implementation against a different reference implementation.
 
 ```bash
 openvaf-r /path/to/photonflux/vendor/BSIM4/bsim4.va -o /tmp/cogenda-bsim4.osdi
-PYTHONPATH=. python benchmarks/gf180_parity/run.py \
+pixi run -e benchmark gf180-parity \
   --pdk /home/cdaunt/code/gdsfactory/pdks/gf180mcu \
   --vacask-root /home/cdaunt/code/vacask/VACASK \
   --model-osdi /tmp/cogenda-bsim4.osdi \
