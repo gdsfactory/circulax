@@ -134,7 +134,7 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
 
 
 def evaluate_source(expression: str, settings: dict[str, float]) -> float:
-    """Parse a schematic parameter expression using the same safe interpreter."""
+    """Parse a parameter expression using the same safe interpreter."""
     import netlist_parser
 
     from circulax.netlist_io.syntax import parameters

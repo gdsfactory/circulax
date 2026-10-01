@@ -154,3 +154,10 @@ def test_spice_quoted_model_expressions(tmp_path: Path) -> None:
     library = Library.from_file(card, dialect="spice")
     model, scope = library.frame.models["rm"]
     assert evaluate(parameters(model)["r"], scope) == 3000
+
+
+def test_literal_parameter_names_are_preserved(tmp_path: Path) -> None:
+    card = tmp_path / "names.lib"
+    card.write_text("model rm sp_resistor r=1k __cx_mfactor=7 $mfactor=2\nr1 (p 0) rm\n")
+    instance = Library.from_file(card).resolve().instances[0]
+    assert instance.parameters == {"r": 1000, "__cx_mfactor": 7, "$mfactor": 2}

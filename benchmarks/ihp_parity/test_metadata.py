@@ -14,6 +14,9 @@ def pdk() -> tuple[Path, ModuleType]:
     root = os.environ.get("IHP_PDK_ROOT")
     if not root:
         pytest.skip("set IHP_PDK_ROOT to test a real IHP checkout")
+    parser = pytest.importorskip("netlist_parser")
+    if not hasattr(parser, "parse_spectre"):
+        pytest.skip("NetlistParse Python Spectre binding is required")
     root = Path(root)
     spec = importlib.util.spec_from_file_location("ihp_circulax_adapter", root / "ihp/models/circulax.py")
     adapter = importlib.util.module_from_spec(spec)

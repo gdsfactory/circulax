@@ -1,4 +1,4 @@
-"""Scoped model-card loading and hierarchical VACASK circuit elaboration."""
+"""Scoped model-card loading and hierarchical circuit elaboration."""
 
 from __future__ import annotations
 
@@ -9,19 +9,6 @@ from typing import Any
 
 from circulax.netlist_io.expressions import Scope, evaluate
 from circulax.netlist_io.syntax import NetlistError, Statement, children, parameters, parse_file
-
-_KINDS = {
-    "ParamStatement",
-    "Model",
-    "Subckt",
-    "SubcktCall",
-    "IfBlock",
-    "IncludeStatement",
-    "LibInclude",
-    "LibStatement",
-    "HDLStatement",
-    "Global",
-}
 
 
 @dataclass(frozen=True)

@@ -33,7 +33,6 @@ def parameters(node: Any) -> dict[str, Any]:
     for p in children(node, "Parameter"):
         parts = children(p)
         name = parts[0].text
-        name = name.replace("__cx_mfactor", "$mfactor")
         if name in result:
             msg = f"duplicate parameter {name!r}"
             raise NetlistError(msg)
@@ -50,7 +49,7 @@ def parse_file(path: Path, dialect: str = "vacask") -> list[Statement]:
         if not hasattr(netlist_parser, "parse_spectre"):
             msg = (
                 "This library requires NetlistParse with the Python parse_spectre binding. "
-                "Build the accompanying NetlistParse.rs checkout with uv pip install ./crates/netlist-py."
+                "Install circulax[netlists] to obtain the supported parser binding."
             )
             raise ImportError(msg)
         root = netlist_parser.parse_spectre(text, vacask=dialect == "vacask")

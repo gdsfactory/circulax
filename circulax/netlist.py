@@ -113,9 +113,8 @@ def prune_unreachable_instances(netlist: kfnl.Netlist | dict) -> kfnl.Netlist | 
     (the first key); once it passes, every sub-netlist — top included — is
     pruned against its own declared ports with no further guard, so a
     sub-netlist with no ports of its own is emptied out entirely. This
-    matches ``sax.netlists.remove_unused_instances``, and the already-shipped
-    downstream fix in gdsfactoryplus#4883 relies on exactly this recursive
-    emptying for nested inert cells.
+    matches ``sax.netlists.remove_unused_instances`` and removes nested
+    inert cells consistently.
 
     Reimplemented natively here (rather than delegating to
     ``sax.netlists.remove_unused_instances``) because circulax's own
