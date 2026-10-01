@@ -7613,7 +7613,6 @@ packages:
   - papermill ; extra == 'docs'
   - pymdown-extensions ; extra == 'docs'
   - netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@cae4f10e53e756721bfd56e74ee716407de7b1e4#subdirectory=crates/netlist-py ; extra == 'netlists'
-  - inspice>=1.7.0.7 ; extra == 'vacask-reference'
   - bosdi @ git+https://github.com/gdsfactory/bosdi.git@57786d0d87ff9bcad55a4e04961055455a171501 ; extra == 'verilog-a'
   requires_python: '>=3.12'
 - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4

@@ -54,7 +54,13 @@ paths, and DC/AC/transient modes in the integration branch. See bosdi PRs
 ## Reproduce
 
 From the Circulax integration checkout, using an environment with its Verilog-A
-extra and InSpice installed:
+extra installed, and the separate benchmark reader dependencies:
+
+```bash
+uv pip install -r benchmarks/requirements-reference.txt
+```
+
+Then run:
 
 ```bash
 PYTHONPATH=. python benchmarks/gf180_parity/run.py \

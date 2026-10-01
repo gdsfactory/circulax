@@ -1,4 +1,4 @@
-"""Standalone VACASK reference runs, decoded using the app's InSpice dependency."""
+"""Benchmark-only VACASK reference runner and raw-output reader."""
 
 from __future__ import annotations
 

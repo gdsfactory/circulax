@@ -16,8 +16,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from benchmarks.utils.vacask_reference import run_vacask
 from circulax.netlist_io import Library
-from circulax.netlist_io.reference import run_vacask
 from circulax.solvers.assembly import assemble_gc_real, assemble_residual_only_real
 
 

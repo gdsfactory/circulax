@@ -3,15 +3,17 @@
 The standalone path is: original IHP native VACASK libraries → NetlistParse CST
 → Circulax lexical parameter scopes and wrapper elaboration → OpenVAF OSDI
 modules → bosdi → Circulax solvers. VACASK independently parses the original
-library for every reference run. InSpice's VACASK raw-file reader decodes results,
-matching the package used by the app. No application changes are included.
+library for every reference run. The benchmark-only runner in
+`benchmarks/utils/vacask_reference.py` uses InSpice to decode reference results.
+The runner and reader dependency are outside the installed Circulax package.
 
 ## Development installation
 
 Use Python 3.12 or 3.13, Rust, OpenVAF and a built VACASK installation.
 
 ```sh
-uv pip install -e '.[verilog-a,netlists,vacask-reference]'
+uv pip install -e '.[verilog-a,netlists]'
+uv pip install -r benchmarks/requirements-reference.txt
 ```
 
 The NetlistParse dependency is temporarily pinned to the exact fork commit in

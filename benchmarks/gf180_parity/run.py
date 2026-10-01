@@ -22,10 +22,10 @@ from osdi_jax import osdi_eval
 from osdi_loader import load_osdi_model
 
 from benchmarks.ihp_parity.run import compare
+from benchmarks.utils.vacask_reference import run_vacask
 from circulax.netlist_io import Library
 from circulax.netlist_io.expressions import Scope, evaluate
 from circulax.netlist_io.osdi import module_metadata
-from circulax.netlist_io.reference import run_vacask
 from circulax.netlist_io.syntax import children, parameters
 from circulax.solvers.assembly import assemble_gc_real, assemble_residual_only_real
 

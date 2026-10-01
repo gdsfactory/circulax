@@ -1,4 +1,4 @@
-"""NetlistParse-backed library loading, OSDI provisioning and reference runs."""
+"""NetlistParse-backed library loading and OSDI provisioning."""
 
 from circulax.netlist_io.library import Library, ResolvedCircuit, ResolvedInstance
 from circulax.netlist_io.syntax import NetlistError

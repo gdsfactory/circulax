@@ -44,7 +44,6 @@ dependencies = [
 netlists = [
     "netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@cae4f10e53e756721bfd56e74ee716407de7b1e4#subdirectory=crates/netlist-py",
 ]
-vacask-reference = ["InSpice>=1.7.0.7"]
 # bosdi caps jax<0.8, so the verilog-a extra constrains the core down from
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
 # so it stays on jax 0.7.2 until bosdi widens its compatibility.

@@ -1,0 +1,2 @@
+# Raw-file reader for standalone simulator comparisons; not a Circulax runtime dependency.
+InSpice>=1.7.0.7
