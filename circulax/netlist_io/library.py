@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,9 +40,11 @@ class ResolvedCircuit:
         backend: str = "dense",
         analysis: str = "dc",
         state_policy: str = "reject",
+        simparams: Mapping[str, float] | None = None,
     ) -> Any:
         """Compile with immutable native analysis mode: dc (default), ac, or tran.
 
+        simparams supplies numeric $simparam settings to all native devices.
         Separate registrations are required to change mode. For AC, retain
         DC conductance and obtain capacitance from an AC registration.
         """
@@ -55,6 +58,7 @@ class ResolvedCircuit:
             backend=backend,
             analysis=analysis,
             state_policy=state_policy,
+            simparams=simparams,
         )
 
 

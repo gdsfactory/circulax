@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -179,6 +180,7 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
     backend: str = "dense",
     analysis: str = "dc",
     state_policy: str = "reject",
+    simparams: Mapping[str, float] | None = None,
 ) -> Circuit:
     """Compile original model cards; reject runtime features bosdi cannot represent."""
     from bosdi.circulax import osdi_component
@@ -213,6 +215,7 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
                     temperature=resolved.temperature_c + 273.15,
                     analysis=analysis,
                     state_policy=state_policy,
+                    simparams=simparams,
                 )
             elif models[component].ports != names:
                 msg = f"{instance.name}: inconsistent terminal count for {module}"

@@ -365,6 +365,29 @@ PSP103 = osdi_component(
 )
 ```
 
+Simulator settings queried through Verilog-A `$simparam` are separate from device
+parameters. Supply finite numeric values when compiling the circuit:
+
+```python
+circuit = compile_circuit(
+    netlist,
+    models_map,
+    simparams={"scale": 2.0, "tnom": 27.0},
+)
+```
+
+These settings apply to all native OSDI devices and carry through DC, AC and
+transient analyses, including device parameter updates. `osdi_component(...,
+simparams={...})` can supply descriptor defaults; circuit-wide entries override
+matching defaults. `resolved.compile(simparams={...})` supports the same mapping
+for parsed netlists. Names are case-sensitive and omitted settings use the
+model's own defaults. Units follow the model's query (the SPICE `tnom` query
+uses degrees Celsius, while `temperature=` uses kelvin).
+
+The mapping is copied at registration. Recompile with another mapping to change
+settings; they are static configuration rather than differentiable device
+parameters. They do not change the host solver's `rtol`, `atol` or `g_leak`.
+
 OSDI models bypass the standard `@component` decorator — they are evaluated via FFI and use finite-difference sensitivities rather than AD. See the [OSDI Ring Oscillator](examples/ring_oscillator_osdi.md) and [PSP103 Parameter Fitting](examples/05_psp103_ring_param_fitting.md) examples.
 
 ---

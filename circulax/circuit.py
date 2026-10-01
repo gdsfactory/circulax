@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -644,6 +644,19 @@ def _embed_circuit_subcircuits(
     return recnet
 
 
+def _apply_native_simparams(models: dict, simparams: Mapping[str, float] | None) -> dict:
+    """Apply circuit-wide native settings without changing caller-owned descriptors."""
+    if simparams is None:
+        return models
+    if not isinstance(simparams, Mapping):
+        msg = "simparams must be a mapping of names to finite numbers"
+        raise TypeError(msg)
+    return {
+        name: model.with_simparams(simparams) if getattr(model, "_is_osdi_descriptor", False) else model
+        for name, model in models.items()
+    }
+
+
 def compile_circuit(
     net_dict: dict | kfnl.Netlist,
     models_map: dict,
@@ -655,6 +668,7 @@ def compile_circuit(
     atol: float = 1e-6,
     max_steps: int = 100,
     params_map: dict[str, dict[str, str]] | None = None,
+    simparams: Mapping[str, float] | None = None,
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
 
@@ -678,6 +692,11 @@ def compile_circuit(
         rtol: Relative tolerance for the Newton solver.
         atol: Absolute tolerance for the Newton solver.
         max_steps: Max Newton iterations.
+        simparams: Numeric settings queried by native Verilog-A $simparam calls.
+            Applied to every OSDI descriptor, overriding its simulator defaults;
+            retained across DC/AC/transient and device parameter updates. These
+            are static model settings, separate from solver tolerances and
+            device parameters. Recompile to change them.
         params_map: Optional mapping from component type names to dicts that
             rename netlist setting keys to model field names, e.g.
             ``{"thermal_heater": {"length": "length_um"}}``.
@@ -697,6 +716,8 @@ def compile_circuit(
     circuit_models = {k: v for k, v in models_map.items() if isinstance(v, Circuit)}
     if circuit_models:
         net_dict = _embed_circuit_subcircuits(net_dict, models_map, circuit_models)
+
+    models_map = _apply_native_simparams(models_map, simparams)
 
     if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict):
         source_netlist = net_dict.get(next(iter(net_dict)))
