@@ -1,0 +1,78 @@
+{
+  "hbt_nx1_nqs0_op": {
+    "passed": true,
+    "max_absolute_error": 3.2526065174565133e-19,
+    "reference_max": 0.00013289702223449776,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx1_nqs0_ac": {
+    "passed": true,
+    "max_absolute_error": 5.204170434662034e-18,
+    "reference_max": 0.004212532581088841,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx1_nqs1_op": {
+    "passed": true,
+    "max_absolute_error": 3.2526065174565133e-19,
+    "reference_max": 0.00013289702223449776,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx1_nqs1_ac": {
+    "passed": true,
+    "max_absolute_error": 4.336808690669032e-18,
+    "reference_max": 0.004212550152156288,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx4_nqs0_op": {
+    "passed": true,
+    "max_absolute_error": 2.0599841277224584e-18,
+    "reference_max": 0.0005315699752852968,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx4_nqs0_ac": {
+    "passed": true,
+    "max_absolute_error": 4.8572257333005154e-17,
+    "reference_max": 0.0168490334375499,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx4_nqs1_op": {
+    "passed": true,
+    "max_absolute_error": 2.0599841277224584e-18,
+    "reference_max": 0.0005315699752852968,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx4_nqs1_ac": {
+    "passed": true,
+    "max_absolute_error": 5.204170435211333e-17,
+    "reference_max": 0.016849103748903967,
+    "rtol": 1e-05,
+    "atol": 1e-09
+  },
+  "hbt_nx10_nqs0_op": {
+    "passed": false,
+    "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: IHP parity: hbt_nx10_nqs0_op\nRunning analysis 'op1'.\n  Elapsed time: 0.00608104\nNR solver failed to converge.\nLeaving core NR loop in iteration 50.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n",
+    "selft": 0
+  },
+  "hbt_nx10_nqs0_ac": {
+    "passed": false,
+    "error": "VACASK failed (1); expected ac1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: IHP parity: hbt_nx10_nqs0_ac\nRunning analysis 'ac1'.\n  Elapsed time: 0.0126218\nNR solver failed to converge.\nLeaving core NR loop in iteration 50.\nHomotopy failed.\nLeaving frequency sweep at frequency=0.0000e+00.\nAnalysis 'ac1' aborted.\n\n",
+    "selft": 0
+  },
+  "hbt_nx10_nqs1_op": {
+    "passed": false,
+    "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: IHP parity: hbt_nx10_nqs1_op\nRunning analysis 'op1'.\n  Elapsed time: 0.0130471\nNR solver failed to converge.\nLeaving core NR loop in iteration 50.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n",
+    "selft": 0
+  },
+  "hbt_nx10_nqs1_ac": {
+    "passed": false,
+    "error": "VACASK failed (1); expected ac1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: IHP parity: hbt_nx10_nqs1_ac\nRunning analysis 'ac1'.\n  Elapsed time: 0.0128041\nNR solver failed to converge.\nLeaving core NR loop in iteration 50.\nHomotopy failed.\nLeaving frequency sweep at frequency=0.0000e+00.\nAnalysis 'ac1' aborted.\n\n",
+    "selft": 0
+  }
+}

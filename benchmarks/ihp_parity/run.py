@@ -67,7 +67,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit comparison matri
             path = Path(temporary) / "circuit.lib"
             path.write_text(circuit_text)
             resolved = Library.from_file(path, temperature_c=temperature_c).resolve()
-            circuit = resolved.compile(module_paths=tuple(args.module_path), compiler=args.compiler)
+            circuit = resolved.compile(module_paths=tuple(args.module_path), compiler=args.compiler, state_policy="limiting_only")
             tolerance_options = "reltol=1e-6 vntol=1e-8 abstol=1e-12" if mode == "tran" else "reltol=1e-8 vntol=1e-10 abstol=1e-14"
             deck = (
                 "IHP parity: "
@@ -105,7 +105,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit comparison matri
                 # VACASK retains its OP conductance matrix and adds only the
                 # reactive Jacobian from a separate AC evaluation (important for idt).
                 gv, _ = assemble_gc_real(dc, circuit.groups)
-                circuit = resolved.compile(module_paths=tuple(args.module_path), compiler=args.compiler, analysis="ac")
+                circuit = circuit._for_analysis("ac")  # noqa: SLF001 -- inspect native AC registration
                 _, cv = assemble_gc_real(dc, circuit.groups)
                 rows = np.concatenate([np.asarray(group.jac_rows).reshape(-1) for _, group in sorted(circuit.groups.items())])
                 cols = np.concatenate([np.asarray(group.jac_cols).reshape(-1) for _, group in sorted(circuit.groups.items())])
@@ -130,7 +130,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit comparison matri
                     forcing = np.asarray(rhs).copy()
                     forcing[0] = 0
                     y = np.linalg.solve(matrix, forcing)
-                    actual.append(circuit.port(jnp.asarray(y), measure))
+                    actual.append(read(jnp.asarray(y)))
                 np.savez(
                     args.output.with_name(name + ".npz"),
                     frequency=reference.vectors["frequency"],
@@ -142,7 +142,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit comparison matri
                 )
             else:
                 dc = circuit.dc()
-                circuit = resolved.compile(module_paths=tuple(args.module_path), compiler=args.compiler, analysis="tran")
                 times = reference.vectors["time"].real
                 solution = circuit.transient(
                     t0=0.0, t1=float(times[-1]), dt0=1e-12, y0=dc, saveat=jnp.asarray(times), max_steps=20000, throw=True
@@ -164,6 +163,23 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit comparison matri
                 results[name]["input_max_absolute_error"] = source_comparison["max_absolute_error"]
                 results[name]["passed"] &= source_comparison["passed"]
             args.output.write_text(json.dumps(results, indent=2) + "\n")
+
+    for nx in [1, 4, 10]:
+        for nqs in [0, 1]:
+            statements = (
+                "vb (base 0) vs dc=0.8 mag=1\nvc (collector 0) vs dc=1.2\n"
+                f"q1 (collector base 0 0) npn13G2 nx={nx} sw_nqs={nqs} selft=0\n"
+            )
+            for mode, analysis, raw in [
+                ("op", "analysis op1 op", "op1.raw"),
+                ("ac", 'analysis ac1 ac from=1e6 to=1e9 mode="dec" points=3', "ac1.raw"),
+            ]:
+                name = f"hbt_nx{nx}_nqs{nqs}_{mode}"
+                try:
+                    run(name, ("cornerHBT.lib", "hbt_typ"), statements, analysis, raw, measure="vc:flow(br)", mode=mode)
+                except RuntimeError as error:
+                    results[name] = {"passed": False, "error": str(error), "selft": 0}
+                    args.output.write_text(json.dumps(results, indent=2) + "\n")
 
     for corner in ["mos_tt", "mos_ss", "mos_ff", "mos_sf", "mos_fs"]:
         for nf in [1, 2, 3]:

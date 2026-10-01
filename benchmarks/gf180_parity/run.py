@@ -185,56 +185,51 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit reference compar
                             "dc": compare(-np.asarray(dc[0])[0, 0], reference_dc.vectors["vd:flow(br)"], atol=1e-12),
                             "ac": compare(currents, reference_ac.vectors["vd:flow(br)"], atol=1e-12),
                         }
-                        if dc_model.num_states == 0:
-                            try:
-                                with tempfile.TemporaryDirectory() as temporary:
-                                    path = Path(temporary) / "card.lib"
-                                    path.write_text(deck.split("\n", 1)[1].split("control\n", 1)[0])
-                                    resolved = Library.from_file(path, temperature_c=26.85).resolve()
-                                    circuit = resolved.compile(module_paths=(modules,))
-                                    solution = circuit.dc()
-                                    group = next(g for g in circuit.groups.values() if "device0" in (g.index_map or {}))
-                                    actual = solution[..., group.var_indices[group.index_map["device0"], -1]]
-                                    report["results"][name]["circulax_dc"] = compare(
-                                        actual, reference_dc.vectors["vd:flow(br)"], atol=1e-12
-                                    )
-                                    gv, _ = assemble_gc_real(solution, circuit.groups)
-                                    ac_circuit = resolved.compile(module_paths=(modules,), analysis="ac")
-                                    _, cv = assemble_gc_real(solution, ac_circuit.groups)
-                                    rows = np.concatenate(
-                                        [np.asarray(g.jac_rows).reshape(-1) for _, g in sorted(circuit.groups.items())]
-                                    )
-                                    cols = np.concatenate(
-                                        [np.asarray(g.jac_cols).reshape(-1) for _, g in sorted(circuit.groups.items())]
-                                    )
-                                    cg = np.zeros((circuit.sys_size, circuit.sys_size))
-                                    cc = np.zeros_like(cg)
-                                    np.add.at(cg, (rows, cols), np.asarray(gv))
-                                    np.add.at(cc, (rows, cols), np.asarray(cv))
+                        try:
+                            with tempfile.TemporaryDirectory() as temporary:
+                                path = Path(temporary) / "card.lib"
+                                path.write_text(deck.split("\n", 1)[1].split("control\n", 1)[0])
+                                resolved = Library.from_file(path, temperature_c=26.85).resolve()
+                                circuit = resolved.compile(module_paths=(modules,), state_policy="limiting_only")
+                                solution = circuit.dc()
+                                group = next(g for g in circuit.groups.values() if "device0" in (g.index_map or {}))
+                                actual = solution[..., group.var_indices[group.index_map["device0"], -1]]
+                                report["results"][name]["circulax_dc"] = compare(
+                                    actual, reference_dc.vectors["vd:flow(br)"], atol=1e-12
+                                )
+                                gv, _ = assemble_gc_real(solution, circuit.groups)
+                                ac_circuit = circuit._for_analysis("ac")  # noqa: SLF001 -- inspect the public analysis registration
+                                _, cv = assemble_gc_real(solution, ac_circuit.groups)
+                                rows = np.concatenate(
+                                    [np.asarray(g.jac_rows).reshape(-1) for _, g in sorted(circuit.groups.items())]
+                                )
+                                cols = np.concatenate(
+                                    [np.asarray(g.jac_cols).reshape(-1) for _, g in sorted(circuit.groups.items())]
+                                )
+                                cg = np.zeros((circuit.sys_size, circuit.sys_size))
+                                cc = np.zeros_like(cg)
+                                np.add.at(cg, (rows, cols), np.asarray(gv))
+                                np.add.at(cc, (rows, cols), np.asarray(cv))
 
-                                    def forcing(amplitude: jax.Array) -> jax.Array:
-                                        groups = circuit._with_param_values({"device1.V": amplitude})  # noqa: SLF001, B023 -- consumed immediately inside this comparison
-                                        return assemble_residual_only_real(solution, groups, 0.0, 0.0)[0]  # noqa: B023 -- immediate jacfwd
+                                def forcing(amplitude: jax.Array) -> jax.Array:
+                                    groups = circuit._with_param_values({"device1.V": amplitude})  # noqa: SLF001, B023 -- consumed immediately inside this comparison
+                                    return assemble_residual_only_real(solution, groups, 0.0, 0.0)[0]  # noqa: B023 -- immediate jacfwd
 
-                                    rhs = np.asarray(-jax.jacfwd(forcing)(jnp.asarray(0.0))).copy()
-                                    rhs[0] = 0
-                                    source_index = group.var_indices[group.index_map["device0"], -1]
-                                    responses = []
-                                    for frequency in frequencies:
-                                        matrix = cg + 2j * np.pi * frequency * cc
-                                        matrix[0, :] = 0
-                                        matrix[0, 0] = 1
-                                        responses.append(np.linalg.solve(matrix, rhs)[source_index])
-                                    report["results"][name]["circulax_ac"] = compare(
-                                        responses, reference_ac.vectors["vd:flow(br)"], atol=1e-12
-                                    )
+                                rhs = np.asarray(-jax.jacfwd(forcing)(jnp.asarray(0.0))).copy()
+                                rhs[0] = 0
+                                source_index = group.var_indices[group.index_map["device0"], -1]
+                                responses = []
+                                for frequency in frequencies:
+                                    matrix = cg + 2j * np.pi * frequency * cc
+                                    matrix[0, :] = 0
+                                    matrix[0, 0] = 1
+                                    responses.append(np.linalg.solve(matrix, rhs)[source_index])
+                                report["results"][name]["circulax_ac"] = compare(
+                                    responses, reference_ac.vectors["vd:flow(br)"], atol=1e-12
+                                )
 
-                            except Exception as error:  # noqa: BLE001 -- report and continue independent comparisons
-                                report["results"][name]["circulax_error"] = str(error)
-                        else:
-                            report["results"][name]["circulax_blocker"] = (
-                                "osdi_component rejects stateful models; low-level static comparison only"
-                            )
+                        except Exception as error:  # noqa: BLE001 -- report and continue independent comparisons
+                            report["results"][name]["circulax_error"] = str(error)
                     except Exception as error:  # noqa: BLE001 -- report and continue independent comparisons
                         report["results"][name] = {"error": str(error)}
                     args.output.write_text(json.dumps(report, indent=2) + "\n")

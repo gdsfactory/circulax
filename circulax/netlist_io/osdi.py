@@ -178,6 +178,7 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
     cache_dir: Path | None = None,
     backend: str = "dense",
     analysis: str = "dc",
+    state_policy: str = "reject",
 ) -> Circuit:
     """Compile original model cards; reject runtime features bosdi cannot represent."""
     from bosdi.circulax import osdi_component
@@ -207,7 +208,11 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
             names = tuple(f"p{i}" for i in range(len(instance.nodes)))
             if component not in models:
                 models[component] = osdi_component(
-                    str(path), ports=names, temperature=resolved.temperature_c + 273.15, analysis=analysis
+                    str(path),
+                    ports=names,
+                    temperature=resolved.temperature_c + 273.15,
+                    analysis=analysis,
+                    state_policy=state_policy,
                 )
             elif models[component].ports != names:
                 msg = f"{instance.name}: inconsistent terminal count for {module}"

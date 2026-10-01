@@ -51,6 +51,7 @@ class ResolvedCircuit:
         cache_dir: Path | None = None,
         backend: str = "dense",
         analysis: str = "dc",
+        state_policy: str = "reject",
     ) -> Any:
         """Compile with immutable native analysis mode: dc (default), ac, or tran.
 
@@ -60,7 +61,13 @@ class ResolvedCircuit:
         from circulax.netlist_io.osdi import compile_resolved
 
         return compile_resolved(
-            self, module_paths=module_paths, compiler=compiler, cache_dir=cache_dir, backend=backend, analysis=analysis
+            self,
+            module_paths=module_paths,
+            compiler=compiler,
+            cache_dir=cache_dir,
+            backend=backend,
+            analysis=analysis,
+            state_policy=state_policy,
         )
 
 

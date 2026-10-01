@@ -16,16 +16,16 @@ if TYPE_CHECKING:
     from circulax.solvers.linear import CircuitLinearSolver
 
 
+def _osdi_param_columns(group: Any) -> dict[str, int]:
+    """Read canonical native parameter columns from bosdi's actual metadata API."""
+    import osdi_shim_nb
+
+    return {name.lower(): i for i, name in enumerate(osdi_shim_nb.get_param_names(group.model_id))}
+
+
 def _resolve_osdi_param_col(group: Any, param_key: str) -> int:
     """Resolve a parameter name to its column index in an OSDI group's params array."""
-    try:
-        from bosdi.osdi_registry import get_model  # type: ignore[import]
-
-        model = get_model(group.model_id)
-        name_to_col = {n.lower(): i for i, n in enumerate(model.param_names)}
-    except (ImportError, Exception) as exc:
-        msg = f"Cannot resolve OSDI parameter '{param_key}': bosdi registry lookup failed ({exc!r})."
-        raise ValueError(msg) from exc
+    name_to_col = _osdi_param_columns(group)
     col = name_to_col.get(param_key.lower())
     if col is None:
         msg = f"Parameter '{param_key}' not found in OSDI model (available: {sorted(name_to_col)})."
@@ -90,6 +90,27 @@ class Circuit:
         self._source_netlist = _source_netlist
         self._source_models = _source_models
         self._is_pure_sax = _is_pure_sax
+        self._analysis_factory = None
+        self._analysis_variants = {}
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    for field in ("var_indices", "jac_rows", "jac_cols"):
+                        if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                            msg = "OSDI analysis changed the circuit scatter layout"
+                            raise ValueError(msg)
+                self._analysis_variants[analysis] = variant
+        return self._analysis_variants[analysis]
 
     @property
     def ports(self) -> tuple[str, ...]:
@@ -125,6 +146,11 @@ class Circuit:
         for name, value in params.items():
             if "." not in name:
                 updated = apply_global_params(updated, {name: value})
+                for group_name, group in updated.items():
+                    if hasattr(group, "model_id"):
+                        col = _osdi_param_columns(group).get(name.lower())
+                        if col is not None:
+                            updated = {**updated, group_name: group.with_params(group.params.at[:, col].set(value))}
                 continue
 
             instance_name, param_key = name.split(".", 1)
@@ -259,6 +285,9 @@ class Circuit:
             ValueError: If multiple array params have different leading dims.
 
         """
+        dc_circuit = self._for_analysis("dc")
+        if dc_circuit is not self:
+            return dc_circuit.dc(y_guess=y_guess, rtol=rtol, atol=atol, max_steps=max_steps, params=params, **param_updates)
         rtol = self.rtol if rtol is None else rtol
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
@@ -374,17 +403,12 @@ class Circuit:
         param_updates = kwargs.pop("param_updates", {})
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "transient")
-        groups = self._with_param_values(arrays)
+        transient_circuit = self._for_analysis("tran")
+        groups = transient_circuit._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
         if y0 is None:
-            y0 = self.solver.solve_dc(
-                groups,
-                self._zero_guess(),
-                rtol=self.rtol,
-                atol=self.atol,
-                max_steps=self.max_steps,
-            )
+            y0 = self.dc(params=updates)
         saveat_obj = SaveAt(ts=saveat) if saveat is not None and not isinstance(saveat, SaveAt) else saveat
-        run_transient = setup_transient(groups=groups, linear_strategy=self.solver, transient_solver=transient_solver)
+        run_transient = setup_transient(groups=groups, linear_strategy=transient_circuit.solver, transient_solver=transient_solver)
         return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, **kwargs)
 
     def sp(
@@ -428,21 +452,26 @@ class Circuit:
 
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "sp")
-        groups = self._with_param_values(arrays)
+        groups = self._for_analysis("ac")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+        dc_groups = (
+            self._for_analysis("dc")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+            if self._analysis_factory is not None
+            else None
+        )
         if holomorphic == "auto":
             holomorphic = _infer_holomorphic(groups)
         if y_dc is None:
-            y_dc = self.solver.solve_dc(
-                groups,
-                self._zero_guess(),
-                rtol=self.rtol,
-                atol=self.atol,
-                max_steps=self.max_steps,
-            )
+            y_dc = self.dc(params=updates)
         port_list = [ports] if isinstance(ports, str) else list(ports)
         port_nodes = [self._resolve_port_node(port) for port in port_list]
         run_ac = setup_ac_sweep(
-            groups, self.sys_size, port_nodes, z0=z0, is_complex=self.solver.is_complex, holomorphic=holomorphic
+            groups,
+            self.sys_size,
+            port_nodes,
+            z0=z0,
+            is_complex=self.solver.is_complex,
+            holomorphic=holomorphic,
+            dc_groups=dc_groups,
         )
         return run_ac(y_dc, jnp.asarray(freqs))
 
@@ -506,6 +535,10 @@ class Circuit:
 
         """
         from circulax.solvers import setup_harmonic_balance
+
+        if self._analysis_factory is not None:
+            msg = "Native OSDI harmonic balance is not supported"
+            raise NotImplementedError(msg)
 
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "hb")
@@ -684,7 +717,7 @@ def compile_circuit(
         _validate_holomorphic_flags(groups)
     solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak)
     is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) for g in groups.values())
-    return Circuit(
+    circuit = Circuit(
         solver=solver,
         groups=groups,
         sys_size=sys_size,
@@ -696,6 +729,30 @@ def compile_circuit(
         _source_models=source_models,
         _is_pure_sax=is_pure_sax,
     )
+    native_models = {name: model for name, model in models_map.items() if getattr(model, "_is_osdi_descriptor", False)}
+    if native_models:
+
+        def analysis_factory(analysis: str) -> Circuit:
+            variants = {
+                name: model.with_analysis(analysis) if name in native_models else model for name, model in models_map.items()
+            }
+            return compile_circuit(
+                net_dict,
+                variants,
+                backend=backend,
+                is_complex=is_complex,
+                g_leak=g_leak,
+                rtol=rtol,
+                atol=atol,
+                max_steps=max_steps,
+                params_map=params_map,
+            )
+
+        circuit._analysis_factory = analysis_factory  # noqa: SLF001 -- compilation initializes the Circuit
+        modes = {model.model.analysis for model in native_models.values()}
+        if len(modes) == 1:
+            circuit._analysis_variants[next(iter(modes))] = circuit  # noqa: SLF001 -- compilation initializes the Circuit
+    return circuit
 
 
 def _infer_holomorphic(groups: dict) -> bool:
@@ -747,7 +804,7 @@ def _infer_is_complex(groups: dict) -> bool:
 
 
 def _group_outputs_complex(group: Any) -> bool:
-    if getattr(group, "is_fdomain", False):
+    if getattr(group, "is_fdomain", False) or hasattr(group, "model_id"):
         return False
     try:
         count = group.var_indices.shape[0]

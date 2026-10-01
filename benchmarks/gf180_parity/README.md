@@ -12,7 +12,7 @@ automatic bin selection, schematic metadata, or hierarchical wrapper conversion.
 
 ## Results
 
-- `results.json`: 70/70 configurations match native VACASK for DC drain current
+- `results.json`: 70/70 configurations match native VACASK through both low-level bosdi and full Circulax assembly for DC drain current
   and complex AC drain current at seven frequencies from 1 kHz to 1 GHz, using
   VACASK's own `sp_bsim4v8` binary. Five corners, 3.3 V NMOS/PMOS, 6 V NMOS/PMOS,
   native NMOS, representative bins, and disabled/enabled gate, body and
@@ -83,10 +83,8 @@ suite success. Binary and PDK source hashes are saved alongside the results.
 
 ## Remaining integration work
 
-- Circulax's `osdi_component` still rejects models declaring state slots. The
-  70 VACASK-model comparisons use bosdi's low-level static interface and do not
-  establish state-history/transient support or full Circulax support for that
-  implementation.
+- Circulax's `osdi_component` rejects unaudited models declaring state slots by default. The
+  comparisons now explicitly opt into `state_policy="limiting_only"` for the audited OpenVAF BSIM4 binary. Its nine slots are `$limit` Newton buffers; `ENABLE_LIM` is disabled. Physical charges remain in Q. Generic state-history, `$abstime`, and BSIM4 transient parity remain unvalidated.
 - The installed VACASK SPICE converter needs level-54/version handling and lacks
   complete MOS/bin/wrapper conversion for this library. The benchmark does not
   use the temporary converter experiments or modify the PDK.

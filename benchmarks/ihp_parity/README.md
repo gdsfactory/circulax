@@ -160,3 +160,13 @@ The PDK changes are committed separately: [IHP PR #259](https://github.com/gdsfa
 fixes the native VACASK common declarations, and the Circulax metadata adapter
 is a draft PR stacked on that branch. The native-library fix can be reviewed
 independently of Circulax.
+
+## Native mode orchestration and VBIC follow-up
+
+Public `Circuit.dc`, `sp`/`ac`, and `transient` now select immutable DC, AC and transient OSDI registrations automatically, including parameter updates. AC uses `G_dc + j*omega*C_ac`. The fixed raw-node and scatter layouts are checked between modes. Native harmonic balance remains explicitly unsupported.
+
+For the audited OpenVAF binaries, the harness opts into `state_policy="limiting_only"`. OpenVAF's OSDI state count represents `$limit` Newton buffers, not physical NQS history. `ENABLE_LIM` stays disabled; physical DDT charges and IDT unknowns remain in the circuit DAE. Generic history-dependent binaries and `$abstime` still need runtime support.
+
+The original 60 comparisons pass after public orchestration changes. `vbic-results.json` adds eight passing IHP VBIC comparisons: DC collector current and AC collector-current response, one/four fingers, NQS enabled/disabled, self-heating disabled, 0.8 V base and 1.2 V collector. Four ten-finger reference cases fail to converge in VACASK itself, even with self-heating disabled; their errors are retained. Running the entire suite currently returns failure for these four explicit reference errors (68 passes out of 72 attempted comparisons). Earlier self-heated one/four-finger checks also passed; ten-finger self-heated references failed. These checks do not establish general HBT transient parity.
+
+A separate compiled `$limit`/DDT RC regression verifies public JIT DC/SP and exponential transient decay. The nine BSIM4 and eight VBIC limiting slots do not require delayed circuit unknowns.
