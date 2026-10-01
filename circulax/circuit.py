@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import jax
@@ -90,6 +91,7 @@ class Circuit:
         self._source_netlist = _source_netlist
         self._source_models = _source_models
         self._is_pure_sax = _is_pure_sax
+        self._simparams_factory = None
         self._analysis_factory = None
         self._analysis_variants = {}
 
@@ -128,6 +130,28 @@ class Circuit:
     def source_models(self) -> dict | None:
         """The leaf models used to compile this circuit, if available."""
         return self._source_models
+
+    def set_simparams(self, simparams: Mapping[str, float] | None = None, **settings: float) -> Circuit:
+        """Return an updated circuit with numeric Verilog-A simulator settings.
+
+        Accept a mapping, keyword arguments, or both (keywords take precedence).
+        Updates merge into the existing settings of every native descriptor.
+        Native setup and analysis variants are rebuilt; existing registrations
+        are reused for matching settings. The current circuit is unchanged so
+        JIT callables already compiled for it remain valid.
+
+        Call outside JIT, then rerun DC, AC or transient on the returned circuit.
+        This updates model $simparam queries, not the host solver's options.
+        """
+        if simparams is not None and not isinstance(simparams, Mapping):
+            msg = "simparams must be a mapping of names to finite numbers"
+            raise TypeError(msg)
+        if self._simparams_factory is None:
+            msg = "set_simparams requires a native OSDI circuit created by compile_circuit"
+            raise ValueError(msg)
+        updates = dict(simparams or {})
+        updates.update(settings)
+        return self._simparams_factory(updates)
 
     def _n(self) -> int:
         return self.sys_size * (2 if self.solver.is_complex else 1)
@@ -657,6 +681,27 @@ def _apply_native_simparams(models: dict, simparams: Mapping[str, float] | None)
     }
 
 
+def _configure_native_variants(circuit: Circuit, models_map: dict, recompile: Callable[[dict], Circuit]) -> None:
+    """Keep mode and simulator-setting updates tied to the compilation options."""
+    native_models = {name: model for name, model in models_map.items() if getattr(model, "_is_osdi_descriptor", False)}
+    if native_models:
+
+        def analysis_factory(analysis: str) -> Circuit:
+            variants = {
+                name: model.with_analysis(analysis) if name in native_models else model for name, model in models_map.items()
+            }
+            return recompile(variants)
+
+        def simparams_factory(settings: Mapping[str, float]) -> Circuit:
+            return recompile(_apply_native_simparams(models_map, settings))
+
+        circuit._simparams_factory = simparams_factory  # noqa: SLF001 -- compilation initializes the Circuit
+        circuit._analysis_factory = analysis_factory  # noqa: SLF001 -- compilation initializes the Circuit
+        modes = {model.model.analysis for model in native_models.values()}
+        if len(modes) == 1:
+            circuit._analysis_variants[next(iter(modes))] = circuit  # noqa: SLF001 -- compilation initializes the Circuit
+
+
 def compile_circuit(
     net_dict: dict | kfnl.Netlist,
     models_map: dict,
@@ -696,7 +741,7 @@ def compile_circuit(
             Applied to every OSDI descriptor, overriding its simulator defaults;
             retained across DC/AC/transient and device parameter updates. These
             are static model settings, separate from solver tolerances and
-            device parameters. Recompile to change them.
+            device parameters. Use Circuit.set_simparams to update them.
         params_map: Optional mapping from component type names to dicts that
             rename netlist setting keys to model field names, e.g.
             ``{"thermal_heater": {"length": "length_um"}}``.
@@ -750,29 +795,18 @@ def compile_circuit(
         _source_models=source_models,
         _is_pure_sax=is_pure_sax,
     )
-    native_models = {name: model for name, model in models_map.items() if getattr(model, "_is_osdi_descriptor", False)}
-    if native_models:
-
-        def analysis_factory(analysis: str) -> Circuit:
-            variants = {
-                name: model.with_analysis(analysis) if name in native_models else model for name, model in models_map.items()
-            }
-            return compile_circuit(
-                net_dict,
-                variants,
-                backend=backend,
-                is_complex=is_complex,
-                g_leak=g_leak,
-                rtol=rtol,
-                atol=atol,
-                max_steps=max_steps,
-                params_map=params_map,
-            )
-
-        circuit._analysis_factory = analysis_factory  # noqa: SLF001 -- compilation initializes the Circuit
-        modes = {model.model.analysis for model in native_models.values()}
-        if len(modes) == 1:
-            circuit._analysis_variants[next(iter(modes))] = circuit  # noqa: SLF001 -- compilation initializes the Circuit
+    recompile = partial(
+        compile_circuit,
+        net_dict,
+        backend=backend,
+        is_complex=is_complex,
+        g_leak=g_leak,
+        rtol=rtol,
+        atol=atol,
+        max_steps=max_steps,
+        params_map=params_map,
+    )
+    _configure_native_variants(circuit, models_map, recompile)
     return circuit
 
 

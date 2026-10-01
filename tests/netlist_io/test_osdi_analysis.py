@@ -135,3 +135,64 @@ def test_resolved_compile_forwards_simparams(binary: Path, tmp_path: Path) -> No
     result = circuit.sp(ports="out", freqs=jnp.array([1e3]))
     expected = 2 / (1 + 50 * (3e-3 + 2j * np.pi * 1e3 * 1e-9)) - 1
     np.testing.assert_allclose(result[0, 0, 0], expected, atol=1e-10)
+
+
+def test_set_simparams_sweep_keeps_previous_jit_valid(binary: Path) -> None:
+    from circulax.components.electronic import CurrentSource
+
+    osdi_component = pytest.importorskip("bosdi.circulax").osdi_component
+    descriptor = osdi_component(str(binary), ("p", "n"), state_policy="limiting_only")
+    netlist = {
+        "instances": {
+            "r": {"component": "native"},
+            "bias": {"component": "isource", "settings": {"I": -1e-3}},
+            "gnd": {"component": "ground"},
+        },
+        "connections": {"r,p": "bias,p1", "r,n": ["bias,p2", "gnd,p1"]},
+        "ports": {"out": "r,p"},
+    }
+    original = compile_circuit(
+        netlist,
+        {"native": descriptor, "isource": CurrentSource},
+        backend="dense",
+        is_complex=False,
+        g_leak=0,
+        rtol=1e-8,
+        atol=1e-12,
+        simparams={"scale": 1, "setup_scale": 2, "charge_scale": 4},
+    )
+    old_dc = jax.jit(original.dc)
+    old_result = old_dc()
+    assert float(original.port(old_result, "out")) == pytest.approx(0.5)
+    updated = original
+    ids = []
+    for scale in [2, 4, 2]:
+        # Keywords take precedence over the mapping; other settings are retained.
+        updated = updated.set_simparams({"scale": 99}, scale=scale)
+        assert updated is not original
+        native = updated.source_models["native"]
+        assert dict(native.model.simparams) == {"scale": scale, "setup_scale": 2, "charge_scale": 4}
+        ids.append(native.model.id)
+        dc = updated.dc()
+        assert float(updated.port(dc, "out")) == pytest.approx(0.5 / scale)
+        frequencies = jnp.array([1e3, 1e6])
+        expected = 2 / (1 + 50 * (2e-3 * scale + 2j * np.pi * frequencies * 4e-9)) - 1
+        actual = jax.jit(lambda f, selected=updated: selected.sp(ports="out", freqs=f))(frequencies)
+        np.testing.assert_allclose(actual[:, 0, 0], expected, atol=1e-10)
+        np.testing.assert_allclose(old_dc(), old_result, atol=1e-12)
+    assert ids[0] == ids[2] != ids[1]
+    assert dict(original.source_models["native"].model.simparams)["scale"] == 1
+    with pytest.raises(ValueError, match="finite"):
+        updated.set_simparams(scale=float("nan"))
+    with pytest.raises(TypeError, match="mapping"):
+        updated.set_simparams([1, 2])
+    equilibrium = updated.dc()
+    y0 = equilibrium.at[updated.port_map["r,p"]].add(1.0)
+    times = jnp.linspace(0, 1e-6, 11)
+    solution = updated.transient(t0=0, t1=1e-6, dt0=1e-9, y0=y0, saveat=times, max_steps=10000)
+    np.testing.assert_allclose(
+        updated.port(solution.ys, "out"),
+        0.25 + np.exp(-np.asarray(times) / 1e-6),
+        rtol=2e-3,
+        atol=1e-4,
+    )
