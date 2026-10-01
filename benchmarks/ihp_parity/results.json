@@ -1,175 +1,175 @@
 {
   "lv_nmos_dc_mos_tt_nf1": {
     "passed": true,
-    "max_absolute_error": 9.17103849459866e-14,
+    "max_absolute_error": 1.8973538018496328e-19,
     "reference_max": 0.00021555391649396053,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_tt_nf2": {
     "passed": true,
-    "max_absolute_error": 7.086676081027865e-14,
+    "max_absolute_error": 2.710505431213761e-19,
     "reference_max": 0.00019285219987705065,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_tt_nf3": {
     "passed": true,
-    "max_absolute_error": 5.734911785910957e-14,
+    "max_absolute_error": 8.131516293641283e-20,
     "reference_max": 0.0001817039532396545,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_ss_nf1": {
     "passed": true,
-    "max_absolute_error": 1.646507366212524e-14,
+    "max_absolute_error": 5.421010862427522e-20,
     "reference_max": 0.00013821976717412143,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_ss_nf2": {
     "passed": true,
-    "max_absolute_error": 1.2512777272655207e-14,
+    "max_absolute_error": 0.0,
     "reference_max": 0.00011989356334584545,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_ss_nf3": {
     "passed": true,
-    "max_absolute_error": 9.980568888706687e-15,
+    "max_absolute_error": 0.0,
     "reference_max": 0.00011002073551434808,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_ff_nf1": {
     "passed": true,
-    "max_absolute_error": 4.885053949896245e-13,
+    "max_absolute_error": 1.0842021724855044e-19,
     "reference_max": 0.00032264808547527977,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_ff_nf2": {
     "passed": true,
-    "max_absolute_error": 3.795905104998776e-13,
+    "max_absolute_error": 1.6263032587282567e-19,
     "reference_max": 0.00029568484057439074,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_ff_nf3": {
     "passed": true,
-    "max_absolute_error": 3.0777382595617575e-13,
+    "max_absolute_error": 3.7947076036992655e-19,
     "reference_max": 0.0002840625909745085,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_sf_nf1": {
     "passed": true,
-    "max_absolute_error": 3.9013226243306276e-14,
+    "max_absolute_error": 1.3552527156068805e-19,
     "reference_max": 0.00017394354655108504,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_sf_nf2": {
     "passed": true,
-    "max_absolute_error": 2.9917691587999506e-14,
+    "max_absolute_error": 5.421010862427522e-20,
     "reference_max": 0.00015342514218557807,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_sf_nf3": {
     "passed": true,
-    "max_absolute_error": 2.405242888539605e-14,
+    "max_absolute_error": 1.8973538018496328e-19,
     "reference_max": 0.0001428225843304301,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_fs_nf1": {
     "passed": true,
-    "max_absolute_error": 2.136117888476563e-13,
+    "max_absolute_error": 5.963111948670274e-19,
     "reference_max": 0.0002654452089026378,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_fs_nf2": {
     "passed": true,
-    "max_absolute_error": 1.6559887142109098e-13,
+    "max_absolute_error": 5.421010862427522e-20,
     "reference_max": 0.0002405203606857375,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "lv_nmos_dc_mos_fs_nf3": {
     "passed": true,
-    "max_absolute_error": 1.3418015613539391e-13,
+    "max_absolute_error": 4.336808689942018e-19,
     "reference_max": 0.0002289724427114615,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "rf_nmos_mos_tt": {
     "passed": true,
-    "max_absolute_error": 4.1250477426230114e-14,
+    "max_absolute_error": 8.131516293641283e-20,
     "reference_max": 9.642609993310823e-05,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "hv_nmos_mos_tt": {
     "passed": true,
-    "max_absolute_error": 1.0671848609889248e-10,
+    "max_absolute_error": 2.4990860075790877e-17,
     "reference_max": 0.00043480665023255257,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "rf_nmos_mos_ss": {
     "passed": true,
-    "max_absolute_error": 1.4152497533267971e-15,
+    "max_absolute_error": 6.776263578034403e-20,
     "reference_max": 5.994678168099436e-05,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "hv_nmos_mos_ss": {
     "passed": true,
-    "max_absolute_error": 1.346868466907923e-10,
+    "max_absolute_error": 4.434386885465713e-17,
     "reference_max": 0.00036973549588487315,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "rf_nmos_mos_ff": {
     "passed": true,
-    "max_absolute_error": 3.093203861451177e-13,
+    "max_absolute_error": 1.8973538018496328e-19,
     "reference_max": 0.00014784242016807026,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "hv_nmos_mos_ff": {
     "passed": true,
-    "max_absolute_error": 8.339989614712662e-11,
+    "max_absolute_error": 1.3010426069826053e-17,
     "reference_max": 0.0005044840589044817,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "rf_nmos_mos_sf": {
     "passed": true,
-    "max_absolute_error": 9.687983379934317e-15,
+    "max_absolute_error": 1.3552527156068805e-19,
     "reference_max": 7.67125710984599e-05,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "hv_nmos_mos_sf": {
     "passed": true,
-    "max_absolute_error": 1.2055465713157673e-10,
+    "max_absolute_error": 3.366447745567491e-17,
     "reference_max": 0.00040099474041238516,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "rf_nmos_mos_fs": {
     "passed": true,
-    "max_absolute_error": 1.2117342990548147e-13,
+    "max_absolute_error": 3.9302328752599536e-19,
     "reference_max": 0.00012026018030489476,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "hv_nmos_mos_fs": {
     "passed": true,
-    "max_absolute_error": 9.47776275322075e-11,
+    "max_absolute_error": 1.7943545954635098e-17,
     "reference_max": 0.0004684528081885688,
     "rtol": 1e-05,
     "atol": 1e-09
@@ -239,7 +239,7 @@
   },
   "temperature_nmos_-40.0": {
     "passed": true,
-    "max_absolute_error": 2.4037439790361437e-14,
+    "max_absolute_error": 3.3881317890172014e-19,
     "reference_max": 7.536177634849515e-05,
     "rtol": 1e-05,
     "atol": 1e-09
@@ -253,7 +253,7 @@
   },
   "temperature_nmos_27.0": {
     "passed": true,
-    "max_absolute_error": 3.545815442478062e-14,
+    "max_absolute_error": 1.7618285302889447e-19,
     "reference_max": 9.647105060143567e-05,
     "rtol": 1e-05,
     "atol": 1e-09
@@ -267,7 +267,7 @@
   },
   "temperature_nmos_125.0": {
     "passed": true,
-    "max_absolute_error": 5.1517140163201414e-14,
+    "max_absolute_error": 3.2526065174565133e-19,
     "reference_max": 0.00012281069054665463,
     "rtol": 1e-05,
     "atol": 1e-09
@@ -280,71 +280,71 @@
     "atol": 1e-09
   },
   "nmos_rfmode0_ac": {
-    "passed": false,
-    "max_absolute_error": 0.0001901391707095723,
+    "passed": true,
+    "max_absolute_error": 1.1102230328969627e-16,
     "reference_max": 0.2093934923408892,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nmos_rfmode1_ac": {
-    "passed": false,
-    "max_absolute_error": 0.002032149206858464,
+    "passed": true,
+    "max_absolute_error": 1.2940482019415162e-12,
     "reference_max": 0.20941920208923848,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nand_0_0": {
     "passed": true,
-    "max_absolute_error": 2.220446049250313e-16,
+    "max_absolute_error": 0.0,
     "reference_max": 1.199999980687466,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nand_0_1.2": {
     "passed": true,
-    "max_absolute_error": 2.220446049250313e-16,
+    "max_absolute_error": 4.440892098500626e-16,
     "reference_max": 1.1999999579767469,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nand_1.2_0": {
     "passed": true,
-    "max_absolute_error": 2.220446049250313e-16,
+    "max_absolute_error": 0.0,
     "reference_max": 1.1999999610498335,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nand_1.2_1.2": {
     "passed": true,
-    "max_absolute_error": 1.1999056554705802e-15,
+    "max_absolute_error": 1.607632852625759e-15,
     "reference_max": 2.6866438922237146e-07,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nor_0_0": {
     "passed": true,
-    "max_absolute_error": 2.220446049250313e-16,
+    "max_absolute_error": 4.440892098500626e-16,
     "reference_max": 1.1999998319067733,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nor_0_1.2": {
     "passed": true,
-    "max_absolute_error": 4.738411494781413e-17,
+    "max_absolute_error": 6.155423500154973e-17,
     "reference_max": 5.746942110475311e-08,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nor_1.2_0": {
     "passed": true,
-    "max_absolute_error": 2.1174407680497716e-15,
+    "max_absolute_error": 1.954120163264493e-15,
     "reference_max": 6.716593035850367e-08,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "nor_1.2_1.2": {
     "passed": true,
-    "max_absolute_error": 9.403828601844207e-17,
+    "max_absolute_error": 3.989564886237157e-17,
     "reference_max": 1.8105877376926668e-08,
     "rtol": 1e-05,
     "atol": 1e-09
@@ -358,42 +358,42 @@
   },
   "inverter_vg0.4": {
     "passed": true,
-    "max_absolute_error": 1.375788372115494e-12,
+    "max_absolute_error": 2.220446049250313e-16,
     "reference_max": 1.197481666507412,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "inverter_vg0.6": {
     "passed": true,
-    "max_absolute_error": 8.200753409681738e-10,
+    "max_absolute_error": 7.179283834091166e-10,
     "reference_max": 0.9007646608244304,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "inverter_vg0.8": {
     "passed": true,
-    "max_absolute_error": 3.723267354149851e-12,
+    "max_absolute_error": 1.8474805019152996e-16,
     "reference_max": 0.00413530510509778,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "inverter_vg1.2": {
     "passed": true,
-    "max_absolute_error": 4.889191300326559e-16,
+    "max_absolute_error": 5.031285444742102e-16,
     "reference_max": 6.716610659598498e-08,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "inverter_dc_sweep": {
     "passed": true,
-    "max_absolute_error": 1.5103851502829002e-10,
+    "max_absolute_error": 7.311928840181281e-12,
     "reference_max": 1.1999999579840017,
     "rtol": 1e-05,
     "atol": 1e-09
   },
   "inverter_tran": {
     "passed": true,
-    "max_absolute_error": 0.0005965480789938971,
+    "max_absolute_error": 9.464244867807281e-06,
     "reference_max": 1.206756836786118,
     "rtol": 0.003,
     "atol": 0.0001,

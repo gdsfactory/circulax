@@ -16,7 +16,7 @@ uv pip install -e '.[verilog-a,netlists,vacask-reference]'
 
 The NetlistParse dependency is temporarily pinned to the exact fork commit in
 [parser PR #6](https://github.com/NyanCAD/NetlistParse.rs/pull/6). The Verilog-A
-extra pins bosdi's setup and temperature fixes to an exact development commit.
+extra pins bosdi's setup, temperature, collapse and integral evaluation fixes to an exact development commit.
 These are source builds and require Rust and a C++ compiler. Installing the
 extras above includes the fixes; no manual patch or local checkout override is
 needed. Replace these development pins with upstream releases once available.
@@ -75,9 +75,9 @@ Transient input waveforms and successful solver completion must also agree.
 The original development run passed all 51 comparisons. Temperature checks at
 −40 °C, 27 °C and 125 °C add six passing MOS/resistor comparisons, and a loaded
 CMOS inverter pulse transient adds another passing comparison. Two additional
-MOS AC checks (QS and RF/NQS, 1 MHz–1 GHz) currently fail the original tolerance;
-`results.json` records these failures without weakening the acceptance criteria.
-They must be resolved before MOS AC parity can be claimed.
+MOS AC checks (QS and RF/NQS, 1 MHz–1 GHz) now pass after the native collapse
+and integral evaluation fixes. All 60 comparisons pass the original acceptance
+criteria; `results.json` records the complete run.
 
 The HV corner exposed duplicate common declarations in VACASK itself, reported
 in [IHP issue #258](https://github.com/gdsfactory/IHP/issues/258). The shared
@@ -120,10 +120,17 @@ feature parity. Temperature is supplied explicitly to both Circulax and VACASK:
 The library and PDK adapter now default to VACASK's usual 27 °C (300.15 K);
 this is not silently treated as 300 K. The benchmark selects its temperatures
 explicitly.
-The added MOS AC cases expose an unresolved response mismatch, especially with
-RF/NQS enabled. Finite-difference checks agree with the extracted capacitance;
-further investigation must cover conductance, internal-node collapse and the
-reference linearization. HBT/state work remains separate from this discrepancy.
+Both MOS AC comparisons now pass ([bosdi #23](https://github.com/gdsfactory/bosdi/pull/23)). Native OSDI collapse follows each instance's
+setup flags ([bosdi #22](https://github.com/gdsfactory/bosdi/pull/22)). Integral
+equations use explicit DC/AC evaluation modes. Following VACASK, the harness
+retains DC conductance and obtains capacitance from a separate AC evaluation.
+Maximum QS and RF/NQS AC discrepancies are 1.11e-16 V and 1.29e-12 V.
+
+`resolved.compile(analysis="dc")` is the default. Use separate `analysis="ac"`
+or `analysis="tran"` registrations for their stamps, evaluated at the DC initial
+point. Analysis mode is fixed for a compiled circuit; the benchmark explicitly
+coordinates these stages. General automatic mode switching inside Circulax's
+public analysis methods is still future work.
 
 VBIC HBT loads expose eight OSDI states and remain explicitly rejected by bosdi's
 component descriptor. They need state-history/limiting/thermal runtime work before

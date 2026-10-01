@@ -102,7 +102,11 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit comparison matri
                 actual = read(circuit.dc(params={"device0.V": jnp.asarray(reference.vectors["vin"].real)}))
             elif mode == "ac":
                 dc = circuit.dc()
-                gv, cv = assemble_gc_real(dc, circuit.groups)
+                # VACASK retains its OP conductance matrix and adds only the
+                # reactive Jacobian from a separate AC evaluation (important for idt).
+                gv, _ = assemble_gc_real(dc, circuit.groups)
+                circuit = resolved.compile(module_paths=tuple(args.module_path), compiler=args.compiler, analysis="ac")
+                _, cv = assemble_gc_real(dc, circuit.groups)
                 rows = np.concatenate([np.asarray(group.jac_rows).reshape(-1) for _, group in sorted(circuit.groups.items())])
                 cols = np.concatenate([np.asarray(group.jac_cols).reshape(-1) for _, group in sorted(circuit.groups.items())])
                 g = np.zeros((circuit.sys_size, circuit.sys_size))
@@ -137,9 +141,11 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 -- explicit comparison matri
                     dc=dc,
                 )
             else:
+                dc = circuit.dc()
+                circuit = resolved.compile(module_paths=tuple(args.module_path), compiler=args.compiler, analysis="tran")
                 times = reference.vectors["time"].real
                 solution = circuit.transient(
-                    t0=0.0, t1=float(times[-1]), dt0=1e-12, saveat=jnp.asarray(times), max_steps=20000, throw=True
+                    t0=0.0, t1=float(times[-1]), dt0=1e-12, y0=dc, saveat=jnp.asarray(times), max_steps=20000, throw=True
                 )
                 actual = circuit.port(solution.ys, measure)
                 np.savez(

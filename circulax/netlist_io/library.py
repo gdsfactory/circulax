@@ -50,11 +50,18 @@ class ResolvedCircuit:
         compiler: str | None = None,
         cache_dir: Path | None = None,
         backend: str = "dense",
+        analysis: str = "dc",
     ) -> Any:
-        """Compile the resolved topology using bosdi OSDI descriptors."""
+        """Compile with immutable native analysis mode: dc (default), ac, or tran.
+
+        Separate registrations are required to change mode. For AC, retain
+        DC conductance and obtain capacitance from an AC registration.
+        """
         from circulax.netlist_io.osdi import compile_resolved
 
-        return compile_resolved(self, module_paths=module_paths, compiler=compiler, cache_dir=cache_dir, backend=backend)
+        return compile_resolved(
+            self, module_paths=module_paths, compiler=compiler, cache_dir=cache_dir, backend=backend, analysis=analysis
+        )
 
 
 class _Frame:
