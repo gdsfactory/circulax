@@ -144,7 +144,12 @@ elaboration live in Circulax; only PDK metadata and its thin adapter live in IHP
 
 ## Local PDK validation
 
-The metadata/library checks pass (18 passed, one skipped without `vacask-bin`).
-The checkout's `AGENTS.md` requires `pre-commit run --all-files` before commits,
-but its `.pre-commit-config.yaml` is absent. The command was attempted and fails
-with `InvalidConfigError`; PDK edits therefore remain uncommitted.
+Run `make dev` in the PDK checkout to install its development dependencies and
+fetch the centrally managed, gitignored `.pre-commit-config.yaml`. The complete
+`uv run pre-commit run --all-files` suite then passes. Metadata/library tests
+also pass (18 passed, one skipped without `vacask-bin`).
+
+The PDK changes are committed separately: [IHP PR #259](https://github.com/gdsfactory/IHP/pull/259)
+fixes the native VACASK common declarations, and the Circulax metadata adapter
+is a draft PR stacked on that branch. The native-library fix can be reviewed
+independently of Circulax.
