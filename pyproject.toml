@@ -150,13 +150,13 @@ pytest = ">=8"
 pytest-xdist = "*"
 
 [tool.pixi.feature.test.target.linux-64.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 [tool.pixi.feature.test.target.osx-arm64.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 [tool.pixi.feature.test.target.win-64.pypi-dependencies]
-circulax = { path = ".", editable = true }
+circulax = { path = ".", editable = true, extras = ["netlists"] }
 
 # Dev tooling feature — full local development environment
 # Includes git-cliff (changelog), uv (build), and the docs/papermill extras.
@@ -180,7 +180,7 @@ tqdm = ">=4.67"
 ngspice = "*"
 
 [tool.pixi.feature.benchmark.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 
 # ---------------------------------------------------------------------------
