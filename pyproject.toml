@@ -39,11 +39,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Temporary immutable PR pin until the Python Spectre/VACASK API is upstream.
+# https://github.com/NyanCAD/NetlistParse.rs/pull/6
+netlists = [
+    "netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@cae4f10e53e756721bfd56e74ee716407de7b1e4#subdirectory=crates/netlist-py",
+]
+vacask-reference = ["InSpice>=1.7.0.7"]
 # bosdi caps jax<0.8, so the verilog-a extra constrains the core down from
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
 # so it stays on jax 0.7.2 until bosdi widens its compatibility.
 verilog-a = [
-    "bosdi~=0.1.6",
+    "bosdi @ git+https://github.com/gdsfactory/bosdi.git@6fddeb88b6ad0e70656ad61f9c5c4ee3268f5520",
 ]
 docs = [
     "ipykernel>=6.29.5",
@@ -68,7 +74,7 @@ docs = [
     "kaleido>=1.2.0,<2",
 ]
 dev = [
-    "circulax[docs, verilog-a]",
+    "circulax[docs, verilog-a, netlists]",
     "black",
     "ruff",
     "pytest>=8",
@@ -353,3 +359,6 @@ select = ["ALL"]
     "N802",
     "ARG001",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true

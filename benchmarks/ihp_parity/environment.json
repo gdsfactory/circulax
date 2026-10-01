@@ -1,0 +1,35 @@
+{
+  "run_date": "2026-10-01",
+  "temperature_c_baseline": 26.85,
+  "temperature_c_checks": [
+    -40,
+    27,
+    125
+  ],
+  "comparison_count": 60,
+  "passed_count": 58,
+  "source_state": {
+    "circulax": {
+      "commit": "c06bce8682981f2498b9aef50d98590ab7dab880",
+      "has_local_changes": true
+    },
+    "pdk": {
+      "commit": "38e00f5f1c11c1dd2522b4b6528500356f2f5368",
+      "has_local_changes": true
+    },
+    "parser": {
+      "commit": "cae4f10e53e756721bfd56e74ee716407de7b1e4",
+      "has_local_changes": false
+    },
+    "bosdi": {
+      "commit": "6fddeb88b6ad0e70656ad61f9c5c4ee3268f5520",
+      "has_local_changes": false
+    },
+    "vacask": {
+      "commit": "6434ed0aa6fefdb282af6d03f00be8f2455625f9",
+      "has_local_changes": true
+    }
+  },
+  "openvaf_version": "openvaf 23.5.0",
+  "limitations": "PSP MOS AC checks fail; HBT state support and voltage-dependent model-card expressions remain unsupported. PDK includes uncommitted local fixes."
+}
