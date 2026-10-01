@@ -1,0 +1,1339 @@
+{
+  "scope": "card-level DC/AC, explicit bin; no full SPICE wrapper or transient claim",
+  "source_sha256": "38a5a817da62ea8d2849efbc50e1f5d127a8e6a4c2539ba456e0cc67ab8bc1fc",
+  "osdi_sha256": "6ee4fb17bf246717938a2f90ba21765709e2526a09b395e4933143179b42e8d7",
+  "raw_nodes": 15,
+  "state_slots": 9,
+  "results": {
+    "nmos_3p3_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.117219336827988e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 4.4273560848345746e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_typical_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.1350241493207625e-19,
+        "reference_max": 1.154597902417403e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.2361671421548914e-18,
+        "reference_max": 4.7004350351762276e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_typical_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00014992658073526246,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0006498836337590304,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_typical_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.087089182034596e-18,
+        "reference_max": 0.00015479125581020097,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.2034644120716005e-17,
+        "reference_max": 0.0006865399586522946,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.125028539931123e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 1.20438543813015e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_typical_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.7660636950252162e-19,
+        "reference_max": 2.1104586634747633e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.7679880137692912e-18,
+        "reference_max": 1.2015670056489548e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_typical_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.7376728913985228e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.00017961999240533318,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_typical_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.55465136891897e-18,
+        "reference_max": 2.724012203645221e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1953331002026747e-17,
+        "reference_max": 0.00017937502626937666,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.1204589618695568e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.710505431213761e-20,
+        "reference_max": 7.929230697030403e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_typical_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.187540192050529e-18,
+        "reference_max": 1.1304821788891946e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.3018103182783314e-17,
+        "reference_max": 8.024510486341003e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 5.507242765596819e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 8.637281101389226e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_typical_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.7194768829262297e-19,
+        "reference_max": 5.488877723573722e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.1864087977232585e-19,
+        "reference_max": 8.636213860929428e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00022637570230924699,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 0.0003024475611192729,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_typical_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.415236843329339e-18,
+        "reference_max": 0.00024567173801805757,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.297442894186144e-17,
+        "reference_max": 0.0003334412728229941,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.846722447090189e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 5.6739233021197254e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ff_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.8973538018496328e-19,
+        "reference_max": 1.9385855427149026e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 5.433824901248157e-18,
+        "reference_max": 6.177528431341021e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ff_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00024884028246801204,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0008226361425020694,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ff_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.415236843329339e-18,
+        "reference_max": 0.0002607881525155214,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 8.023106347372202e-18,
+        "reference_max": 0.0008898115914912669,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 4.383482420182564e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 1.7724907670061198e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ff_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.1011428314305904e-20,
+        "reference_max": 4.368049208982542e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1141892776415808e-18,
+        "reference_max": 1.7789057608491408e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ff_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 5.991614604276486e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0002685406085055251,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ff_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.3406979439709605e-18,
+        "reference_max": 5.9819708641745386e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.2847795763034e-17,
+        "reference_max": 0.00026975305079515055,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.394241152883892e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.710505431213761e-20,
+        "reference_max": 0.00011001703803254539,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_ff_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.4699480741935398e-18,
+        "reference_max": 2.4305161352915453e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.819238076354912e-17,
+        "reference_max": 0.0001123050039514689,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.973399212115746e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 1.545756737851914e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_ff_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.1069168505287736e-18,
+        "reference_max": 1.9692094031277775e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.2403943654276812e-18,
+        "reference_max": 1.546504195269077e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.0004188549549780362,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.710505431213761e-20,
+        "reference_max": 0.00041996610717592707,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_ff_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.7016637624971418e-14,
+        "reference_max": 0.0004770167371654015,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0557066147574334e-14,
+        "reference_max": 0.0004767231502560704,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 6.002869764157367e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 3.218345202424738e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ss_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.1848438816761693e-19,
+        "reference_max": 6.1243207520476616e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3901183459243822e-18,
+        "reference_max": 3.344383770349957e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ss_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.877116632491855e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.00047091773716219734,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_ss_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.781155076543197e-18,
+        "reference_max": 8.033167741733681e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.252263449518264e-17,
+        "reference_max": 0.00048757168661420886,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.899046051460734e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 6.946289567819044e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ss_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.219226321806267e-19,
+        "reference_max": 7.832128895555657e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.13899737832735e-19,
+        "reference_max": 6.904145883234148e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ss_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 8.85818060587331e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 9.470748486085276e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_ss_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 5.327837238229549e-18,
+        "reference_max": 8.800151636105079e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.2156616962494098e-17,
+        "reference_max": 9.425412733768854e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 4.039306998965063e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 5.414868270159857e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_ss_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.1636680579948118e-18,
+        "reference_max": 4.05262490742521e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.8059013408485767e-17,
+        "reference_max": 5.437222948830409e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 8.342394942505306e-08,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 6.160615312708846e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_ss_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 8.228896834026737e-14,
+        "reference_max": 8.309279425210323e-08,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 5.869440823743984e-17,
+        "reference_max": 6.161251938088913e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00011030667195521328,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 0.00020068941270016602,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_ss_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 5.0550926292136644e-18,
+        "reference_max": 0.00011543896373633752,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.5380433142669944e-17,
+        "reference_max": 0.00021304465555751034,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.5995127103126156e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 5.2282726519195063e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_fs_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.0503208545953324e-19,
+        "reference_max": 1.6707810212019055e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.879171080877379e-18,
+        "reference_max": 5.6470940648043045e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_fs_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00021750340494686995,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0007678197887524248,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_fs_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.168404344971009e-19,
+        "reference_max": 0.00022688721332061172,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.5612511285730685e-17,
+        "reference_max": 0.00082446997251148,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.0804418489820526e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 8.384224328637661e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_fs_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.0333801956502464e-19,
+        "reference_max": 1.071270523769754e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.4175407173296878e-18,
+        "reference_max": 8.33765287572162e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_fs_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.2582380572815257e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.00011740017059065835,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_fs_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.621912882459388e-18,
+        "reference_max": 1.249982602111923e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.550123394125877e-17,
+        "reference_max": 0.00011688571826893988,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.0162373563387168e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 0.00010161651346918637,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_fs_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.2293907171733185e-18,
+        "reference_max": 2.043685324116462e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.639742194901723e-17,
+        "reference_max": 0.00010350505123496011,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.6524661731879275e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 6.459197875015294e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_fs_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 3.2169028410028504e-13,
+        "reference_max": 1.6461160153882884e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.470983148278132e-16,
+        "reference_max": 6.460162825952998e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00035232859569829614,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 0.0003864412291642521,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_fs_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.0757291325075302e-14,
+        "reference_max": 0.0003958235579721391,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.766965848269696e-15,
+        "reference_max": 0.0004367665188852768,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.309950729406132e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 3.607352363603541e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_sf_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.4060746924421386e-19,
+        "reference_max": 7.483103803397331e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.4356565655947685e-18,
+        "reference_max": 3.770312039224224e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_sf_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 9.577385579790222e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0005245534771228046,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_3p3_sf_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 5.339695699491109e-18,
+        "reference_max": 9.798185649703686e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.5178830414892748e-17,
+        "reference_max": 0.000545980779686907,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 3.6220525403859766e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 1.5868734338415865e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_sf_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 2.430984558619842e-19,
+        "reference_max": 3.6058486129530997e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.2416901205144293e-18,
+        "reference_max": 1.5898143465405326e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_sf_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 4.940108540372399e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0002423026416828391,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_3p3_sf_bin8_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 4.2825985813177425e-18,
+        "reference_max": 4.927284444830077e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.8919331305809285e-17,
+        "reference_max": 0.0002429733783486893,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 5.445952765976202e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 6.016977180971145e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_sf_bin0_parasitics1": {
+      "pdk_version_selector": 4.5,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 5.4667506415792544e-18,
+        "reference_max": 5.471226507880597e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.9307513457509014e-17,
+        "reference_max": 6.052735601215058e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.3637895272465027e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 1.288514656146924e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "pmos_6p0_sf_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.6013157867842548e-18,
+        "reference_max": 1.3602736170479133e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.668904580049875e-19,
+        "reference_max": 1.288582620131437e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00014392988242517367,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 0.00023489879894263353,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    },
+    "nmos_6p0_nat_sf_bin0_parasitics1": {
+      "pdk_version_selector": 4.6,
+      "implementation": "sp_bsim4v8",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 1.8973538018496328e-18,
+        "reference_max": 0.00015238158964233584,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 2.2142485717740405e-17,
+        "reference_max": 0.00025266876190806306,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_blocker": "osdi_component rejects stateful models; low-level static comparison only"
+    }
+  }
+}

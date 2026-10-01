@@ -49,7 +49,7 @@ vacask-reference = ["InSpice>=1.7.0.7"]
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
 # so it stays on jax 0.7.2 until bosdi widens its compatibility.
 verilog-a = [
-    "bosdi @ git+https://github.com/gdsfactory/bosdi.git@2c656fdf278ea5223be4ee8a062c1b696aac5562",
+    "bosdi @ git+https://github.com/gdsfactory/bosdi.git@d75be086ce113e6ff71521573e6905074836e044",
 ]
 docs = [
     "ipykernel>=6.29.5",

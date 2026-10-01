@@ -139,3 +139,18 @@ def test_nested_unsupported_statement_is_rejected(tmp_path: Path) -> None:
     card.write_text("subckt device(p n)\nac1 ac start=1 stop=1k\nends\n")
     with pytest.raises(NetlistError, match="unsupported"):
         Library.from_file(card).instantiate("device")
+
+
+def test_spice_quoted_model_expressions(tmp_path: Path) -> None:
+    """SPICE primes are expressions, including nested scope references and SI units."""
+    card = tmp_path / "quoted.lib"
+    card.write_text("""* Quoted SPICE model card
+.param flag=1 scale='(flag==0)*2 + (flag==1)*3'
+.model rm r r='scale*1k'
+""")
+    from circulax.netlist_io.expressions import evaluate
+    from circulax.netlist_io.syntax import parameters
+
+    library = Library.from_file(card, dialect="spice")
+    model, scope = library.frame.models["rm"]
+    assert evaluate(parameters(model)["r"], scope) == 3000

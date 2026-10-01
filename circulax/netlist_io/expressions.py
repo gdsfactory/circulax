@@ -77,7 +77,7 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
     """Interpret only supported CST operations; never execute source as Python."""
     c = children(node)
     kind = node.kind
-    if kind in {"Brace", "Parens", "ParenthesizedExpression", "LiteralExpr", "FunctionArgs", "Condition", "Quote"}:
+    if kind in {"Brace", "Parens", "ParenthesizedExpression", "LiteralExpr", "FunctionArgs", "Condition", "Quote", "Prime"}:
         expressions = [p for p in c if p.kind != "Notation"]
         if len(expressions) != 1:
             msg = f"invalid expression {node.text!r}"
