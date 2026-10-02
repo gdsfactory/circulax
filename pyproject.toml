@@ -39,11 +39,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Temporary immutable PR pin until the Python Spectre/VACASK API is upstream.
+# https://github.com/NyanCAD/NetlistParse.rs/pull/6
+netlists = [
+    "netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@cae4f10e53e756721bfd56e74ee716407de7b1e4#subdirectory=crates/netlist-py",
+]
 # bosdi caps jax<0.8, so the verilog-a extra constrains the core down from
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
 # so it stays on jax 0.7.2 until bosdi widens its compatibility.
 verilog-a = [
-    "bosdi~=0.1.6",
+    "bosdi @ git+https://github.com/gdsfactory/bosdi.git@5595fc331e28dadadd8bbc1c0292c8e35f0e627f",
 ]
 docs = [
     "ipykernel>=6.29.5",
@@ -68,7 +73,7 @@ docs = [
     "kaleido>=1.2.0,<2",
 ]
 dev = [
-    "circulax[docs, verilog-a]",
+    "circulax[docs, verilog-a, netlists]",
     "black",
     "ruff",
     "pytest>=8",
@@ -138,19 +143,19 @@ tqdm = ">=4.67.1,<5"
 
 # Test feature — lean CI environment (no docs, no dev tooling)
 # Used for the non-default Python matrix (py312).
-# bosdi (verilog-a extra) has no Windows wheels, so Windows uses base deps only.
+# Exercise the native OSDI and netlist integrations on every supported platform.
 [tool.pixi.feature.test.pypi-dependencies]
 pytest = ">=8"
 pytest-xdist = "*"
 
 [tool.pixi.feature.test.target.linux-64.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 [tool.pixi.feature.test.target.osx-arm64.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 [tool.pixi.feature.test.target.win-64.pypi-dependencies]
-circulax = { path = ".", editable = true }
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 # Dev tooling feature — full local development environment
 # Includes git-cliff (changelog), uv (build), and the docs/papermill extras.
@@ -163,8 +168,10 @@ uv = ">=0.6"
 git-cliff = ">=2"
 schemdraw = ">=0.18"
 
-# Benchmark feature — NGSpice accuracy comparison
+# Benchmark feature — NGSpice and VACASK accuracy comparisons
 [tool.pixi.feature.benchmark.dependencies]
+# Keep typing_extensions explicitly requested when solving the mixed Conda/PyPI environment.
+typing_extensions = ">=4.13"
 scipy = ">=1.13"
 matplotlib = ">=3.9"
 tqdm = ">=4.67"
@@ -174,8 +181,17 @@ tqdm = ">=4.67"
 ngspice = "*"
 
 [tool.pixi.feature.benchmark.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["verilog-a"] }
+pytest = ">=8"
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
+[tool.pixi.feature.benchmark.target.linux-64.pypi-dependencies]
+InSpice = ">=1.7.0.7"
+
+[tool.pixi.feature.benchmark.tasks]
+ihp-metadata-tests = { cmd = ["pytest", "benchmarks/ihp_parity/test_metadata.py"], description = "Check external IHP metadata adapter; set IHP_PDK_ROOT" }
+ihp-parity = { cmd = ["python", "-m", "benchmarks.ihp_parity.run"], description = "Compare IHP against native VACASK; supply simulator and PDK paths" }
+gf180-parity = { cmd = ["python", "-m", "benchmarks.gf180_parity.run"], description = "Compare GF180 compact-model cards against native VACASK" }
+native-tests = { cmd = ["pytest", "tests/netlist_io/test_osdi_analysis.py", "tests/netlist_io/test_osdi_compilation.py"], description = "Native OSDI compilation and public analysis tests" }
 
 # ---------------------------------------------------------------------------
 # Tasks
@@ -222,8 +238,8 @@ default = { features = ["py313", "dev"], solve-group = "py313" }
 py312 = { features = ["py312", "test"], solve-group = "py312" }
 py313 = { features = ["py313", "dev"],  solve-group = "py313" }
 
-# Benchmark environment — includes NGSpice for accuracy comparisons
-benchmark = { features = ["py313", "benchmark"], solve-group = "py313" }
+# Benchmark environment — separate solve group keeps reference dependencies isolated
+benchmark = { features = ["py313", "benchmark"], solve-group = "benchmark" }
 
 # ---------------------------------------------------------------------------
 # Pytest
@@ -294,6 +310,7 @@ ignore = [
 select = ["ALL"]
 
 [tool.ruff.lint.per-file-ignores]
+"benchmarks/**/test_*.py" = ["D", "S101"]  # pytest functions and assertions
 "circulax/fitting/*.py" = [
     # The fitting code retains the established numerical API and implementation
     # while moving in-tree. Refactoring these separately avoids changing its
@@ -353,3 +370,6 @@ select = ["ALL"]
     "N802",
     "ARG001",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true

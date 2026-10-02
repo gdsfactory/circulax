@@ -171,6 +171,7 @@ def setup_ac_sweep(
     z0: float | Array = 50.0,
     is_complex: bool = False,
     holomorphic: bool = False,
+    dc_groups: dict[str, Any] | None = None,
 ) -> Callable[[Array, Array], Array]:
     """Configure and return a callable for AC small-signal S-parameter sweep.
 
@@ -195,6 +196,8 @@ def setup_ac_sweep(
 
     Args:
         groups: Compiled component groups from :func:`~circulax.compile_netlist`.
+        dc_groups: Optional groups registered for DC, providing conductance while
+            ``groups`` provides AC charge derivatives. Both must share a scatter layout.
         num_vars: Total number of scalar unknowns (second return value of
             :func:`~circulax.compile_netlist`).
         port_nodes: Global node indices for each circuit port, in the desired
@@ -239,7 +242,7 @@ def setup_ac_sweep(
         raise ValueError(msg)
 
     if is_complex and not holomorphic:
-        return _setup_ac_sweep_2n(groups, num_vars, port_nodes, z0=z0)
+        return _setup_ac_sweep_2n(groups, num_vars, port_nodes, z0=z0, dc_groups=dc_groups)
 
     # --- Pre-compute static COO index arrays (captured in closure) -----------
     static_rows, static_cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
@@ -264,7 +267,7 @@ def setup_ac_sweep(
             jnp.array(groups[gk].jac_cols).reshape(-1),
         )
         for gk in sorted(groups)
-        if groups[gk].has_delay
+        if getattr(groups[gk], "has_delay", False)
     }
 
     gc_assemble = assemble_gc_complex if is_complex else assemble_gc_real
@@ -274,6 +277,8 @@ def setup_ac_sweep(
     # -------------------------------------------------------------------------
     def run_ac(y_dc: Array, freqs: Array) -> Array:
         G_vals, C_vals = gc_assemble(y_dc, groups)
+        if dc_groups is not None:
+            G_vals, _ = gc_assemble(y_dc, dc_groups)
 
         G_mat = jnp.zeros((num_vars, num_vars), dtype=jnp.complex128)
         G_mat = G_mat.at[static_rows_jax, static_cols_jax].add(G_vals)
@@ -315,6 +320,7 @@ def _setup_ac_sweep_2n(
     port_nodes: list[int],
     *,
     z0: float | Array = 50.0,
+    dc_groups: dict[str, Any] | None = None,
 ) -> Callable[[Array, Array], Array]:
     """Build an AC sweep using the full 2N×2N real-block system."""
     N = num_vars
@@ -341,13 +347,15 @@ def _setup_ac_sweep_2n(
             jnp.array(groups[gk].jac_cols).reshape(-1),
         )
         for gk in sorted(groups)
-        if groups[gk].has_delay
+        if getattr(groups[gk], "has_delay", False)
     }
 
     z0_arr = _normalize_z0(z0, N_ports)
 
     def run_ac_2n(y_dc: Array, freqs: Array) -> Array:
         G_blocks, C_blocks = assemble_gc_complex_2n(y_dc, groups)
+        if dc_groups is not None:
+            G_blocks, _ = assemble_gc_complex_2n(y_dc, dc_groups)
 
         RHS = jnp.zeros((2 * N, N_ports), dtype=jnp.complex128)
         RHS = RHS.at[port_nodes_arr, jnp.arange(N_ports)].set(2.0 / z0_arr)
