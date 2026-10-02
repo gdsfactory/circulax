@@ -143,7 +143,7 @@ tqdm = ">=4.67.1,<5"
 
 # Test feature — lean CI environment (no docs, no dev tooling)
 # Used for the non-default Python matrix (py312).
-# bosdi (verilog-a extra) has no Windows wheels, so Windows uses base deps only.
+# Exercise the native OSDI and netlist integrations on every supported platform.
 [tool.pixi.feature.test.pypi-dependencies]
 pytest = ">=8"
 pytest-xdist = "*"
@@ -155,7 +155,7 @@ circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 [tool.pixi.feature.test.target.win-64.pypi-dependencies]
-circulax = { path = ".", editable = true, extras = ["netlists"] }
+circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 
 # Dev tooling feature — full local development environment
 # Includes git-cliff (changelog), uv (build), and the docs/papermill extras.

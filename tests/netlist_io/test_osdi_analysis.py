@@ -14,6 +14,7 @@ from circulax import compile_circuit
 
 @pytest.fixture(scope="module")
 def binary(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    pytest.importorskip("bosdi.circulax")
     compiler = shutil.which("openvaf-r")
     if compiler is None:
         pytest.skip("openvaf-r is not installed")

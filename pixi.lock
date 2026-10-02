@@ -1326,6 +1326,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.51.36231-h1b9f54f_39.conda
       - pypi: ./
       - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/10/bd/c038d7cc38edc1aa5bf91ab8068b63d4308c66c4c8bb3cbba7dfbc049f9c/pyparsing-3.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl
