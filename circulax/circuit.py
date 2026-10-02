@@ -749,6 +749,11 @@ def _infer_is_complex(groups: dict) -> bool:
 def _group_outputs_complex(group: Any) -> bool:
     if getattr(group, "is_fdomain", False):
         return False
+    if not hasattr(group, "physics_func"):
+        # Group types that bypass the physics_func interface entirely (e.g.
+        # bosdi's OsdiComponentGroup, which evaluates via the OSDI FFI) are
+        # real-valued electronic devices, not a detection failure.
+        return False
     try:
         count = group.var_indices.shape[0]
         y0 = jnp.zeros(group.var_indices.shape[1])
