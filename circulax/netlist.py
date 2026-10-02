@@ -424,126 +424,84 @@ def _is_recursive_netlist(net_dict: dict) -> bool:
     """Return True if *net_dict* looks like a RecursiveNetlist (dict-of-Netlists)."""
     if "instances" in net_dict:
         return False
-    return any(isinstance(v, dict) and "instances" in v for v in net_dict.values())
+    return any(isinstance(v, kfnl.Netlist) or (isinstance(v, dict) and "instances" in v) for v in net_dict.values())
 
 
-def flatten_recursive_netlist(
-    recnet: dict[str, dict],
-    sep: str = "~",
-) -> dict:
-    """Flatten a ``RecursiveNetlist`` into a single SAX-format netlist.
-
-    A ``RecursiveNetlist`` is a ``dict[str, Netlist]`` where the first key is
-    the top-level circuit and remaining keys define subcircuits.  An instance
-    whose ``component`` string matches a key in the dict is treated as a
-    subcircuit and inlined with prefixed instance names.
-
-    Handles circulax connection extensions (tuple targets, ``nets`` lists)
-    that SAX's own ``flatten_netlist`` does not support.
-
-    Args:
-        recnet: Mapping from circuit name to SAX-format netlist dict.
-        sep: Separator for hierarchical instance names (default ``"~"``).
-
-    Returns:
-        A flat SAX-format netlist dict.
-
-    """
-    import copy
-
-    top_name = next(iter(recnet))
-    flat = copy.deepcopy(recnet[top_name])
-    _flatten_into(recnet, flat, sep)
+def _normalize_simulator_ground(flat: kfnl.Netlist) -> kfnl.Netlist:
+    # All simulator ground terminals refer to the same node, including grounds
+    # introduced by nested cells. Keep the established GND instance name.
+    data = flat.to_dict()
+    grounds = {name for name, instance in data["instances"].items() if instance["component"] == "ground"}
+    if grounds:
+        if "GND" in data["instances"] and "GND" not in grounds:
+            msg = "Instance name 'GND' is reserved for the ground component"
+            raise ValueError(msg)
+        ground = data["instances"][sorted(grounds)[0]]
+        data["instances"] = {name: inst for name, inst in data["instances"].items() if name not in grounds}
+        data["instances"]["GND"] = ground
+        for net in data["nets"]:
+            for member in net:
+                if member.get("instance") in grounds:
+                    member["instance"] = "GND"
+        flat = kfnl.Netlist.from_dict(data)
     return flat
 
 
-def _rewrite_ref(ref: str, inst_name: str, port_map: dict[str, str]) -> str:
-    """Rewrite a port reference if it targets *inst_name*."""
-    if "," not in ref:
-        return ref
-    inst, port = ref.split(",", 1)
-    if inst == inst_name:
-        mapped = port_map.get(port)
-        if mapped is not None:
-            return mapped
-    return ref
-
-
-def _rewrite_connection_value(
-    val: str | tuple | list,
-    inst_name: str,
-    port_map: dict[str, str],
-) -> str | tuple:
-    """Rewrite the value side of a connection entry."""
-    if isinstance(val, str):
-        return _rewrite_ref(val, inst_name, port_map)
-    return tuple(_rewrite_ref(v, inst_name, port_map) for v in val)
-
-
-def _flatten_into(recnet: dict[str, dict], net: dict, sep: str) -> None:
-    """Inline all subcircuit instances in *net* (mutates in place)."""
-    import copy
-
-    changed = True
-    while changed:
-        changed = False
-        for inst_name in list(net.get("instances", {})):
-            comp = net["instances"][inst_name].get("component", "")
-            if comp not in recnet:
-                continue
-            changed = True
-            child = copy.deepcopy(recnet[comp])
-            _flatten_into(recnet, child, sep)
-            _inline_subcircuit(net, inst_name, child, sep)
-
-
-def _inline_subcircuit(net: dict, inst_name: str, child: dict, sep: str) -> None:
-    """Inline a single flattened subcircuit into *net* (mutates in place)."""
-    del net["instances"][inst_name]
-
-    port_map: dict[str, str] = {ext: _prefix_ref(ref, inst_name, sep) for ext, ref in child.get("ports", {}).items()}
-
-    for child_inst, child_data in child.get("instances", {}).items():
-        if child_inst == "GND" or child_data.get("component") == "ground":
-            net["instances"].setdefault("GND", child_data)
-        else:
-            net["instances"][f"{inst_name}{sep}{child_inst}"] = child_data
-
-    connections = net.setdefault("connections", {})
-    for src, tgt in child.get("connections", {}).items():
-        new_src = _prefix_ref(src, inst_name, sep)
-        if isinstance(tgt, str):
-            new_tgt: str | tuple = _prefix_ref(tgt, inst_name, sep)
-        else:
-            new_tgt = tuple(_prefix_ref(t, inst_name, sep) for t in tgt)
-        connections[new_src] = new_tgt
-
-    for net_entry in child.get("nets", []):
-        p1 = _prefix_ref(net_entry["p1"], inst_name, sep)
-        p2 = _prefix_ref(net_entry["p2"], inst_name, sep)
-        net.setdefault("nets", []).append({"p1": p1, "p2": p2})
-
-    net["connections"] = {
-        _rewrite_ref(src, inst_name, port_map): _rewrite_connection_value(tgt, inst_name, port_map)
-        for src, tgt in connections.items()
+def _flatten_circuit_netlists(recnet: dict[str, dict | kfnl.Netlist], sep: str = "~") -> kfnl.Netlist | dict:
+    """Flatten canonical topology with kfnetlist; adapt legacy settings if needed."""
+    netlists: dict[str, kfnl.Netlist] = {}
+    overrides: dict[str, dict[str, Any]] = {}
+    # kfnetlist settings are JSON values. Retain legacy arrays/complex values
+    # outside topology, using instance info to follow their origin through flatten.
+    for cell, source in recnet.items():
+        if isinstance(source, kfnl.Netlist):
+            netlists[cell] = source
+            continue
+        native, settings = sax_to_kfnetlist(source)
+        if settings:
+            data = native.to_dict()
+            for name, values in settings.items():
+                origin = str(len(overrides))
+                overrides[origin] = values
+                data["instances"][name].setdefault("info", {})["_circulax_settings_origin"] = origin
+            native = kfnl.Netlist.from_dict(data)
+        netlists[cell] = native
+    maps = {
+        cell: {name: instance.component for name, instance in net.instances.items() if instance.component in netlists}
+        for cell, net in netlists.items()
     }
+    top = next(iter(netlists))
+    flat = netlists[top].flatten(
+        netlists,
+        instance_cell_map=maps[top],
+        sub_instance_cell_maps=maps,
+        recursive=True,
+        allow_unconnected_ports=True,
+        separator=sep,
+    )
+    flat = _normalize_simulator_ground(flat)
+    flat.sort()
+    if overrides:
+        from copy import deepcopy
 
-    for edge in net.get("nets", []):
-        edge["p1"] = _rewrite_ref(edge["p1"], inst_name, port_map)
-        edge["p2"] = _rewrite_ref(edge["p2"], inst_name, port_map)
+        legacy = kfnetlist_to_sax(flat)
+        for name, instance in flat.instances.items():
+            origin = instance.info.get("_circulax_settings_origin")
+            if origin in overrides:
+                legacy["instances"][name]["settings"] = deepcopy(overrides[origin])
+        return legacy
+    return flat
 
-    if "ports" in net:
-        net["ports"] = {pname: _rewrite_ref(ptgt, inst_name, port_map) for pname, ptgt in net["ports"].items()}
 
+def flatten_recursive_netlist(recnet: dict[str, dict | kfnl.Netlist], sep: str = "~") -> dict:
+    """Flatten a legacy cell mapping using kfnetlist's recursive flatten API.
 
-def _prefix_ref(ref: str, inst_name: str, sep: str) -> str:
-    """Prefix an ``"instance,port"`` reference, skipping GND."""
-    if "," not in ref:
-        return ref
-    inst, port = ref.split(",", 1)
-    if inst == "GND":
-        return ref
-    return f"{inst_name}{sep}{inst},{port}"
+    The first entry is the top cell. Component names select child cells and
+    ``sep`` prefixes flattened instances. The return value stays a SAX-format
+    dictionary for compatibility; compilation uses the canonical result directly.
+    """
+    flat = _flatten_circuit_netlists(recnet, sep)
+    return kfnetlist_to_sax(flat) if isinstance(flat, kfnl.Netlist) else flat
 
 
 # ---------------------------------------------------------------------------

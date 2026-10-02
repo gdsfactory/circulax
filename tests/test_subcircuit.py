@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from circulax import compile_circuit
-from circulax.netlist import _is_recursive_netlist, flatten_recursive_netlist
+from circulax.netlist import _is_recursive_netlist, build_net_map_kfnetlist, flatten_recursive_netlist, sax_to_kfnetlist
 
 jax.config.update("jax_enable_x64", True)
 
@@ -47,6 +48,24 @@ class TestIsRecursiveNetlist:
 
 class TestFlattenRecursiveNetlist:
     """Unit tests for the flattening algorithm."""
+
+    def test_legacy_non_json_settings_survive_native_flatten(self) -> None:
+        values = np.array([1.0, 2.0])
+        recnet = {
+            "top": {"instances": {"a": {"component": "child"}}, "ports": {"out": "a,p1"}},
+            "child": {
+                "instances": {"R": {"component": "Resistor", "settings": {"R": 1 + 2j, "values": values}}},
+                "ports": {"p1": "R,p1", "p2": "R,p2"},
+            },
+        }
+        flat = flatten_recursive_netlist(recnet, sep="/")
+        settings = flat["instances"]["a/R"]["settings"]
+        assert settings["R"] == 1 + 2j
+        np.testing.assert_array_equal(settings["values"], values)
+        settings["values"][0] = 99
+        assert values[0] == 1
+        assert set(recnet["top"]["instances"]) == {"a"}
+        assert "info" not in recnet["child"]["instances"]["R"]
 
     def test_no_subcircuits(self) -> None:
         """A RecursiveNetlist with only leaf instances passes through unchanged."""
@@ -104,7 +123,9 @@ class TestFlattenRecursiveNetlist:
             },
         }
         flat = flatten_recursive_netlist(recnet)
-        assert "SC1~R1,p2" in flat["connections"] or any("SC1~R1,p2" in str(v) for v in flat["connections"].values())
+        topology, _ = sax_to_kfnetlist(flat)
+        nodes, _ = build_net_map_kfnetlist(topology)
+        assert nodes["SC1~R1,p2"] == nodes["R_ext,p1"]
 
     def test_tuple_targets(self) -> None:
         """Circulax tuple-target connections are rewritten correctly."""
@@ -124,9 +145,9 @@ class TestFlattenRecursiveNetlist:
             },
         }
         flat = flatten_recursive_netlist(recnet)
-        gnd_targets = flat["connections"]["GND,p1"]
-        assert isinstance(gnd_targets, tuple)
-        assert "SC1~R1,p2" in gnd_targets
+        topology, _ = sax_to_kfnetlist(flat)
+        nodes, _ = build_net_map_kfnetlist(topology)
+        assert nodes["GND,p1"] == nodes["V1,p1"] == nodes["SC1~R1,p2"] == 0
 
     def test_nested_subcircuits(self) -> None:
         """Subcircuits within subcircuits are flattened recursively."""

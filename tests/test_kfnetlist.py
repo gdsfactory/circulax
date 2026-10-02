@@ -29,7 +29,9 @@ def test_kfnetlist_hierarchy_adapter_preserves_single_terminal_nets() -> None:
     assert build_net_map_kfnetlist(adapted) == build_net_map_kfnetlist(original)
 
 
-def test_kfnetlist_circuit_retains_source_and_can_be_embedded() -> None:
+def test_kfnetlist_circuit_retains_source_and_can_be_embedded(monkeypatch: pytest.MonkeyPatch) -> None:
+    from importlib import import_module
+
     from circulax import compile_circuit
     from circulax.components.electronic import Resistor, VoltageSource
 
@@ -55,7 +57,13 @@ def test_kfnetlist_circuit_retains_source_and_can_be_embedded() -> None:
             "ports": {"out": "SC,a"},
         }
     )
+
+    def reject_sax_roundtrip(_netlist: kfnl.Netlist) -> dict:
+        pytest.fail("Native hierarchy must compile without converting back to SAX")
+
+    monkeypatch.setattr(import_module("circulax.netlist"), "kfnetlist_to_sax", reject_sax_roundtrip)
     combined = compile_circuit(parent, {**models, "child": circuit})
+    assert isinstance(combined.source_netlist, kfnl.Netlist)
     assert float(combined.port(combined.dc(), "out")) == pytest.approx(1.0)
     assert "SC~R,p1" in combined.port_map
 

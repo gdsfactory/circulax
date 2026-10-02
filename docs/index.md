@@ -28,6 +28,9 @@ syntax, the library loader evaluates parameters and subcircuit scopes, and OSDI
 provisioning builds a kfnetlist for `compile_circuit`. `ResolvedCircuit` is the
 intermediate model-card result, rather than a second simulation topology API.
 Circuits compiled from kfnetlist retain it in `Circuit.source_netlist`.
+Subcircuit composition delegates recursive flattening to `kfnetlist.Netlist.flatten`,
+using component names to select child cells and `~` to qualify leaf instances.
+Circulax handles simulator ground naming and legacy input conversion at the boundary.
 
 Simulate an underdamped LCR circuit in the time domain:
 

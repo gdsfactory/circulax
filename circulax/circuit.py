@@ -644,23 +644,20 @@ def _embed_circuit_subcircuits(
     net_dict: dict | kfnl.Netlist,
     models_map: dict,
     circuit_models: dict[str, Circuit],
-) -> dict:
+) -> dict[str, dict | kfnl.Netlist]:
     """Build a RecursiveNetlist from Circuit objects in *models_map* (mutates *models_map*)."""
-    from circulax.netlist import _is_recursive_netlist, kfnetlist_to_sax
+    from circulax.netlist import _is_recursive_netlist
 
-    if isinstance(net_dict, kfnl.Netlist):
-        net_dict = kfnetlist_to_sax(net_dict)
-    recnet: dict[str, dict] = {}
+    recnet: dict[str, dict | kfnl.Netlist] = {}
     if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict):
         recnet.update(net_dict)
     else:
-        recnet["top"] = net_dict  # type: ignore[assignment]
+        recnet["top"] = net_dict
     for name, circ in circuit_models.items():
         if circ.source_netlist is None:
             msg = f"Circuit '{name}' has no stored source netlist and cannot be used as a subcircuit."
             raise ValueError(msg)
-        source = circ.source_netlist
-        recnet[name] = kfnetlist_to_sax(source) if isinstance(source, kfnl.Netlist) else source
+        recnet[name] = circ.source_netlist
         for mk, mv in (circ.source_models or {}).items():
             existing = models_map.get(mk)
             if existing is not None and existing is not mv:
@@ -754,7 +751,7 @@ def compile_circuit(
 
     """
     from circulax.compiler import compile_netlist
-    from circulax.netlist import _is_recursive_netlist, flatten_recursive_netlist
+    from circulax.netlist import _flatten_circuit_netlists, _is_recursive_netlist
     from circulax.solvers.linear import analyze_circuit
 
     models_map = dict(models_map)
@@ -770,7 +767,7 @@ def compile_circuit(
     if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict):
         source_netlist = net_dict.get(next(iter(net_dict)))
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
-        net_dict = flatten_recursive_netlist(net_dict)
+        net_dict = _flatten_circuit_netlists(net_dict)
         source_netlist = net_dict
     elif isinstance(net_dict, (dict, kfnl.Netlist)):
         source_netlist = net_dict
