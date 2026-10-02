@@ -264,7 +264,7 @@ def setup_ac_sweep(
             jnp.array(groups[gk].jac_cols).reshape(-1),
         )
         for gk in sorted(groups)
-        if groups[gk].has_delay
+        if getattr(groups[gk], "has_delay", False)
     }
 
     gc_assemble = assemble_gc_complex if is_complex else assemble_gc_real
@@ -341,7 +341,7 @@ def _setup_ac_sweep_2n(
             jnp.array(groups[gk].jac_cols).reshape(-1),
         )
         for gk in sorted(groups)
-        if groups[gk].has_delay
+        if getattr(groups[gk], "has_delay", False)
     }
 
     z0_arr = _normalize_z0(z0, N_ports)
