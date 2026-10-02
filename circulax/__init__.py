@@ -5,6 +5,12 @@ from circulax.circuit import Circuit, compile_circuit
 from circulax.compiler import compile_netlist
 from circulax.components.electronic import TransmissionLine
 from circulax.netlist import (
+    Netlist as Netlist,
+)
+from circulax.netlist import (
+    SaxNetlist as SaxNetlist,
+)
+from circulax.netlist import (
     build_net_map,
     build_net_map_kfnetlist,
     flatten_recursive_netlist,
@@ -12,7 +18,6 @@ from circulax.netlist import (
     prune_unreachable_instances,
     sax_to_kfnetlist,
 )
-from circulax.netlist import circulaxNetlist as Netlist
 from circulax.s_transforms import fdomain_component, fdomain_model, sax_component
 from circulax.solvers import analyze_circuit, setup_ac_sweep, setup_harmonic_balance, setup_transient
 from circulax.testbench import attach_testbench

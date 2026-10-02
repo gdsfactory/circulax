@@ -14,6 +14,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import kfnetlist as kfnl
+
 from circulax.netlist_io.syntax import NetlistError
 
 if TYPE_CHECKING:
@@ -189,10 +191,10 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
 
     modules = _provision_modules(resolved, module_paths, compiler, cache_dir)
 
-    instances = {"GND": {"component": "ground"}}
+    netlist = kfnl.Netlist()
+    netlist.create_inst(name="GND", kcl="", component="ground")
     models = {}
-    nodes: dict[str, list[str]] = {"0": ["GND,p1"]}
-    ports = {}
+    nodes: dict[str, list[kfnl.PortRef | kfnl.NetlistPort]] = {"0": [kfnl.PortRef(instance="GND", port="p1")]}
     for index, instance in enumerate(resolved.instances):
         key = f"device{index}"
         module = instance.module.lower()
@@ -230,20 +232,24 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
         if len(names) != len(instance.nodes):
             msg = f"{instance.name}: expected {len(names)} terminals"
             raise NetlistError(msg)
-        instances[key] = {"component": component, "settings": settings}
+        netlist.create_inst(name=key, kcl="", component=component, settings=settings or None)
         for name, node in zip(names, instance.nodes, strict=True):
-            nodes.setdefault(node, []).append(f"{key},{name}")
-    connections = {members[0]: tuple(members[1:]) for members in nodes.values() if len(members) > 1}
+            nodes.setdefault(node, []).append(kfnl.PortRef(instance=key, port=name))
     # Expose all flattened nodes, plus the public wrapper's formal port aliases.
-    for node, members in nodes.items():
-        ports[node] = members[0]
+    ports = {node: node for node in nodes}
     for port, node in resolved.ports.items():
         if node not in nodes:
             msg = f"unconnected public terminal {port!r}"
             raise NetlistError(msg)
-        ports[port] = nodes[node][0]
+        ports[port] = node
+    for port, node in ports.items():
+        netlist.create_port(port)
+        nodes[node].append(kfnl.NetlistPort(port))
+    for members in nodes.values():
+        netlist.create_net(*members)
+    netlist.sort()
     return compile_circuit(
-        {"instances": instances, "connections": connections, "ports": ports},
+        netlist,
         models,
         backend=backend,
         is_complex=False,

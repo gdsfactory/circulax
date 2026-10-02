@@ -43,7 +43,8 @@ circulaxNetlist = Annotated[
 ]
 """Legacy SAX-format netlist type. Prefer ``kfnetlist.Netlist`` for new code."""
 
-Netlist = circulaxNetlist
+SaxNetlist = circulaxNetlist
+Netlist = kfnl.Netlist
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +388,33 @@ def sax_to_kfnetlist(
     return nl, settings_override
 
 
+def kfnetlist_to_sax(nl: kfnl.Netlist) -> dict:
+    """Adapt canonical topology for legacy SAX subcircuit composition only.
+
+    kfnetlist.to_dict() uses kfnetlist's serialization schema, not SAX's.
+    Explicitly translate net members and external-port aliases at this boundary.
+    """
+    result: dict = {
+        "instances": {
+            name: {"component": instance.component, "settings": instance.settings} for name, instance in nl.instances.items()
+        },
+        "nets": [],
+        "ports": {},
+    }
+    for net in nl.nets:
+        refs = [f"{m.instance},{m.port}" for m in net if isinstance(m, kfnl.PortRef)]
+        ports = [m.name for m in net if isinstance(m, kfnl.NetlistPort)]
+        if not refs:
+            if ports:
+                msg = f"Cannot embed a net containing only external ports: {ports}"
+                raise ValueError(msg)
+            continue
+        result["nets"].extend({"p1": refs[0], "p2": ref} for ref in (refs[1:] or refs[:1]))
+        for port in ports:
+            result["ports"][port] = refs[0]
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Recursive netlist flattening
 # ---------------------------------------------------------------------------
@@ -499,6 +527,10 @@ def _inline_subcircuit(net: dict, inst_name: str, child: dict, sep: str) -> None
         _rewrite_ref(src, inst_name, port_map): _rewrite_connection_value(tgt, inst_name, port_map)
         for src, tgt in connections.items()
     }
+
+    for edge in net.get("nets", []):
+        edge["p1"] = _rewrite_ref(edge["p1"], inst_name, port_map)
+        edge["p2"] = _rewrite_ref(edge["p2"], inst_name, port_map)
 
     if "ports" in net:
         net["ports"] = {pname: _rewrite_ref(ptgt, inst_name, port_map) for pname, ptgt in net["ports"].items()}

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import jax
 import jax.numpy as jnp
+import kfnetlist as kfnl
 import numpy as np
 import pytest
 
@@ -131,6 +132,8 @@ def test_resolved_compile_forwards_simparams(binary: Path, tmp_path: Path) -> No
     card = tmp_path / "settings.lib"
     card.write_text(f'load "{binary}"\nmodel rm native_modes\nr1 (out 0) rm\n')
     circuit = Library.from_file(card).resolve().compile(state_policy="limiting_only", simparams={"scale": 3})
+    assert isinstance(circuit.source_netlist, kfnl.Netlist)
+    assert set(circuit.ports) == {"0", "out"}
     descriptor = circuit.source_models["native_modes"]
     assert dict(descriptor.model.simparams) == {"scale": 3}
     result = circuit.sp(ports="out", freqs=jnp.array([1e3]))

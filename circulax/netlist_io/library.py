@@ -24,7 +24,11 @@ class ResolvedInstance:
 
 @dataclass
 class ResolvedCircuit:
-    """Simulator-independent leaf topology and the modules used by its cards."""
+    """Evaluated model cards awaiting conversion to kfnetlist and native models.
+
+    This intermediate retains ordered terminals and load declarations needed
+    for OSDI provisioning. Compilation builds the canonical kfnetlist.Netlist.
+    """
 
     instances: list[ResolvedInstance]
     loads: list[tuple[str, Path]]

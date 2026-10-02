@@ -77,7 +77,7 @@ class Circuit:
         rtol: float = 1e-6,
         atol: float = 1e-6,
         max_steps: int = 100,
-        _source_netlist: dict | None = None,
+        _source_netlist: dict | kfnl.Netlist | None = None,
         _source_models: dict | None = None,
         _is_pure_sax: bool = False,  # noqa: FBT001, FBT002
     ) -> None:
@@ -119,10 +119,12 @@ class Circuit:
         """External port names declared in the source netlist."""
         if self._source_netlist is None:
             return ()
+        if isinstance(self._source_netlist, kfnl.Netlist):
+            return tuple(port.name for port in self._source_netlist.ports)
         return tuple(self._source_netlist.get("ports", {}).keys())
 
     @property
-    def source_netlist(self) -> dict | None:
+    def source_netlist(self) -> dict | kfnl.Netlist | None:
         """The original netlist used to compile this circuit, if available."""
         return self._source_netlist
 
@@ -644,10 +646,10 @@ def _embed_circuit_subcircuits(
     circuit_models: dict[str, Circuit],
 ) -> dict:
     """Build a RecursiveNetlist from Circuit objects in *models_map* (mutates *models_map*)."""
-    from circulax.netlist import _is_recursive_netlist
+    from circulax.netlist import _is_recursive_netlist, kfnetlist_to_sax
 
     if isinstance(net_dict, kfnl.Netlist):
-        net_dict = net_dict.to_dict()
+        net_dict = kfnetlist_to_sax(net_dict)
     recnet: dict[str, dict] = {}
     if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict):
         recnet.update(net_dict)
@@ -657,7 +659,8 @@ def _embed_circuit_subcircuits(
         if circ.source_netlist is None:
             msg = f"Circuit '{name}' has no stored source netlist and cannot be used as a subcircuit."
             raise ValueError(msg)
-        recnet[name] = circ.source_netlist
+        source = circ.source_netlist
+        recnet[name] = kfnetlist_to_sax(source) if isinstance(source, kfnl.Netlist) else source
         for mk, mv in (circ.source_models or {}).items():
             existing = models_map.get(mk)
             if existing is not None and existing is not mv:
@@ -755,7 +758,7 @@ def compile_circuit(
     from circulax.solvers.linear import analyze_circuit
 
     models_map = dict(models_map)
-    source_netlist: dict | None = None
+    source_netlist: dict | kfnl.Netlist | None = None
     source_models: dict | None = None
 
     circuit_models = {k: v for k, v in models_map.items() if isinstance(v, Circuit)}
@@ -769,7 +772,7 @@ def compile_circuit(
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
         net_dict = flatten_recursive_netlist(net_dict)
         source_netlist = net_dict
-    elif isinstance(net_dict, dict):
+    elif isinstance(net_dict, (dict, kfnl.Netlist)):
         source_netlist = net_dict
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
 

@@ -17,6 +17,18 @@ pip install circulax
 
 ## Quickstart
 
+`kfnetlist.Netlist` is Circulax's canonical circuit topology and is also exported
+as `circulax.Netlist`. Its instances, nets, and ports define connectivity for
+compilation. SAX dictionaries remain supported as input and are converted to
+kfnetlist; their legacy type is available as `circulax.SaxNetlist`.
+
+`circulax.netlist` provides compilation helpers and legacy SAX adapters.
+`circulax.netlist_io` reads Spectre/VACASK model libraries: NetlistParse supplies
+syntax, the library loader evaluates parameters and subcircuit scopes, and OSDI
+provisioning builds a kfnetlist for `compile_circuit`. `ResolvedCircuit` is the
+intermediate model-card result, rather than a second simulation topology API.
+Circuits compiled from kfnetlist retain it in `Circuit.source_netlist`.
+
 Simulate an underdamped LCR circuit in the time domain:
 
 ![LCR transient animation](images/lcr_animation.gif)
