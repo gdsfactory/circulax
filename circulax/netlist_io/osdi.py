@@ -152,16 +152,16 @@ def _native_source(instance: ResolvedInstance) -> tuple[str, Any, dict[str, floa
 
 
 def _provision_modules(
-    resolved: ResolvedCircuit, module_paths: tuple[Path, ...], compiler: str | None, cache_dir: Path | None
+    resolved: ResolvedCircuit,
+    module_paths: tuple[Path, ...],
+    osdi_modules: tuple[Path, ...],
+    compiler: str | None,
+    cache_dir: Path | None,
 ) -> dict[str, tuple[Path, dict[str, str]]]:
     """Resolve and provision the module declarations belonging to the libraries."""
     modules = {}
-    for reference, directory in resolved.loads:
-        candidates = [directory / reference, *(Path(p) / reference for p in module_paths)]
-        path = next((p.resolve() for p in candidates if p.is_file()), None)
-        if path is None:
-            msg = f"OSDI load {reference!r} not found in {candidates}"
-            raise FileNotFoundError(msg)
+
+    def register(path: Path) -> None:
         if path.suffix == ".va":
             path = compile_va(path, compiler=compiler, cache_dir=cache_dir)
         name, aliases = module_metadata(path)
@@ -170,6 +170,19 @@ def _provision_modules(
             raise NetlistError(msg)
         modules[name.lower()] = (path, aliases)
 
+    for reference, directory in resolved.loads:
+        candidates = [directory / reference, *(Path(p) / reference for p in module_paths)]
+        path = next((p.resolve() for p in candidates if p.is_file()), None)
+        if path is None:
+            msg = f"OSDI load {reference!r} not found in {candidates}"
+            raise FileNotFoundError(msg)
+        register(path)
+    # Libraries without an explicit `load` statement (e.g. plain ngspice model
+    # cards, whose `.model` type names a module registered externally, the way
+    # ngspice's own `.spiceinit` does with `osdi '<path>'`) register directly.
+    for path in osdi_modules:
+        register(Path(path).resolve())
+
     return modules
 
 
@@ -177,6 +190,7 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
     resolved: ResolvedCircuit,
     *,
     module_paths: tuple[Path, ...] = (),
+    osdi_modules: tuple[Path, ...] = (),
     compiler: str | None = None,
     cache_dir: Path | None = None,
     backend: str = "dense",
@@ -189,7 +203,7 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
 
     from circulax.circuit import compile_circuit
 
-    modules = _provision_modules(resolved, module_paths, compiler, cache_dir)
+    modules = _provision_modules(resolved, module_paths, osdi_modules, compiler, cache_dir)
 
     netlist = kfnl.Netlist()
     netlist.create_inst(name="GND", kcl="", component="ground")

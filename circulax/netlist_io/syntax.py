@@ -40,19 +40,19 @@ def parameters(node: Any) -> dict[str, Any]:
     return result
 
 
-def parse_file(path: Path, dialect: str = "vacask") -> list[Statement]:
+def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
     """Parse libraries directly with NetlistParse; retain source and path ownership."""
     text = path.read_text()
-    if dialect == "spice":
+    if dialect == "ngspice":
         root = netlist_parser.parse_spice("* Circulax library\n" + text)
-    elif dialect in {"spectre", "vacask"}:
-        if not hasattr(netlist_parser, "parse_spectre"):
+    elif dialect == "spectre":
+        if not hasattr(netlist_parser, "parse_netlist"):
             msg = (
-                "This library requires NetlistParse with the Python parse_spectre binding. "
+                "This library requires NetlistParse with the Python parse_netlist binding. "
                 "Install circulax[netlists] to obtain the supported parser binding."
             )
             raise ImportError(msg)
-        root = netlist_parser.parse_spectre(text, vacask=dialect == "vacask")
+        root = netlist_parser.parse_netlist(text, "spectre")
     else:
         msg = f"unsupported dialect {dialect!r}"
         raise NetlistError(msg)

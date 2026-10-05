@@ -49,7 +49,7 @@ class Scope:
     def __init__(self, parent: Scope | None = None) -> None:
         """Create a lazy parameter scope with an optional lexical parent."""
         self.parent = parent
-        self.dialect = parent.dialect if parent else "vacask"
+        self.dialect = parent.dialect if parent else "ngspice"
         self.bindings: dict[str, Any] = {}
         self._active: set[str] = set()
 

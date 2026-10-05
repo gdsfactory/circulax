@@ -39,6 +39,7 @@ class ResolvedCircuit:
         self,
         *,
         module_paths: tuple[Path, ...] = (),
+        osdi_modules: tuple[Path, ...] = (),
         compiler: str | None = None,
         cache_dir: Path | None = None,
         backend: str = "dense",
@@ -51,12 +52,17 @@ class ResolvedCircuit:
         simparams supplies numeric $simparam settings to all native devices.
         Separate registrations are required to change mode. For AC, retain
         DC conductance and obtain capacitance from an AC registration.
+
+        osdi_modules registers compiled `.osdi`/`.va` files by their own
+        descriptor name directly, for libraries (e.g. plain ngspice model
+        cards) that reference a module by name without a `load` statement.
         """
         from circulax.netlist_io.osdi import compile_resolved
 
         return compile_resolved(
             self,
             module_paths=module_paths,
+            osdi_modules=osdi_modules,
             compiler=compiler,
             cache_dir=cache_dir,
             backend=backend,
@@ -109,7 +115,7 @@ class Library:
     Libraries retain their lexical scopes, local nodes and conditional branches.
     """
 
-    def __init__(self, *, temperature_c: float = 27.0, include_paths: tuple[Path, ...] = (), dialect: str = "vacask") -> None:
+    def __init__(self, *, temperature_c: float = 27.0, include_paths: tuple[Path, ...] = (), dialect: str = "ngspice") -> None:
         """Create an empty model library at the requested card temperature."""
         if not math.isfinite(temperature_c) or temperature_c <= -273.15:
             msg = "temperature_c must be finite and above absolute zero"
@@ -134,7 +140,7 @@ class Library:
         section: str | None = None,
         temperature_c: float = 27.0,
         include_paths: tuple[Path, ...] = (),
-        dialect: str = "vacask",
+        dialect: str = "ngspice",
     ) -> Library:
         """Read a library and select a named corner section when requested."""
         library = cls(temperature_c=temperature_c, include_paths=include_paths, dialect=dialect)
@@ -208,7 +214,7 @@ class Library:
         for statement in statements:
             node = statement.node
             kind = statement.kind
-            if kind == "ParamStatement":
+            if kind in {"ParamStatement", "EndlStatement"}:
                 continue
             if kind == "Model":
                 name = (_nodes(node) or [n.text for n in children(node, "Identifier")])[0]
@@ -216,7 +222,7 @@ class Library:
             elif kind == "Subckt":
                 name = children(node, "Identifier")[0].text
                 frame.subcircuits[name] = (statement, frame)
-            elif kind == "SubcktCall":
+            elif kind in {"SubcktCall", "OSDIDevice"}:
                 frame.calls.append(statement)
             elif kind == "HDLStatement":
                 reference = children(node, "StringLiteral")[0].text.strip('"')
