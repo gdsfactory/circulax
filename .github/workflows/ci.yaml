@@ -129,6 +129,49 @@ jobs:
           JAX_PLATFORMS: cpu
         run: pixi run -e ${{ matrix.env }} pytest_run
 
+  ihp_parity:
+    name: "IHP parity / ngspice + VACASK"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      JAX_PLATFORMS: cpu
+      MPLCONFIGDIR: /tmp/ihp-matplotlib
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.76.1
+          environments: ihp-parity
+          cache: true
+      - name: Install ngspice build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential autoconf automake libtool bison flex
+      - name: Check locked IHP environment
+        run: pixi install -e ihp-parity --locked
+      - uses: actions/cache@v4
+        with:
+          path: .pixi/ihp-parity/osdi-cache
+          key: ihp-osdi-linux-${{ hashFiles('pixi.lock', 'circulax/netlist_io/osdi.py', 'benchmarks/ihp_parity/ci.py') }}
+      - uses: actions/cache@v4
+        with:
+          path: .pixi/ihp-parity/toolchain/ngspice
+          key: ihp-ngspice-linux-${{ hashFiles('benchmarks/ihp_parity/build_ngspice.sh') }}
+      - name: Require ngspice and VACASK parity
+        run: pixi run --locked -e ihp-parity ihp-parity-ci
+      - name: Upload parity results and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ihp-parity-results
+          include-hidden-files: true
+          path: |
+            parity-results/
+            .pixi/ihp-parity/toolchain/ngspice/*.log
+          if-no-files-found: warn
+
   test_long:
     # Slow tests (notebook execution) run on PRs to main and on push to main.
     # Only on Linux / py313 — papermill notebook execution is not tested on Windows/macOS.

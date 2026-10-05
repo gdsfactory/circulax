@@ -50,6 +50,7 @@ class Scope:
         """Create a lazy parameter scope with an optional lexical parent."""
         self.parent = parent
         self.dialect = parent.dialect if parent else "ngspice"
+        self.statistical_mode = parent.statistical_mode if parent else "reject"
         self.bindings: dict[str, Any] = {}
         self._active: set[str] = set()
 
@@ -99,7 +100,7 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
             msg = f"invalid number {node.text!r}"
             raise NetlistError(msg)
         suffix = match[2].lower()
-        if match[2] == "M" and scope.dialect != "spice":
+        if match[2] == "M" and scope.dialect not in {"spice", "ngspice"}:
             return float(match[1]) * 1e6
         if suffix and suffix not in _SCALE:
             msg = f"unsupported unit suffix {suffix!r}"
@@ -133,6 +134,13 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
         return evaluate(c[2] if evaluate(c[0], scope) else c[4], scope)
     if kind == "FunctionCall":
         function = c[0].text
+        if function.lower() == "agauss" and scope.statistical_mode == "nominal":
+            arguments = children(node, "FunctionArgs")
+            if len(arguments) != 3:
+                msg = "agauss requires nominal, variation and sigma arguments"
+                raise NetlistError(msg)
+            values = [evaluate(argument, scope) for argument in arguments]
+            return float(values[0])
         if function not in _FUNCTIONS:
             msg = f"unsupported function {function!r}"
             raise NetlistError(msg)
