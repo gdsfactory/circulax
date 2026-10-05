@@ -177,7 +177,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.15.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/c1/d16c6ecfc91326b045e3eafa30711dd1f1c52f9c74be7ee61ab087fb821e/inspice-1.7.0.7-py3-none-any.whl
@@ -304,7 +304,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-hed4e4f5_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/13/57/d38a27365df11eb37b2855ecb82cacdb90502019f8482662d1502888681d/klujax-0.5.2-cp313-cp313-macosx_11_0_arm64.whl
@@ -440,7 +440,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-ng-2.3.3-h0261ad2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/zstd-1.5.7-h534d264_6.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/18/a6/907a406bb7d359e6a63f99c313846d9eec4f7e6f7437809e03aa00fa3074/absl_py-2.4.0-py3-none-any.whl
@@ -516,7 +516,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.15.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/02/08/9c41fb51ab5b43eb21674aff13df270e8ba6c4b29c8624e328dc7a9482af/distlib-0.4.3-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
@@ -740,7 +740,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-h010d191_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uv-0.11.24-hc169f86_0.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/02/08/9c41fb51ab5b43eb21674aff13df270e8ba6c4b29c8624e328dc7a9482af/distlib-0.4.3-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
@@ -964,7 +964,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.51.36231-h1b9f54f_39.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.51.36231-h1b9f54f_39.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/02/08/9c41fb51ab5b43eb21674aff13df270e8ba6c4b29c8624e328dc7a9482af/distlib-0.4.3-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
@@ -1188,7 +1188,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.6.17-hbd8a1cb_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0e/a4/82b7a2fe5d8a67a59ed831b24d59a3d46ea7d207b66e1602d376541d94a6/orjson-3.11.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -1256,7 +1256,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h46df422_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-h010d191_3.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/08/ef/b3c6b9b5be2f82416d73fe2ed2e96e2793cd80e7510bd6a17ca79cdd88ec/fonttools-4.63.0-cp312-cp312-macosx_10_13_universal2.whl
@@ -1325,7 +1325,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.51.36231-h1b9f54f_39.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.51.36231-h1b9f54f_39.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/10/bd/c038d7cc38edc1aa5bf91ab8068b63d4308c66c4c8bb3cbba7dfbc049f9c/pyparsing-3.3.2-py3-none-any.whl
@@ -1418,7 +1418,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.15.0-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025c-hc9c84f9_1.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/02/08/9c41fb51ab5b43eb21674aff13df270e8ba6c4b29c8624e328dc7a9482af/distlib-0.4.3-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
@@ -1642,7 +1642,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/tk-8.6.13-h010d191_3.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/uv-0.11.24-hc169f86_0.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/02/08/9c41fb51ab5b43eb21674aff13df270e8ba6c4b29c8624e328dc7a9482af/distlib-0.4.3-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
@@ -1866,7 +1866,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/vc14_runtime-14.51.36231-h1b9f54f_39.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/vcomp14-14.51.36231-h1b9f54f_39.conda
       - pypi: ./
-      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+      - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
       - pypi: git+https://github.com/gdsfactory/bosdi.git?rev=5595fc331e28dadadd8bbc1c0292c8e35f0e627f#5595fc331e28dadadd8bbc1c0292c8e35f0e627f
       - pypi: https://files.pythonhosted.org/packages/02/08/9c41fb51ab5b43eb21674aff13df270e8ba6c4b29c8624e328dc7a9482af/distlib-0.4.3-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/d3/8b2d598ed183c9982240fab82475c1f1ff21e38dbc052cbfc444e30e9c77/scikit_rf-1.12.0-py3-none-any.whl
@@ -7290,7 +7290,7 @@ packages:
   - mkdocstrings==0.28.3 ; extra == 'dev'
   - mypy ; extra == 'dev'
   - nbconvert ; extra == 'dev'
-  - netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@cae4f10e53e756721bfd56e74ee716407de7b1e4#subdirectory=crates/netlist-py ; extra == 'dev'
+  - netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py ; extra == 'dev'
   - papermill ; extra == 'dev'
   - pre-commit ; extra == 'dev'
   - pymdown-extensions ; extra == 'dev'
@@ -7317,10 +7317,10 @@ packages:
   - nbconvert ; extra == 'docs'
   - papermill ; extra == 'docs'
   - pymdown-extensions ; extra == 'docs'
-  - netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@cae4f10e53e756721bfd56e74ee716407de7b1e4#subdirectory=crates/netlist-py ; extra == 'netlists'
+  - netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py ; extra == 'netlists'
   - bosdi @ git+https://github.com/gdsfactory/bosdi.git@5595fc331e28dadadd8bbc1c0292c8e35f0e627f ; extra == 'verilog-a'
   requires_python: '>=3.12'
-- pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=cae4f10e53e756721bfd56e74ee716407de7b1e4#cae4f10e53e756721bfd56e74ee716407de7b1e4
+- pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb
   name: netlist-parser
   version: 0.1.0
   requires_python: '>=3.9'

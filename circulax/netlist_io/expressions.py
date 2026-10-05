@@ -54,12 +54,20 @@ class Scope:
         self._active: set[str] = set()
 
     def lookup(self, name: str) -> float | str:
-        """Resolve a parameter, evaluating its definition in the declaring scope."""
+        """Resolve a parameter, evaluating its definition in the declaring scope.
+
+        SPICE identifiers are case-insensitive, so a name is matched exactly
+        first and falls back to a case-insensitive scan of this scope only.
+        """
         if name not in self.bindings:
-            if self.parent is not None:
+            folded = next((k for k in self.bindings if k.lower() == name.lower()), None)
+            if folded is not None:
+                name = folded
+            elif self.parent is not None:
                 return self.parent.lookup(name)
-            msg = f"unresolved parameter {name!r}"
-            raise NetlistError(msg)
+            else:
+                msg = f"unresolved parameter {name!r}"
+                raise NetlistError(msg)
         value = self.bindings[name]
         if isinstance(value, (float, int)):
             return value

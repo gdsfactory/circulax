@@ -218,11 +218,11 @@ class Library:
                 continue
             if kind == "Model":
                 name = (_nodes(node) or [n.text for n in children(node, "Identifier")])[0]
-                frame.models[name] = (node, frame.scope)
+                frame.models[name.lower()] = (node, frame.scope)
             elif kind == "Subckt":
                 name = children(node, "Identifier")[0].text
-                frame.subcircuits[name] = (statement, frame)
-            elif kind in {"SubcktCall", "OSDIDevice"}:
+                frame.subcircuits[name.lower()] = (statement, frame)
+            elif kind in {"SubcktCall", "OSDIDevice", "Diode", "Resistor", "Capacitor"}:
                 frame.calls.append(statement)
             elif kind == "HDLStatement":
                 reference = children(node, "StringLiteral")[0].text.strip('"')
@@ -250,7 +250,7 @@ class Library:
         self, subcircuit: str, nodes: tuple[str, ...] | None = None, settings: dict[str, float] | None = None, *, name: str = "X1"
     ) -> ResolvedCircuit:
         """Expand a library subcircuit without loading executable OSDI modules."""
-        found = self.frame.find(subcircuit, "subcircuits")
+        found = self.frame.find(subcircuit.lower(), "subcircuits")
         if found is None:
             msg = f"unknown subcircuit {subcircuit!r}"
             raise NetlistError(msg)
@@ -289,40 +289,55 @@ class Library:
         self._populate(frame, _body(statement), settings)
         self._calls(frame, dict(zip(ports, nodes, strict=True)), name, instances, (*active, token))
 
+    # Builtin SPICE primitives whose two-terminal instance line carries no
+    # model reference at all (e.g. `R1 1 2 R=1k`) when used without one.
+    _INLINE_BUILTINS = {"Resistor": "r", "Capacitor": "c"}
+
     def _calls(
         self, frame: _Frame, terminals: dict[str, str], prefix: str, instances: list[ResolvedInstance], active: tuple[int, ...]
     ) -> None:
         for statement in frame.calls:
-            symbols = _nodes(statement.node)
-            if children(statement.node, "SNodeList"):
-                call_name, master = [n.text for n in children(statement.node, "Identifier")]
-                nodes = symbols
+            node = statement.node
+            symbols = _nodes(node)
+            inline_builtin = self._INLINE_BUILTINS.get(statement.kind)
+            is_inline = inline_builtin is not None and not children(node, "NameRef")
+            if is_inline:
+                call_name, *nodes = symbols
+                master, model, subcircuit = inline_builtin, None, None
             else:
-                call_name, *nodes, master = symbols
+                if inline_builtin is not None:
+                    call_name, *nodes = symbols
+                    master = children(node, "NameRef")[0].text
+                elif children(node, "SNodeList"):
+                    call_name, master = [n.text for n in children(node, "Identifier")]
+                    nodes = symbols
+                else:
+                    call_name, *nodes, master = symbols
+                master = master.lower()
+                lookup = frame
+                model = None
+                subcircuit = None
+                while lookup is not None:
+                    model = lookup.models.get(master)
+                    subcircuit = lookup.subcircuits.get(master) if model is None else None
+                    if model is not None or subcircuit is not None:
+                        break
+                    lookup = lookup.parent
             name = f"{prefix}/{call_name}" if prefix else call_name
             mapped = tuple(
                 "0" if n in self.grounds else terminals.get(n, n if n in self.globals or not prefix else f"{prefix}/{n}")
                 for n in nodes
             )
-            settings = {k: evaluate(v, frame.scope) for k, v in parameters(statement.node).items()}
-            lookup = frame
-            model = None
-            subcircuit = None
-            while lookup is not None:
-                model = lookup.models.get(master)
-                subcircuit = lookup.subcircuits.get(master) if model is None else None
-                if model is not None or subcircuit is not None:
-                    break
-                lookup = lookup.parent
+            settings = {k: evaluate(v, frame.scope) for k, v in parameters(node).items()}
             if subcircuit is not None:
                 self._instantiate(subcircuit, mapped, settings, name, instances, active)
                 continue
             if model is not None:
                 model_node, model_scope = model
-                module = children(model_node, "Identifier")[-1].text
+                module = children(model_node, "Identifier")[-1].text.lower()
                 card = {k: evaluate(v, model_scope) for k, v in parameters(model_node).items()}
                 card.update(settings)
-            elif master in {"vsource", "isource"}:
+            elif is_inline or master in {"vsource", "isource"}:
                 module = master
                 card = settings
             else:

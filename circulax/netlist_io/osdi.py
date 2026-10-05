@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from circulax.circuit import Circuit
     from circulax.netlist_io.library import ResolvedCircuit, ResolvedInstance
 
+# Builtin SPICE primitive type keywords (`.model name <type>`, or no model at
+# all for a bare two-terminal device) map to VACASK's SPICE-port OSDI module
+# names. Callers provision the actual `.osdi` files via `osdi_modules=`.
+_BUILTIN_SPICE_MODULES = {"r": "sp_resistor", "c": "sp_capacitor", "d": "sp_diode"}
+
 
 def compile_va(source: Path, *, compiler: str | None = None, cache_dir: Path | None = None) -> Path:
     """Compile into a content-addressed cache, including preprocessor dependencies."""
@@ -218,11 +223,11 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
             models[component] = model
             names = ("p1", "p2")
         else:
-            if module not in modules:
+            component = _BUILTIN_SPICE_MODULES.get(module, module)
+            if component not in modules:
                 msg = f"{instance.name}: no loaded OSDI module named {instance.module!r}"
                 raise NetlistError(msg)
-            path, aliases = modules[module]
-            component = module
+            path, aliases = modules[component]
             names = tuple(f"p{i}" for i in range(len(instance.nodes)))
             if component not in models:
                 models[component] = osdi_component(
