@@ -50,16 +50,25 @@ class Scope:
         """Create a lazy parameter scope with an optional lexical parent."""
         self.parent = parent
         self.dialect = parent.dialect if parent else "ngspice"
+        self.statistical_mode = parent.statistical_mode if parent else "reject"
         self.bindings: dict[str, Any] = {}
         self._active: set[str] = set()
 
     def lookup(self, name: str) -> float | str:
-        """Resolve a parameter, evaluating its definition in the declaring scope."""
+        """Resolve a parameter, evaluating its definition in the declaring scope.
+
+        SPICE identifiers are case-insensitive, so a name is matched exactly
+        first and falls back to a case-insensitive scan of this scope only.
+        """
         if name not in self.bindings:
-            if self.parent is not None:
+            folded = next((k for k in self.bindings if k.lower() == name.lower()), None)
+            if folded is not None:
+                name = folded
+            elif self.parent is not None:
                 return self.parent.lookup(name)
-            msg = f"unresolved parameter {name!r}"
-            raise NetlistError(msg)
+            else:
+                msg = f"unresolved parameter {name!r}"
+                raise NetlistError(msg)
         value = self.bindings[name]
         if isinstance(value, (float, int)):
             return value
@@ -91,7 +100,7 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
             msg = f"invalid number {node.text!r}"
             raise NetlistError(msg)
         suffix = match[2].lower()
-        if match[2] == "M" and scope.dialect != "spice":
+        if match[2] == "M" and scope.dialect not in {"spice", "ngspice"}:
             return float(match[1]) * 1e6
         if suffix and suffix not in _SCALE:
             msg = f"unsupported unit suffix {suffix!r}"
@@ -125,6 +134,13 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
         return evaluate(c[2] if evaluate(c[0], scope) else c[4], scope)
     if kind == "FunctionCall":
         function = c[0].text
+        if function.lower() == "agauss" and scope.statistical_mode == "nominal":
+            arguments = children(node, "FunctionArgs")
+            if len(arguments) != 3:
+                msg = "agauss requires nominal, variation and sigma arguments"
+                raise NetlistError(msg)
+            values = [evaluate(argument, scope) for argument in arguments]
+            return float(values[0])
         if function not in _FUNCTIONS:
             msg = f"unsupported function {function!r}"
             raise NetlistError(msg)

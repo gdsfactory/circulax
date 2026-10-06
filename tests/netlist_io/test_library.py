@@ -132,6 +132,9 @@ N1 p n device
 
 
 def test_spectre_direct_and_case_sensitive_suffixes(tmp_path: Path) -> None:
+    parser = pytest.importorskip("netlist_parser")
+    if not hasattr(parser, "parse_netlist"):
+        pytest.skip("Spectre parse_netlist binding is required")
     card = tmp_path / "spectre.lib"
     card.write_text("""subckt device(p n)
 parameters a=1M b=1m
@@ -169,3 +172,78 @@ def test_literal_parameter_names_are_preserved(tmp_path: Path) -> None:
     card.write_text("* names\n.model rm sp_resistor r=1k __cx_mfactor=7\nN1 p 0 rm\n")
     instance = Library.from_file(card).resolve().instances[0]
     assert instance.parameters == {"r": 1000, "__cx_mfactor": 7}
+
+
+def test_native_sources_use_scoped_dc_ac_and_pulse_expressions(tmp_path: Path) -> None:
+    card = tmp_path / "sources.lib"
+    card.write_text(""".param supply=1.2
+.subckt driver p n
+.param level=supply
+Vbias p n DC {level} AC 2 30
+Iload p n 3m
+Vpulse local n PULSE(0 {level} 1n 0.1n 0.1n 2n 4n)
+.ends
+X1 out 0 driver level=2
+""")
+    voltage, current, pulse = Library.from_file(card).resolve().instances
+    assert voltage.module == "vsource"
+    assert voltage.nodes == ("out", "0")
+    assert voltage.parameters == {"dc": 2, "mag": 2, "phase": 30}
+    assert current.module == "isource"
+    assert current.parameters == {"dc": 0.003}
+    assert pulse.nodes == ("X1/local", "0")
+    assert pulse.parameters["type"] == "pulse"
+    assert pulse.parameters["val1"] == 2
+    assert pulse.parameters["period"] == pytest.approx(4e-9)
+
+
+@pytest.mark.parametrize("waveform", ["SIN(0 1 1k)", "PULSE(0 1)"])
+def test_unsupported_native_waveform_fails_explicitly(tmp_path: Path, waveform: str) -> None:
+    card = tmp_path / "source.lib"
+    card.write_text(f"V1 out 0 {waveform}\n")
+    with pytest.raises(NetlistError, match="PULSE"):
+        Library.from_file(card).resolve()
+
+
+def test_native_sources_compile_and_solve(tmp_path: Path) -> None:
+    pytest.importorskip("bosdi.circulax")
+    card = tmp_path / "source.lib"
+    card.write_text("V1 out 0 DC 1.2\nI1 out 0 DC 3m\n")
+    circuit = Library.from_file(card).resolve().compile()
+    assert circuit.port(circuit.dc(), "out") == pytest.approx(1.2)
+
+
+def test_nominal_statistics_are_explicit_and_inherited(tmp_path: Path) -> None:
+    card = tmp_path / "statistics.lib"
+    card.write_text(""".subckt device p n
+.param mean=2
+.model rm r r='agauss(mean,1,3)*1k'
+R1 p n rm
+.ends
+X1 out 0 device
+""")
+    with pytest.raises(NetlistError, match="agauss"):
+        Library.from_file(card).resolve()
+    resolved = Library.from_file(card, statistical_mode="nominal").resolve()
+    assert resolved.instances[0].parameters["r"] == 2000
+    with pytest.raises(NetlistError, match="statistical_mode"):
+        Library.from_file(card, statistical_mode="sample")
+
+
+def test_ngspice_uppercase_meg_and_milli_suffixes(tmp_path: Path) -> None:
+    card = tmp_path / "sources.lib"
+    card.write_text("V1 out 0 1M\nI1 out 0 2MEG\n")
+    voltage, current = Library.from_file(card).resolve().instances
+    assert voltage.parameters["dc"] == pytest.approx(1e-3)
+    assert current.parameters["dc"] == pytest.approx(2e6)
+
+
+def test_positional_primitives_retain_values(tmp_path: Path) -> None:
+    card = tmp_path / "primitives.lib"
+    card.write_text(".param resistance=2k\nR1 in out 1k\nR2 out 0 R={resistance}\nC1 out 0 3p\nL1 in 0 4n\n")
+    instances = Library.from_file(card).resolve().instances
+    assert [instance.module for instance in instances] == ["r", "r", "c", "l"]
+    assert instances[0].parameters == {"r": 1000}
+    assert instances[1].parameters == {"R": 2000}
+    assert instances[2].parameters["c"] == pytest.approx(3e-12)
+    assert instances[3].parameters["l"] == pytest.approx(4e-9)
