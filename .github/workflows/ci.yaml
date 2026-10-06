@@ -37,10 +37,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         env: [py312, py313]
-        exclude:
-          # py313 uses the dev feature which includes bosdi (no Windows wheels)
-          - os: windows-latest
-            env: py313
 
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +120,9 @@ jobs:
 
       - name: Compile OSDI test fixtures
         run: pixi run -e ${{ matrix.env }} compile_osdi
+
+      - name: Verify native OSDI integration is installed
+        run: pixi run -e ${{ matrix.env }} python -c "from bosdi.circulax import osdi_component; import osdi_jax"
 
       - name: Run fast tests
         env:

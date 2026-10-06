@@ -1,0 +1,35 @@
+{
+  "run_date": "2026-10-01",
+  "temperature_c_baseline": 26.85,
+  "temperature_c_checks": [
+    -40,
+    27,
+    125
+  ],
+  "comparison_count": 60,
+  "passed_count": 60,
+  "source_state": {
+    "circulax": {
+      "commit": "a2c6c74a18f5868c12b929255fbb4d3d3bf667b3",
+      "has_local_changes": true
+    },
+    "pdk": {
+      "commit": "dc36b27ad61180c65a9d0068ebd850c47e6ca5c4",
+      "has_local_changes": false
+    },
+    "parser": {
+      "commit": "cae4f10e53e756721bfd56e74ee716407de7b1e4",
+      "has_local_changes": false
+    },
+    "bosdi": {
+      "commit": "480e9cc539a89dccef7795f2e7e3c7ace1aad67b",
+      "has_local_changes": false
+    },
+    "vacask": {
+      "commit": "6434ed0aa6fefdb282af6d03f00be8f2455625f9",
+      "has_local_changes": true
+    }
+  },
+  "openvaf_version": "openvaf 23.5.0",
+  "limitations": "All 60 selected comparisons pass; general state history, HBT, voltage-dependent model-card expressions and arbitrary Verilog-A abstime remain unsupported. Analysis mode is selected when compiling; benchmark uses separate DC and AC/transient registrations."
+}
