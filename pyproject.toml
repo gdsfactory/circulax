@@ -43,7 +43,7 @@ dependencies = [
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
 # so it stays on jax 0.7.2 until bosdi widens its compatibility.
 verilog-a = [
-    "bosdi~=0.1.6",
+    "bosdi~=0.1.8",
 ]
 docs = [
     "ipykernel>=6.29.5",
