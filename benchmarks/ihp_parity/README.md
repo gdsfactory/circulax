@@ -170,7 +170,7 @@ independently of Circulax.
 
 ## Native mode orchestration and VBIC follow-up
 
-Public `Circuit.dc`, `sp`/`ac`, and `transient` now select immutable DC, AC and transient OSDI registrations automatically, including parameter updates. AC uses `G_dc + j*omega*C_ac`. The fixed raw-node and scatter layouts are checked between modes. Native harmonic balance remains explicitly unsupported.
+Public `Circuit.dc`, `sp`/`ac`, and `transient` now select immutable DC, AC and transient OSDI registrations automatically, including parameter updates. AC uses `G_dc + j*omega*C_ac`. The fixed raw-node and scatter layouts are checked between modes. Native harmonic balance uses transient-mode F/Q for devices without ABI state slots; devices with ABI state slots remain unsupported. Gradients through a converged native HB solve remain unsupported.
 
 For the audited OpenVAF binaries, the harness opts into `state_policy="limiting_only"`. OpenVAF's OSDI state count represents `$limit` Newton buffers, not physical NQS history. `ENABLE_LIM` stays disabled; physical DDT charges and IDT unknowns remain in the circuit DAE. Generic history-dependent binaries and `$abstime` still need runtime support.
 
