@@ -119,6 +119,10 @@ preview = ["pixi-build"]
 [tool.pixi.pypi-dependencies]
 circulax = { path = ".", editable = true }
 
+# Released bosdi macOS wheels load the Conda C++ runtime via @rpath.
+[tool.pixi.target.osx-arm64.dependencies]
+libcxx = ">=22.1.3"
+
 # ---------------------------------------------------------------------------
 # Conda package build (pixi build)
 # pixi-build-python reads [project] metadata directly — no recipe.yaml needed.
