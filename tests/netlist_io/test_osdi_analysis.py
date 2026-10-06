@@ -69,7 +69,7 @@ def test_public_native_analyses(binary: Path, initial_mode: str) -> None:
     np.testing.assert_allclose(updated[:, 0, 0], expected_updated, atol=1e-10)
     global_updated = jax.jit(lambda resistance: circuit.sp(ports="out", freqs=frequencies, r=resistance, c=2e-9))(2000.0)
     np.testing.assert_allclose(global_updated, updated, atol=1e-10)
-    with pytest.raises(NotImplementedError, match="harmonic balance"):
+    with pytest.raises(NotImplementedError, match="harmonic balance with ABI state slots"):
         circuit.hb(freq=1e3)
     y0 = circuit.dc().at[circuit.port_map["r,p"]].set(1.0)
     times = jnp.linspace(0, 1e-6, 11)

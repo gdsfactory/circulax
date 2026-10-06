@@ -39,10 +39,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Temporary immutable PR pin until the Python Spectre/VACASK API is upstream.
+# Temporary immutable PR pin until the Python dialect-dispatch API is upstream.
 # https://github.com/NyanCAD/NetlistParse.rs/pull/6
 netlists = [
-    "netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@cae4f10e53e756721bfd56e74ee716407de7b1e4#subdirectory=crates/netlist-py",
+    "netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py",
 ]
 # bosdi caps jax<0.8, so the verilog-a extra constrains the core down from
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
@@ -191,9 +191,26 @@ circulax = { path = ".", editable = true, extras = ["verilog-a", "netlists"] }
 [tool.pixi.feature.benchmark.target.linux-64.pypi-dependencies]
 InSpice = ">=1.7.0.7"
 
+# Temporary IHP testing dependency until PR #259 is merged/released.
+# Its Python <3.13 requirement needs a separate solve group.
+[tool.pixi.feature.ihp-pdk]
+platforms = ["linux-64"]
+
+[tool.pixi.feature.ihp-pdk.system-requirements]
+libc = { family = "glibc", version = "2.34" }
+
+[tool.pixi.feature.ihp-pdk.pypi-dependencies]
+# Reuse bosdi's OSDI 0.4-compatible simulator/compiler wheel.
+vacask-bin = "==0.3.3.dev2"
+ihp-gdsfactory = { git = "https://github.com/gdsfactory/IHP.git", branch = "fix/vacask-common-declarations" }
+
+[tool.pixi.feature.ihp-pdk.tasks]
+ihp-build-ngspice = { cmd = ["bash", "benchmarks/ihp_parity/build_ngspice.sh"], description = "Build pinned ngspice 45.2 with OSDI enabled" }
+ihp-parity-ci = { cmd = ["python", "-m", "benchmarks.ihp_parity.ci"], depends-on = ["ihp-build-ngspice"], description = "Provision locked IHP/VACASK and require both 60-case parity matrices" }
+
 [tool.pixi.feature.benchmark.tasks]
 ihp-metadata-tests = { cmd = ["pytest", "benchmarks/ihp_parity/test_metadata.py"], description = "Check external IHP metadata adapter; set IHP_PDK_ROOT" }
-ihp-parity = { cmd = ["python", "-m", "benchmarks.ihp_parity.run"], description = "Compare IHP against native VACASK; supply simulator and PDK paths" }
+ihp-parity = { cmd = ["python", "-m", "benchmarks.ihp_parity.run"], description = "Compare IHP against ngspice or converted VACASK; supply simulator and PDK paths" }
 gf180-parity = { cmd = ["python", "-m", "benchmarks.gf180_parity.run"], description = "Compare GF180 compact-model cards against native VACASK" }
 native-tests = { cmd = ["pytest", "tests/netlist_io/test_osdi_analysis.py", "tests/netlist_io/test_osdi_compilation.py"], description = "Native OSDI compilation and public analysis tests" }
 
@@ -244,6 +261,7 @@ py313 = { features = ["py313", "dev"],  solve-group = "py313" }
 
 # Benchmark environment — separate solve group keeps reference dependencies isolated
 benchmark = { features = ["py313", "benchmark"], solve-group = "benchmark" }
+ihp-parity = { features = ["py312", "benchmark", "ihp-pdk"], solve-group = "ihp-parity" }
 
 # ---------------------------------------------------------------------------
 # Pytest
