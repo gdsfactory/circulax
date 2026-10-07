@@ -501,6 +501,12 @@ def _inline_subcircuit(net: dict, inst_name: str, child: dict, sep: str) -> None
         for src, tgt in connections.items()
     }
 
+    if "nets" in net:
+        net["nets"] = [
+            {**entry, "p1": _rewrite_ref(entry["p1"], inst_name, port_map), "p2": _rewrite_ref(entry["p2"], inst_name, port_map)}
+            for entry in net["nets"]
+        ]
+
     if "ports" in net:
         net["ports"] = {pname: _rewrite_ref(ptgt, inst_name, port_map) for pname, ptgt in net["ports"].items()}
 
