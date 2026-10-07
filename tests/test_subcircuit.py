@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from circulax import compile_circuit
+from circulax import attach_testbench, compile_circuit
 from circulax.netlist import _is_recursive_netlist, flatten_recursive_netlist
 
 jax.config.update("jax_enable_x64", True)
@@ -473,3 +473,38 @@ class TestCircuitInModelsMap:
         parent_models = {"R": Capacitor, "sub": sub, "ground": lambda: 0}
         with pytest.raises(ValueError, match="Model name conflict"):
             compile_circuit(parent_netlist, parent_models)
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_attach_testbench_to_compiled_subcircuit(*, nested: bool) -> None:
+    """Parent nets terminate compiled subcircuits, including nested packages."""
+    models = _leaf_models()
+    leaf = compile_circuit(
+        {"instances": {"R": {"component": "Resistor", "settings": {"R": 100.0}}}, "ports": {"p1": "R,p1", "p2": "R,p2"}},
+        models,
+        backend="dense",
+    )
+    if nested:
+        leaf = compile_circuit(
+            {"instances": {"INNER": {"component": "leaf"}}, "ports": {"p1": "INNER,p1", "p2": "INNER,p2"}},
+            {**models, "leaf": leaf},
+            backend="dense",
+        )
+    device = {
+        "instances": {"A": {"component": "package"}, "B": {"component": "package"}},
+        "nets": [{"p1": "A,p2", "p2": "B,p1"}],
+        "ports": {"in": "A,p1", "out": "B,p2"},
+    }
+    bench = attach_testbench(
+        device,
+        sources={"in": {"name": "V1", "component": "VDC", "settings": {"V": 3.0}}},
+        loads={"out": {"name": "LOAD", "component": "Resistor", "settings": {"R": 100.0}}},
+    )
+    circuit = compile_circuit(bench, {**models, "package": leaf}, backend="dense")
+    op = circuit.dc()
+    # Two series 100-ohm packages and a 100-ohm load divide 3 V into thirds.
+    assert jnp.isclose(circuit.port(op, "LOAD,p1"), 1.0, rtol=1e-6)
+    assert jnp.isclose(circuit.port(op, "V1,i_src"), -0.01, rtol=1e-6)
+    # Flattening must not mutate the original device or compiled package.
+    assert device["nets"] == [{"p1": "A,p2", "p2": "B,p1"}]
+    assert leaf.ports == ("p1", "p2")
