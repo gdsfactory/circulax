@@ -41,8 +41,15 @@ def parameters(node: Any) -> dict[str, Any]:
 
 
 def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
-    """Parse libraries directly with NetlistParse; retain source and path ownership."""
-    text = path.read_text()
+    """Parse original UTF-8 or legacy Latin-1 model cards and includes.
+
+    @tags circulax-simulation
+    """
+    data = path.read_bytes()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("latin-1")
     if dialect == "ngspice":
         root = netlist_parser.parse_spice("* Circulax library\n" + text)
     elif dialect == "spectre":

@@ -6,6 +6,7 @@ models and passes a kfnetlist.Netlist to compile_circuit.
 """
 
 from circulax.netlist_io.library import Library, ResolvedCircuit, ResolvedInstance
+from circulax.netlist_io.model import LibraryModel, NetlistDefinition
 from circulax.netlist_io.syntax import NetlistError
 
-__all__ = ["Library", "NetlistError", "ResolvedCircuit", "ResolvedInstance"]
+__all__ = ["Library", "LibraryModel", "NetlistDefinition", "NetlistError", "ResolvedCircuit", "ResolvedInstance"]

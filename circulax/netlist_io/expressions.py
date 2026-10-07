@@ -7,7 +7,9 @@ import operator
 import re
 from typing import Any
 
-from circulax.netlist_io.syntax import NetlistError, children
+import netlist_parser
+
+from circulax.netlist_io.syntax import NetlistError, children, parameters
 
 _SCALE = {"t": 1e12, "g": 1e9, "meg": 1e6, "k": 1e3, "m": 1e-3, "u": 1e-6, "n": 1e-9, "p": 1e-12, "f": 1e-15, "mil": 25.4e-6}
 _BINARY = {
@@ -142,12 +144,11 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
 
 
 def evaluate_source(expression: str, settings: dict[str, float]) -> float:
-    """Parse a parameter expression using the same safe interpreter."""
-    import netlist_parser
+    """Parse a parameter expression using the same safe interpreter.
 
-    from circulax.netlist_io.syntax import parameters
-
-    root = netlist_parser.parse_spectre("parameters value=" + expression + "\n", vacask=True)
+    @tags circulax-simulation
+    """
+    root = netlist_parser.parse_netlist("parameters value=" + expression + "\n", "spectre")
     if netlist_parser.errors(root) or not children(root, "Parameters"):
         msg = f"invalid property expression {expression!r}"
         raise NetlistError(msg)

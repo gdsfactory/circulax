@@ -6,7 +6,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from circulax.netlist_io.expressions import Scope, evaluate
 from circulax.netlist_io.syntax import NetlistError, Statement, children, parameters, parse_file
@@ -201,6 +201,10 @@ class Library:
         return output
 
     def _populate(self, frame: _Frame, statements: list[Statement], overrides: dict[str, float] | None = None) -> None:  # noqa: C901, PLR0912 -- statement dispatch
+        """Populate scoped declarations and native device statements.
+
+        @tags circulax-simulation
+        """
         # Collect all local bindings before evaluation, allowing forward references.
         for statement in statements:
             if statement.kind == "ParamStatement":
@@ -222,7 +226,7 @@ class Library:
             elif kind == "Subckt":
                 name = children(node, "Identifier")[0].text
                 frame.subcircuits[name.lower()] = (statement, frame)
-            elif kind in {"SubcktCall", "OSDIDevice", "Diode", "Resistor", "Capacitor"}:
+            elif kind in {"SubcktCall", "OSDIDevice", "Diode", "Resistor", "Capacitor", "Inductor"}:
                 frame.calls.append(statement)
             elif kind == "HDLStatement":
                 reference = children(node, "StringLiteral")[0].text.strip('"')
@@ -291,7 +295,7 @@ class Library:
 
     # Builtin SPICE primitives whose two-terminal instance line carries no
     # model reference at all (e.g. `R1 1 2 R=1k`) when used without one.
-    _INLINE_BUILTINS = {"Resistor": "r", "Capacitor": "c"}
+    _INLINE_BUILTINS: ClassVar[dict[str, str]] = {"Resistor": "r", "Capacitor": "c", "Inductor": "l"}
 
     def _calls(
         self, frame: _Frame, terminals: dict[str, str], prefix: str, instances: list[ResolvedInstance], active: tuple[int, ...]

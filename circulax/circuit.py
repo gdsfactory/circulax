@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,7 @@ import jax
 import jax.numpy as jnp
 import kfnetlist as kfnl
 
+from circulax.netlist import _is_recursive_netlist
 from circulax.utils import apply_global_params, update_params_dict
 
 if TYPE_CHECKING:
@@ -681,6 +683,39 @@ def _apply_native_simparams(models: dict, simparams: Mapping[str, float] | None)
     }
 
 
+def _embed_library_subcircuits(net_dict: dict | kfnl.Netlist, models_map: dict) -> dict:
+    """Bind wrapper settings to leaf rows, then retain kfnetlist hierarchy.
+
+    @tags circulax-simulation
+    """
+    registrations = {name: model for name, model in models_map.items() if getattr(model, "_is_circulax_library_model", False)}
+    recnet = dict(net_dict) if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict) else {"top": net_dict}
+    for cell, source in list(recnet.items()):
+        native = isinstance(source, kfnl.Netlist)
+        data = source.to_dict() if native else deepcopy(source)
+        for instance in data.get("instances", {}).values():
+            model = registrations.get(instance.get("component"))
+            if model is None:
+                continue
+            definition = model.instantiate(instance.get("settings"))
+            key = f"__circulax_library_{len(recnet)}"
+            while key in recnet or key in models_map:
+                key += "_"
+            recnet[key] = definition.source_netlist
+            instance["component"] = key
+            instance["settings"] = {}
+            for name, leaf in definition.source_models.items():
+                existing = models_map.get(name)
+                if existing is not None and existing is not leaf:
+                    msg = f"Model name conflict: '{name}' maps to different objects in library '{model.subcircuit}'."
+                    raise ValueError(msg)
+                models_map[name] = leaf
+        recnet[cell] = kfnl.Netlist.from_dict(data) if native else data
+    for name in registrations:
+        del models_map[name]
+    return recnet
+
+
 def _configure_native_variants(circuit: Circuit, models_map: dict, recompile: Callable[[dict], Circuit]) -> None:
     """Keep mode and simulator-setting updates tied to the compilation options."""
     native_models = {name: model for name, model in models_map.items() if getattr(model, "_is_osdi_descriptor", False)}
@@ -717,12 +752,16 @@ def compile_circuit(
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
 
+    @tags circulax-simulation
+
     Accepts a ``kfnetlist.Netlist``, a SAX-format dict, or a
     ``RecursiveNetlist`` (``dict[str, Netlist]``).  When a recursive netlist
     is given, subcircuit instances are flattened before compilation.
 
     A compiled :class:`Circuit` may also appear as a value in *models_map*;
     its stored source netlist is inlined as a subcircuit automatically.
+    A ``netlist_io.LibraryModel`` binds instance settings to card parameters
+    and leaf topology before the same kfnetlist flattening step.
 
     Args:
         net_dict: Netlist (kfnetlist.Netlist, SAX-format dict, or
@@ -761,6 +800,9 @@ def compile_circuit(
     circuit_models = {k: v for k, v in models_map.items() if isinstance(v, Circuit)}
     if circuit_models:
         net_dict = _embed_circuit_subcircuits(net_dict, models_map, circuit_models)
+
+    if any(getattr(model, "_is_circulax_library_model", False) for model in models_map.values()):
+        net_dict = _embed_library_subcircuits(net_dict, models_map)
 
     models_map = _apply_native_simparams(models_map, simparams)
 
