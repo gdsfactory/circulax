@@ -17,12 +17,13 @@ import math
 import re
 
 from circulax.components.electronic import WAVE_DC, WAVE_PULSE, WAVE_PWL, WAVE_SIN
-from circulax.netlist_io.expressions import evaluate_source, parse_sine_waveform
+from circulax.netlist_io.expressions import evaluate_source
 from circulax.netlist_io.syntax import NetlistError
 
 _CALL = re.compile(r"(?P<name>[A-Za-z_]\w*)\s*\((?P<args>[^()]*)\)")
 _OPTION = re.compile(r"\s*(?P<name>[A-Za-z_]\w*)\s*=\s*(?P<value>[^\s,]+)\s*,?")
 _PULSE_NAMES = ("v1", "v2", "delay", "tr", "tf", "pw", "per")
+_SINE_NAMES = ("offset", "amplitude", "freq", "delay", "damping", "phase")
 
 
 def _number(token: str, dialect: str, what: str) -> float:
@@ -41,6 +42,29 @@ def _tokens(arguments: str) -> list[str]:
     return [part for part in re.split(r"[\s,]+", arguments.strip()) if part]
 
 
+def _sine(arguments: str, dialect: str, *, require_frequency: bool = False) -> dict[str, float]:
+    tokens = _tokens(arguments)
+    if not (3 if require_frequency else 2) <= len(tokens) <= len(_SINE_NAMES):
+        msg = "SIN requires offset, amplitude, frequency and at most three optional arguments"
+        raise NetlistError(msg)
+    result = dict.fromkeys(_SINE_NAMES, 0.0)
+    result.update({name: _number(token, dialect, f"SIN {name}") for name, token in zip(_SINE_NAMES, tokens, strict=False)})
+    if any(result[name] < 0 for name in ("freq", "delay", "damping")):
+        msg = "SIN requires finite values and nonnegative frequency, delay and damping"
+        raise NetlistError(msg)
+    result["phase"] = math.radians(result["phase"])
+    return result
+
+
+def parse_sine_waveform(waveform: str, dialect: str = "spice") -> dict[str, float]:
+    """Parse SIN with an explicit frequency; return phase in radians."""
+    match = _CALL.fullmatch(waveform.strip())
+    if match is None or match["name"].lower() != "sin":
+        msg = f"unsupported transient source waveform {waveform!r}"
+        raise NetlistError(msg)
+    return _sine(match["args"], dialect, require_frequency=True)
+
+
 def _pulse(arguments: str, dialect: str) -> dict[str, float]:
     tokens = _tokens(arguments)
     if not 2 <= len(tokens) <= len(_PULSE_NAMES):
@@ -55,10 +79,10 @@ def _pulse(arguments: str, dialect: str) -> dict[str, float]:
     return result
 
 
-def _pwl(arguments: str, dialect: str) -> dict[str, float | tuple[float, ...]]:
+def _pwl(tokens: list[str], dialect: str) -> dict[str, float | tuple[float, ...]]:
     options = {"r": -1.0, "td": 0.0}
     values: list[float] = []
-    for token in _tokens(arguments):
+    for token in tokens:
         if "=" in token:
             key, _, text = token.partition("=")
             option = key.lower()
@@ -89,12 +113,53 @@ def _pad(values: tuple[float, ...], length: int) -> tuple[float, ...]:
     if length < 2:  # interpolation needs two samples
         msg = "pwl_points must be at least 2"
         raise NetlistError(msg)
+    if len(values) > length:
+        msg = f"PWL has {len(values)} points but pwl_points={length}"
+        raise NetlistError(msg)
     if not values:
         return (0.0,) * length
     return (*values, *([values[-1]] * (length - len(values))))
 
 
-def parse_waveform(  # noqa: C901, PLR0912 -- waveform dispatch and argument validation
+def _parse_call(spec: str, match: re.Match[str], dialect: str) -> tuple[dict[str, float | tuple[float, ...]], int]:
+    """Parse a waveform and consume its trailing options once, leaving DC clauses."""
+    name = match["name"].lower()
+    end = match.end()
+    result: dict[str, float | tuple[float, ...]]
+    if name == "sin":
+        result = {"kind": WAVE_SIN, **_sine(match["args"], dialect)}
+    elif name == "pulse":
+        result = {"kind": WAVE_PULSE, **_pulse(match["args"], dialect)}
+    elif name == "pwl":
+        tokens = _tokens(match["args"])
+        while option := _OPTION.match(spec, end):
+            tokens.append(f"{option['name']}={option['value']}")
+            end = option.end()
+        result = {"kind": WAVE_PWL, **_pwl(tokens, dialect)}
+    else:
+        msg = f"unsupported transient source waveform {match['name']!r}; expected SIN, PULSE or PWL"
+        raise NetlistError(msg)
+    return result, end
+
+
+def _finish_settings(
+    result: dict[str, float | tuple[float, ...]], tstep: float | None, tstop: float | None, pwl_points: int | None
+) -> dict[str, float | tuple[float, ...]]:
+    # DC-only cards historically ignore transient analysis settings.
+    if result["kind"] != WAVE_DC:
+        for name, value in (("tstep", tstep), ("tstop", tstop)):
+            if value is not None:
+                if not math.isfinite(value) or value <= 0:
+                    msg = f"{name} must be a finite positive number"
+                    raise NetlistError(msg)
+                result[name] = value
+    if pwl_points is not None:
+        for name in ("pwl_t", "pwl_v"):
+            result[name] = _pad(result.get(name, ()), pwl_points)
+    return result
+
+
+def parse_waveform(
     waveform: str,
     *,
     dialect: str = "spice",
@@ -123,59 +188,17 @@ def parse_waveform(  # noqa: C901, PLR0912 -- waveform dispatch and argument val
     @tags circulax-simulation
 
     """
-    for name, value in (("tstep", tstep), ("tstop", tstop)):
-        if value is not None and (not math.isfinite(value) or value <= 0):
-            msg = f"{name} must be a finite positive number"
-            raise NetlistError(msg)
     text = waveform.strip()
     match = _CALL.match(text)
     if match is None:
         msg = f"unsupported transient source waveform {waveform!r}"
         raise NetlistError(msg)
-    name = match["name"].lower()
-    tail = text[match.end() :].strip()
-    if tail and name != "pwl":
+    result, end = _parse_call(text, match, dialect)
+    tail = text[end:].strip()
+    if tail:
         msg = f"unsupported source clauses {tail!r}"
         raise NetlistError(msg)
-    result: dict[str, float | tuple[float, ...]]
-    if name == "sin":
-        arguments = _tokens(match["args"])
-        if len(arguments) == 2:
-            arguments.append("0")  # deferred 1/TSTOP
-        try:
-            result = {"kind": WAVE_SIN, **parse_sine_waveform(f"SIN({' '.join(arguments)})", dialect)}
-        except (ArithmeticError, ValueError) as exc:
-            msg = f"invalid SIN value: {exc}"
-            raise NetlistError(msg) from exc
-    elif name == "pulse":
-        result = {"kind": WAVE_PULSE, **_pulse(match["args"], dialect)}
-    elif name == "pwl":
-        options = []
-        while tail:
-            option = _OPTION.match(tail)
-            if option is None:
-                msg = f"invalid PWL options {tail!r}"
-                raise NetlistError(msg)
-            options.append(f"{option['name']}={option['value']}")
-            tail = tail[option.end() :]
-        result = {"kind": WAVE_PWL, **_pwl(" ".join((match["args"], *options)), dialect)}
-    else:
-        msg = f"unsupported transient source waveform {match['name']!r}; expected SIN, PULSE or PWL"
-        raise NetlistError(msg)
-    # Store analysis settings separately: zero arguments must still be resolved
-    # after later parameter updates and with the actual transient/HB analysis.
-    if tstep is not None:
-        result["tstep"] = tstep
-    if tstop is not None:
-        result["tstop"] = tstop
-    if pwl_points is not None:
-        times = result.get("pwl_t", ())
-        if len(times) > pwl_points:
-            msg = f"PWL has {len(times)} points but pwl_points={pwl_points}"
-            raise NetlistError(msg)
-        result["pwl_t"] = _pad(times, pwl_points)
-        result["pwl_v"] = _pad(result.get("pwl_v", ()), pwl_points)
-    return result
+    return _finish_settings(result, tstep, tstop, pwl_points)
 
 
 def parse_source(
@@ -206,13 +229,11 @@ def parse_source(
         msg = f"only one transient waveform is allowed per source; got {spec!r}"
         raise NetlistError(msg)
     call = calls[0] if calls else None
-    end = call.end() if call is not None else 0
-    if call is not None and call["name"].lower() == "pwl":
-        # SPICE places r and td outside the parentheses. Consume only options,
-        # retaining a subsequent DC clause for the independent operating point.
-        while option := _OPTION.match(spec, end):
-            end = option.end()
-    rest = spec if call is None else f"{spec[: call.start()]} {spec[end:]}"
+    settings: dict[str, float | tuple[float, ...]] = {"kind": WAVE_DC}
+    rest = spec
+    if call is not None:
+        settings, end = _parse_call(spec, call, dialect)
+        rest = f"{spec[: call.start()]} {spec[end:]}"
     tokens = _tokens(rest)
     if tokens and tokens[0].lower() == "dc":
         tokens = tokens[1:]
@@ -228,10 +249,5 @@ def parse_source(
     # An empty specification is SPICE's zero-valued source (e.g. an ammeter).
     dc_given = float(bool(tokens))
     dc = _number(tokens[0], dialect, "DC") if tokens else 0.0
-    if call is not None:
-        settings = parse_waveform(spec[call.start() : end], dialect=dialect, tstep=tstep, tstop=tstop, pwl_points=pwl_points)
-    else:
-        settings = {"kind": WAVE_DC}
-        if pwl_points is not None:
-            settings.update(pwl_t=_pad((), pwl_points), pwl_v=_pad((), pwl_points))
+    settings = _finish_settings(settings, tstep, tstop, pwl_points)
     return {**settings, "dc": dc, "dc_given": dc_given}
