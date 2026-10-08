@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 # Builtin SPICE primitive type keywords (`.model name <type>`, or no model at
 # all for a bare two-terminal device) map to VACASK's SPICE-port OSDI module
 # names. Callers provision the actual `.osdi` files via `osdi_modules=`.
-_BUILTIN_SPICE_MODULES = {"r": "sp_resistor", "c": "sp_capacitor", "l": "sp_inductor", "d": "sp_diode"}
+_BUILTIN_SPICE_MODULES = {"r": "sp_resistor", "c": "sp_capacitor", "d": "sp_diode", "l": "sp_inductor"}
 
 
 def compile_va(source: Path, *, compiler: str | None = None, cache_dir: Path | None = None) -> Path:
@@ -45,6 +45,8 @@ def compile_va(source: Path, *, compiler: str | None = None, cache_dir: Path | N
     digest = hashlib.sha256()
     version = subprocess.check_output([executable, "--version"])  # noqa: S603 -- explicit compiler, no shell
     digest.update(version)
+    digest.update(Path(executable).read_bytes())
+    digest.update(b"target_cpu=generic")
     digest.update(f"{platform.system()}/{platform.machine()}".encode())
     visited: set[Path] = set()
 
@@ -73,7 +75,7 @@ def compile_va(source: Path, *, compiler: str | None = None, cache_dir: Path | N
         with tempfile.TemporaryDirectory(dir=cache) as temporary:
             output = Path(temporary) / "model.osdi"
             run = subprocess.run(  # noqa: S603 -- explicit compiler, no shell
-                [executable, str(source), "-o", str(output)], capture_output=True, text=True, check=False
+                [executable, "--target_cpu", "generic", str(source), "-o", str(output)], capture_output=True, text=True, check=False
             )
             if run.returncode or not output.is_file():
                 msg = f"OpenVAF failed for {source}:\n{run.stdout}\n{run.stderr}"
@@ -296,6 +298,10 @@ def build_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
                 raise NetlistError(msg)
             canonical = {}
             for name, value in settings.items():
+                # ngspice's N-device `m` is simulator multiplicity when the
+                # module does not declare its own parameter of that name.
+                if name.lower() == "m" and "m" not in aliases and "$mfactor" in aliases:
+                    name = "$mfactor"
                 if name.lower() not in aliases:
                     msg = f"{instance.name}: unknown parameter {name!r} for {module}"
                     raise NetlistError(msg)

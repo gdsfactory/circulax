@@ -1,181 +1,146 @@
-# IHP / VACASK parity development
+# IHP parity benchmark
 
-The standalone path is: original IHP native VACASK libraries → NetlistParse CST
-→ Circulax lexical parameter scopes and wrapper elaboration → OpenVAF OSDI
-modules → bosdi → Circulax solvers. VACASK independently parses the original
-library for every reference run. The benchmark-only runner in
-`benchmarks/utils/vacask_reference.py` uses InSpice to decode reference results.
-The runner and reader dependency are outside the installed Circulax package.
+Circulax and ngspice read `gdsfactory/IHP`'s native
+`ihp/models/ngspice/models/*.lib` files. VACASK reads the corresponding
+preconverted `ihp/models/vacask/models/*.lib` files from the same checkout.
+VACASK's ngspice importer is not used and needs no local adapter patch.
+The harness renders its fixed testbench vocabulary into VACASK root syntax,
+while ngspice and Circulax use native ngspice testbench statements.
 
-## Development installation
+## PDK revision and required corrections
 
-The existing `benchmark` environment uses Python 3.13 and contains the
-native integration dependencies plus the reference reader on Linux. Its own solve group keeps
-InSpice out of development and ordinary CI environments. Rust, OpenVAF and a built
-VACASK installation must be available separately.
+Validation uses IHP PR #259 revision
+`fee0b94b051d822737d959f2b7ae049db533f217`, which fixes duplicate `swsoa`
+and primitive model declarations in the converted libraries, plus
+[toolchain/ihp-resistor-parity.patch](toolchain/ihp-resistor-parity.patch).
+That supplemental patch corrects the three converted resistor instances from
+`sw_mman=0` to `sw_mman=1`, matching the shipped native cards. The switch enables
+deterministic manual offsets; it does not draw random samples. Without this
+correction, 12 resistor comparisons fail. The existing converter preserves the
+native value when regenerating these cards, as verified independently.
 
-```sh
-pixi install -e benchmark
-```
+These are IHP model-library corrections, not VACASK simulator modifications.
+PR #259 is currently unmerged, so current IHP main is not the validated input.
+The supplemental patch includes an independent dialect-consistency test.
 
-Run the native integration checks with `pixi run -e benchmark native-tests`.
-Set `VACASK_MODULE_PATH` to the native module directory to include module-dependent checks.
+## Running
 
-The NetlistParse dependency is temporarily pinned to the exact fork commit in
-[parser PR #6](https://github.com/NyanCAD/NetlistParse.rs/pull/6). The Verilog-A
-extra pins bosdi's setup, temperature, collapse and integral evaluation fixes to an exact development commit.
-These are source builds and require Rust and a C++ compiler. Installing the
-benchmark environment includes the fixes; no manual patch or local checkout override is
-needed. Replace these development pins with upstream releases once available.
-
-This exposes `parse_spectre(source)` and the explicit extension mode
-`parse_spectre(source, vacask=True)`. No regex conversion through SPICE is used.
-The patch leaves the default Spectre parser behavior unchanged. Native VACASK
-loads, sections, grouped card parameters and @if/@else/@end are opt-in syntax.
-Include resolution, parameter evaluation and topology elaboration belong to
-Circulax, following NetlistParse's documented syntax/semantics split. Arbitrary
-Python evaluation is never used for card/property expressions.
-
-The SPICE-compatible capacitor requires the simulator-parameter setup fix in
-[bosdi PR #19](https://github.com/gdsfactory/bosdi/pull/19). Temperature support is
-in [bosdi PR #20](https://github.com/gdsfactory/bosdi/pull/20). Temperature is an
-immutable configuration of each loaded model id, so cached handles, parameter
-updates and uncached evaluation all preserve the selected kelvin temperature.
-Separate registrations of the same binary may use different temperatures.
-
-## Running comparisons
-
-From the Circulax checkout:
+Run the same locked Linux task used in GitHub Actions:
 
 ```sh
-pixi run -e benchmark ihp-parity \
-  --pdk /path/to/ihp-parity-pdk \
-  --vacask /path/to/VACASK/build/simulator/vacask \
-  --module-path /path/to/VACASK/build/lib/vacask/mod \
-  --shared-library-path /path/to/VACASK/.pixi/envs/default/lib \
-  --compiler /path/to/openvaf-r \
-  --output benchmarks/ihp_parity/results.json
+pixi run --locked -e ihp-parity ihp-parity-ci
 ```
 
-`--only SUBSTRING` selects a subset. Paths are configurable; no simulator or PDK
-checkout path is embedded in library code. Verilog-A compilation uses a cache
-under `~/.cache/circulax/osdi`, keyed by source and include contents, compiler
-version and architecture. VACASK receives the same binaries in its temporary run
-folder, retaining its own card/wrapper evaluation. Binaries are not written to
-the PDK checkout. These are OSDI **ABI 0.4** artifacts for VACASK/bosdi, not
-ngspice binaries. The source directory name `ngspice/va` is only the PDK's
-storage location for shared Verilog-A sources. Ngspice libraries and compiled
-artifacts are left untouched; a separate compiler/ABI path is required for
-ngspice compatibility.
+This installs IHP PR #259 from `fix/vacask-common-declarations`, pinned by
+`pixi.lock` to `fee0b94`, and `vacask-bin==0.3.3.dev2`, which bundles VACASK,
+OpenVAF and compatible primitive modules. The task builds ngspice 45.2 with
+OSDI support from a pinned source revision, compiles the shipped IHP models
+for a generic CPU, then requires **60/60 comparisons for each simulator**.
+Builds and caches live under `.pixi/ihp-parity`; results, provenance and
+AC/transient diagnostics are written to `parity-results/`.
 
-Tests cover MOS corner/finger/multiplicity drain currents, RF NQS and HV MOS,
-resistor corners, inverter/NAND/NOR operating points, an inverter DC sweep,
-CMIM/RF CMIM driven AC and CMIM pulse transient. Transient runs bound VACASK's
-`maxstep` to 1 ps; `step` alone is its initial/output step, not an upper bound.
-Circulax uses fixed 1 ps BDF2. VACASK transient solver tolerances are `reltol=1e-6`,
-`vntol=1e-8`, `abstol=1e-12`; tighter tolerances caused its inverter transient to
-abort with "Timestep too small". These remain below the comparison tolerance.
-Waveform tolerances are 0.3% plus 100 µV; DC/AC
-use 1e-5 relative plus 1 nA or 1 nV absolute according to the measured vector.
-Transient input waveforms and successful solver completion must also agree.
+The task copies installed IHP model resources into its build directory and
+applies the guarded three-setting resistor correction there. The installed
+PR dependency remains unchanged. No external checkout or locally modified
+VACASK build is needed. First builds require Git, a C toolchain, Autoconf,
+Automake, Libtool, Bison and Flex; the CI job installs these prerequisites.
 
-The original development run passed all 51 comparisons. Temperature checks at
-−40 °C, 27 °C and 125 °C add six passing MOS/resistor comparisons, and a loaded
-CMOS inverter pulse transient adds another passing comparison. Two additional
-MOS AC checks (QS and RF/NQS, 1 MHz–1 GHz) now pass after the native collapse
-and integral evaluation fixes. All 60 comparisons pass the original acceptance
-criteria; `results.json` records the complete run.
+The Linux `IHP parity / ngspice + VACASK` job in
+[ci.yaml](../../.github/workflows/ci.yaml) runs this task on pull requests and
+main/development pushes and uploads diagnostics even when parity fails.
+Its Python 3.12 environment is isolated from the Python 3.13 benchmark
+environment because IHP requires Python `<3.13`. Model resources are located
+without importing IHP's geometry package.
 
-The HV corner exposed duplicate common declarations in VACASK itself, reported
-in [IHP issue #258](https://github.com/gdsfactory/IHP/issues/258). The shared
-common library now only loads modules; `swsoa=0` is local to each MOS wrapper,
-and primitive default cards have library-specific aliases. VACASK rejects
-duplicate card names in one scope before flattening. The public IHP device names
-remain unchanged. Aliases resolving to the same OSDI module still share a bosdi
-batch; `test_card_aliases_share_an_osdi_batch` verifies this explicitly.
+For manual or selected runs, `pixi run -e ihp-parity ihp-parity --help` exposes
+the underlying harness. `--pdk` defaults to the installed package; use the
+staged corrected tree for VACASK resistor comparisons.
 
-## PDK API
+The parser is pinned to NetlistParse revision `d83031d`. Circulax requires
+OSDI ABI 0.4 modules. Compile PSP QS/NQS and r3_cmc from the selected IHP
+checkout's `ihp/models/ngspice/va` sources, plus VACASK's SPICE-port
+resistor/capacitor/inductor sources, using a compatible compiler. Native ngspice
+has a separate `--ngspice-osdi-module` option. VACASK loads its modules through
+the converted PDK's common include; Circulax's explicit modules are not injected
+into the VACASK deck. `--vacask-compiler` configures the reference independently
+of Circulax's `--compiler`. Compiled reference VA sources are cached and staged
+in the temporary run directory, avoiding repeated compilation for every case.
 
-The PDK adds a Circulax entry derived from each native VACASK metadata entry.
-Schematic geometry equations, port order and deterministic corner choices remain
-identical. The optional `ihp.models.circulax.resolve_component` adapter accepts
-schematic model metadata, cell properties and a terminal-to-node mapping:
+The portable helper accepts `IHP_ROOT`, `OSDI_DIR` and optional `PYTHON`:
 
-```python
-from ihp.cells.fet_transistors import nmos_schematic
-from ihp.models.circulax import resolve_component
-
-resolved = resolve_component(
-    nmos_schematic().info['models'],
-    {'width': 2.0, 'length': 0.13, 'nf': 2, 'm': 3},
-    {'D': 'out', 'G': 'in', 'S': '0', 'B': '0'},
-    corner='mos_tt',
-)
-# Inspect resolved.instances without loading native code.
-circuit = resolved.compile(module_paths=(module_directory,), compiler=compiler)
+```sh
+export IHP_ROOT=/path/to/validated/IHP
+export OSDI_DIR=/path/to/abi04/modules
+# Run inside the benchmark environment, e.g. pixi run -e benchmark bash ...
+bash benchmarks/ihp_parity/toolchain/run-local-parity.sh \
+  --simulator ngspice --output /tmp/ihp-ngspice-results.json
+bash benchmarks/ihp_parity/toolchain/run-local-parity.sh \
+  --simulator vacask --vacask /path/to/vacask \
+  --module-path /path/to/vacask/modules \
+  --vacask-compiler /path/to/openvaf-r \
+  --shared-library-path /path/to/shared/libraries \
+  --output /tmp/ihp-vacask-results.json
 ```
 
-A biased circuit can be loaded with `Library.from_file(path).resolve().compile(...)`.
-The pure adapter does not import Circulax until invoked. Invalid corners and
-unknown card parameters fail explicitly.
+`OSDI_DIR` contains `psp103.osdi`, `psp103_nqs.osdi`, `r3_cmc.osdi`,
+`sp_resistor.osdi`, `sp_capacitor.osdi` and `sp_inductor.osdi`. See
+[toolchain/README.md](toolchain/README.md) for the recorded toolchain.
+`--pdk` also accepts an upstream IHP-Open-PDK root or native models directory
+for ngspice. That layout requires an explicit `--vacask-models` converted tree
+when selecting VACASK; there is no fallback to native foreign imports.
 
-## Scope and remaining runtime work
+`--only SUBSTRING` selects comparisons; matching none is an error. Failures are
+recorded in JSON and remaining cases continue. Any failure returns nonzero.
+AC/transient `.npz` diagnostics are saved beside the results. HBT/VBIC cases
+remain excluded from this matrix, per issue #69.
 
-These changes establish the first three integration steps, not complete VACASK
-feature parity. Temperature is supplied explicitly to both Circulax and VACASK:
-300 K (26.85 °C) for the baseline, with −40 °C, 27 °C and 125 °C checks added.
-The library and PDK adapter now default to VACASK's usual 27 °C (300.15 K);
-this is not silently treated as 300 K. The benchmark selects its temperatures
-explicitly.
-Both MOS AC comparisons now pass ([bosdi #23](https://github.com/gdsfactory/bosdi/pull/23)). Native OSDI collapse follows each instance's
-setup flags ([bosdi #22](https://github.com/gdsfactory/bosdi/pull/22)). Integral
-equations use explicit DC/AC evaluation modes. Following VACASK, the harness
-retains DC conductance and obtains capacitance from a separate AC evaluation.
-Maximum QS and RF/NQS AC discrepancies are 1.11e-16 V and 1.29e-12 V.
+## Acceptance and analysis semantics
 
-`resolved.compile(analysis="dc")` is the default. Use separate `analysis="ac"`
-or `analysis="tran"` registrations for their stamps, evaluated at the DC initial
-point. Analysis mode is fixed for a compiled circuit; the benchmark explicitly
-coordinates these stages. General automatic mode switching inside Circulax's
-public analysis methods is still future work.
+The 60 cases cover LV/HV MOS corners, finger counts/multiplicity, RF MOS,
+resistor corners, MOS/resistor temperature sweeps, NAND/NOR/inverter DC,
+inverter DC sweep, QS/NQS MOS AC, CMIM/RF CMIM AC, and loaded inverter/CMIM
+pulse transients. Acceptance tolerances remain `rtol=1e-5`, `atol=1e-9` for
+DC/AC and `rtol=3e-3`, `atol=1e-4` for transients. Input waveforms separately
+require `rtol=atol=1e-9`. Transient steps remain bounded to 1 ps.
 
-VBIC HBT loads expose eight OSDI states and remain explicitly rejected by bosdi's
-component descriptor. They need state-history/limiting/thermal runtime work before
-HBT simulation parity can be claimed. Model-card expressions that depend on
-circuit voltages, such as the HV varactor's `v(...)` parasitic expressions, also
-need a runtime expression representation; the static loader rejects them.
-Statistical/mismatch sections referring to absent converted libraries fail with
-the missing include path. HB differentiation and general Verilog-A `$abstime`
-are outside this initial integration.
+For VACASK AC, Circulax assembles `G_dc + j*omega*C_ac`; for ngspice it uses
+`G_ac + j*omega*C_ac`, matching each simulator's small-signal evaluation.
+Circulax DC solves use `rtol=1e-10`, `atol=1e-12`; reference solver tolerances
+are unchanged. The VACASK backend supplies Circulax with `gmin=1e-12`, matching
+VACASK's device option. The shipped IHP PSP sources do not use that parameter.
 
-[Circulax issue #63](https://github.com/gdsfactory/circulax/issues/63) and
-[IHP issue #257](https://github.com/gdsfactory/IHP/issues/257) identify real
-integration gaps. One assumption needs correction: the actual IHP PSP103 NQS
-binary tested here has zero OSDI states; it does not have the VBIC state blocker.
-The common native libraries and wrapper metadata should remain the source of
-truth instead of manually copied compact-model defaults. Generic parsing and
-elaboration live in Circulax; only PDK metadata and its thin adapter live in IHP.
+Circulax requires released bosdi 0.1.8 or later in the 0.1 series. Native
+harmonic balance evaluates transient-mode F/Q for devices without ABI state
+slots and uses a DC starting point. Devices with ABI state slots and gradients
+through a converged native HB solve remain unsupported. HB is covered by
+separate RC-divider regressions rather than this parity matrix.
 
-## Local PDK validation
+The harness explicitly selects `statistical_mode="nominal"`: `agauss` evaluates
+to its nominal argument. The default library loader rejects random functions.
+Sampling and statistical/mismatch parity are outside this benchmark. Ngspice
+uses a fixed seed for reproducibility. Explicit deterministic model-card
+settings such as the resistor manual-offset switch are preserved.
 
-Run `make dev` in the PDK checkout to install its development dependencies and
-fetch the centrally managed, gitignored `.pre-commit-config.yaml`. The complete
-`uv run pre-commit run --all-files` suite then passes. Metadata/library tests
-also pass (18 passed, one skipped without `vacask-bin`).
+## Recorded validation
 
-The PDK changes are committed separately: [IHP PR #259](https://github.com/gdsfactory/IHP/pull/259)
-fixes the native VACASK common declarations, and the Circulax metadata adapter
-is a draft PR stacked on that branch. The native-library fix can be reviewed
-independently of Circulax.
+`ihp-ngspice-results.json` and `ihp-vacask-results.json` each record **60/60
+passing** on 2026-10-05, using the same IHP source revision and unchanged
+acceptance tolerances. `ihp-provenance.json` records input revisions, patches,
+binary hashes and toolchain versions. Validation uses the same locked
+packages and pinned ngspice build as the CI task, without simulator patches.
 
-## Native mode orchestration and VBIC follow-up
+Run the regression selection with:
 
-Public `Circuit.dc`, `sp`/`ac`, and `transient` now select immutable DC, AC and transient OSDI registrations automatically, including parameter updates. AC uses `G_dc + j*omega*C_ac`. The fixed raw-node and scatter layouts are checked between modes. Native harmonic balance remains explicitly unsupported.
+```sh
+PATH=/path/to/abi04/compiler/directory:$PATH \
+VACASK_EXECUTABLE=/path/to/vacask \
+VACASK_MODULE_PATH=/path/to/abi04/modules \
+VACASK_SHARED_LIBRARY_PATH=/path/to/shared/libraries \
+  pixi run -e benchmark python -m pytest \
+  tests/netlist_io benchmarks/utils/test_reference.py \
+  tests/test_circuit.py tests/test_ac_sweep.py tests/test_subcircuit.py -q
+```
 
-For the audited OpenVAF binaries, the harness opts into `state_policy="limiting_only"`. OpenVAF's OSDI state count represents `$limit` Newton buffers, not physical NQS history. `ENABLE_LIM` stays disabled; physical DDT charges and IDT unknowns remain in the circuit DAE. Generic history-dependent binaries and `$abstime` still need runtime support.
-
-The original 60 comparisons pass after public orchestration changes. `vbic-results.json` adds eight passing IHP VBIC comparisons: DC collector current and AC collector-current response, one/four fingers, NQS enabled/disabled, self-heating disabled, 0.8 V base and 1.2 V collector. Four ten-finger reference cases fail to converge in VACASK itself, even with self-heating disabled; their errors are retained. Running the entire suite currently returns failure for these four explicit reference errors (68 passes out of 72 attempted comparisons). Earlier self-heated one/four-finger checks also passed; ten-finger self-heated references failed. These checks do not establish general HBT transient parity.
-
-A separate compiled `$limit`/DDT RC regression verifies public JIT DC/SP and exponential transient decay. The nine BSIM4 and eight VBIC limiting slots do not require delayed circuit unknowns.
-
-IHP-specific metadata adapter checks live under `benchmarks/ihp_parity/test_metadata.py`. Run them explicitly with `IHP_PDK_ROOT=/path/to/IHP pixi run -e benchmark ihp-metadata-tests`; ordinary Circulax tests do not inspect an external PDK checkout.
+The reference tests run real ngspice OP/DC/AC/transient analyses and analytic
+VACASK converted-wrapper cases for both branches and multiplicity. The helper
+module remains benchmark-only; InSpice is not a Circulax runtime dependency.
