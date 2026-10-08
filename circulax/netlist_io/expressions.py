@@ -7,7 +7,9 @@ import operator
 import re
 from typing import Any
 
-from circulax.netlist_io.syntax import NetlistError, children
+import netlist_parser
+
+from circulax.netlist_io.syntax import NetlistError, children, parameters
 
 _SCALE = {"t": 1e12, "g": 1e9, "meg": 1e6, "k": 1e3, "m": 1e-3, "u": 1e-6, "n": 1e-9, "p": 1e-12, "f": 1e-15, "mil": 25.4e-6}
 _BINARY = {
@@ -149,16 +151,36 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
     raise NetlistError(msg)
 
 
-def evaluate_source(expression: str, settings: dict[str, float]) -> float:
-    """Parse a parameter expression using the same safe interpreter."""
-    import netlist_parser
+def evaluate_source(expression: str, settings: dict[str, float], dialect: str = "ngspice") -> float:
+    """Parse a parameter expression using the same safe interpreter.
 
-    from circulax.netlist_io.syntax import parameters
+    ``dialect="spice"`` reads an uppercase ``M`` suffix as milli, as SPICE source
+    cards do; other dialects read it as mega.
 
-    root = netlist_parser.parse_spectre("parameters value=" + expression + "\n", vacask=True)
+    @tags circulax-simulation
+    """
+    root = netlist_parser.parse_netlist("parameters value=" + expression + "\n", "spectre")
     if netlist_parser.errors(root) or not children(root, "Parameters"):
         msg = f"invalid property expression {expression!r}"
         raise NetlistError(msg)
     scope = Scope()
+    scope.dialect = dialect
     scope.bindings.update(settings)
     return evaluate(parameters(children(root, "Parameters")[0])["value"], scope)
+
+
+def parse_sine_waveform(waveform: str, dialect: str = "spice") -> dict[str, float]:
+    """Resolve SPICE-style SIN(offset amplitude frequency [delay damping phase]).
+
+    Phase is supplied in degrees and returned in radians. Numeric arguments use
+    the same safe expression/unit interpreter as model cards, read with SPICE
+    suffix semantics by default (``M`` is milli). Other waveform kinds are
+    rejected so callers cannot silently substitute a DC source.
+
+    @tags circulax-simulation
+    """
+    # Keep the original import path without mixing waveform parsing into the
+    # expression evaluator. Import lazily because sources uses evaluate_source.
+    from circulax.netlist_io.sources import parse_sine_waveform as parse_sine
+
+    return parse_sine(waveform, dialect)

@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from circulax import compile_circuit
+from circulax.netlist_io import LibraryModel
 
 
 @pytest.fixture(scope="module")
@@ -41,6 +42,50 @@ endmodule
     target = root / "analysis.osdi"
     subprocess.run([compiler, str(source), "-o", str(target)], check=True, capture_output=True)  # noqa: S603 -- explicit compiler; no shell
     return target
+
+
+def test_library_wrappers_share_real_native_batch(binary: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flatten different wrapper settings into one real bosdi device batch.
+
+    @tags circulax-simulation
+    """
+    card = tmp_path / "wrapper.lib"
+    card.write_text("""* native wrapper
+.subckt wrapper p n
+.param resistance=1000
+.model native native_modes r=resistance c=0
+N1 p mid native
+N2 mid n native
+.ends
+""")
+    # Metadata inspection currently implements ABI 0.4; this fixture's binary
+    # is supported by the installed bosdi. Isolate that independent reader here.
+    monkeypatch.setattr(
+        "circulax.netlist_io.osdi.module_metadata",
+        lambda _path: ("native_modes", {"r": "r", "c": "c"}),
+    )
+    model = LibraryModel.from_file(card, "wrapper", osdi_modules=(binary,), state_policy="limiting_only")
+    circuit = compile_circuit(
+        {
+            "instances": {
+                "one": {"component": "wrapper", "settings": {"resistance": 100}},
+                "two": {"component": "wrapper", "settings": {"resistance": 200}},
+                "GND": {"component": "ground"},
+            },
+            "connections": {"one,n": "two,p", "two,n": "GND,p1"},
+            "ports": {"out": "one,p"},
+        },
+        {"wrapper": model},
+        backend="dense",
+        is_complex=False,
+    )
+    assert len(circuit.groups) == 1
+    group = next(iter(circuit.groups.values()))
+    assert group.params.shape[0] == 4
+    assert len(group.index_map) == 4
+    rows = sorted(i.settings["r"] for i in circuit.source_netlist.instances.values() if i.component == "native_modes")
+    assert rows == [100, 100, 200, 200]
+    assert float(circuit.port(circuit.dc(), "out")) == pytest.approx(0)
 
 
 @pytest.mark.parametrize("initial_mode", ["dc", "ac", "tran"])

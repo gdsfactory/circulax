@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,8 @@ import jax
 import jax.numpy as jnp
 import kfnetlist as kfnl
 
+from circulax.netlist import _is_recursive_netlist
+from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
 
 if TYPE_CHECKING:
@@ -171,7 +174,7 @@ class Circuit:
         updated = self.groups
         for name, value in params.items():
             if "." not in name:
-                updated = apply_global_params(updated, {name: value})
+                updated = record_dc_override(apply_global_params(updated, {name: value}), name)
                 for group_name, group in updated.items():
                     if hasattr(group, "model_id"):
                         col = _osdi_param_columns(group).get(name.lower())
@@ -190,7 +193,9 @@ class Circuit:
                     if not hasattr(group.params, param_key):
                         msg = f"Instance '{instance_name}' has no parameter '{param_key}'."
                         raise ValueError(msg)
-                    updated = update_params_dict(updated, group_name, instance_name, param_key, value)
+                    updated = record_dc_override(
+                        update_params_dict(updated, group_name, instance_name, param_key, value), param_key, instance_name
+                    )
                 break
             else:
                 msg = f"Instance '{instance_name}' not found in compiled circuit."
@@ -401,6 +406,7 @@ class Circuit:
         saveat: Any = None,
         params: dict[str, Any] | None = None,
         transient_solver: Any = None,
+        tstep: float | None = None,
         **kwargs: Any,
     ) -> Any:
         """Run transient (time-domain) analysis.
@@ -409,7 +415,9 @@ class Circuit:
             t0: Start time.
             t1: End time.
             dt0: Initial time step.
-            y0: Initial state vector. If ``None``, a DC solve is run first.
+            y0: Initial state vector. If ``None``, solve the time-zero operating
+                point using transient source values.
+            tstep: SPICE source-default time step; defaults to ``dt0``.
             saveat: Times at which to save the solution. Accepts an array of
                 timestamps or a ``diffrax.SaveAt`` object.
             params: Parameter updates (same format as :meth:`dc`).
@@ -432,10 +440,20 @@ class Circuit:
         transient_circuit = self._for_analysis("tran")
         groups = transient_circuit._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
         if y0 is None:
-            y0 = self.dc(params=updates)
+            from circulax.solvers.source_settings import waveform_groups
+
+            dc_circuit = self._for_analysis("dc")
+            initial_groups = waveform_groups(
+                dc_circuit._with_param_values(arrays),  # noqa: SLF001 -- another Circuit analysis variant
+                tstep=dt0 if tstep is None else tstep,
+                tstop=t1,
+            )
+            y0 = dc_circuit.solver.solve_dc(
+                initial_groups, self._zero_guess(), rtol=self.rtol, atol=self.atol, max_steps=self.max_steps
+            )
         saveat_obj = SaveAt(ts=saveat) if saveat is not None and not isinstance(saveat, SaveAt) else saveat
         run_transient = setup_transient(groups=groups, linear_strategy=transient_circuit.solver, transient_solver=transient_solver)
-        return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, **kwargs)
+        return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, tstep=tstep, **kwargs)
 
     def sp(
         self,
@@ -681,6 +699,39 @@ def _apply_native_simparams(models: dict, simparams: Mapping[str, float] | None)
     }
 
 
+def _embed_library_subcircuits(net_dict: dict | kfnl.Netlist, models_map: dict) -> dict:
+    """Bind wrapper settings to leaf rows, then retain kfnetlist hierarchy.
+
+    @tags circulax-simulation
+    """
+    registrations = {name: model for name, model in models_map.items() if getattr(model, "_is_circulax_library_model", False)}
+    recnet = dict(net_dict) if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict) else {"top": net_dict}
+    for cell, source in list(recnet.items()):
+        native = isinstance(source, kfnl.Netlist)
+        data = source.to_dict() if native else deepcopy(source)
+        for instance in data.get("instances", {}).values():
+            model = registrations.get(instance.get("component"))
+            if model is None:
+                continue
+            definition = model.instantiate(instance.get("settings"))
+            key = f"__circulax_library_{len(recnet)}"
+            while key in recnet or key in models_map:
+                key += "_"
+            recnet[key] = definition.source_netlist
+            instance["component"] = key
+            instance["settings"] = {}
+            for name, leaf in definition.source_models.items():
+                existing = models_map.get(name)
+                if existing is not None and existing is not leaf:
+                    msg = f"Model name conflict: '{name}' maps to different objects in library '{model.subcircuit}'."
+                    raise ValueError(msg)
+                models_map[name] = leaf
+        recnet[cell] = kfnl.Netlist.from_dict(data) if native else data
+    for name in registrations:
+        del models_map[name]
+    return recnet
+
+
 def _configure_native_variants(circuit: Circuit, models_map: dict, recompile: Callable[[dict], Circuit]) -> None:
     """Keep mode and simulator-setting updates tied to the compilation options."""
     native_models = {name: model for name, model in models_map.items() if getattr(model, "_is_osdi_descriptor", False)}
@@ -717,12 +768,16 @@ def compile_circuit(
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
 
+    @tags circulax-simulation
+
     Accepts a ``kfnetlist.Netlist``, a SAX-format dict, or a
     ``RecursiveNetlist`` (``dict[str, Netlist]``).  When a recursive netlist
     is given, subcircuit instances are flattened before compilation.
 
     A compiled :class:`Circuit` may also appear as a value in *models_map*;
     its stored source netlist is inlined as a subcircuit automatically.
+    A ``netlist_io.LibraryModel`` binds instance settings to card parameters
+    and leaf topology before the same kfnetlist flattening step.
 
     Args:
         net_dict: Netlist (kfnetlist.Netlist, SAX-format dict, or
@@ -761,6 +816,9 @@ def compile_circuit(
     circuit_models = {k: v for k, v in models_map.items() if isinstance(v, Circuit)}
     if circuit_models:
         net_dict = _embed_circuit_subcircuits(net_dict, models_map, circuit_models)
+
+    if any(getattr(model, "_is_circulax_library_model", False) for model in models_map.values()):
+        net_dict = _embed_library_subcircuits(net_dict, models_map)
 
     models_map = _apply_native_simparams(models_map, simparams)
 

@@ -11,12 +11,19 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Mapping
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import kfnetlist as kfnl
 
+from circulax.circuit import compile_circuit
 from circulax.netlist_io.syntax import NetlistError
+
+try:
+    from bosdi.circulax import osdi_component
+except ImportError:
+    osdi_component = None
 
 if TYPE_CHECKING:
     from circulax.circuit import Circuit
@@ -165,10 +172,17 @@ def _provision_modules(
     compiler: str | None,
     cache_dir: Path | None,
 ) -> dict[str, tuple[Path, dict[str, str]]]:
-    """Resolve and provision the module declarations belonging to the libraries."""
+    """Resolve and provision library modules.
+
+    @tags circulax-simulation
+    """
     modules = {}
 
     def register(path: Path) -> None:
+        """Provision and validate a module declaration.
+
+        @tags circulax-simulation
+        """
         if path.suffix == ".va":
             path = compile_va(path, compiler=compiler, cache_dir=cache_dir)
         name, aliases = module_metadata(path)
@@ -177,8 +191,22 @@ def _provision_modules(
             raise NetlistError(msg)
         modules[name.lower()] = (path, aliases)
 
+    # Explicit compatible binaries are authoritative. A library may declare
+    # modules unrelated to the selected wrapper; do not compile unused loads
+    # when the supplied modules already cover every required leaf type.
+    for path in osdi_modules:
+        register(Path(path).resolve())
+    required = {
+        _BUILTIN_SPICE_MODULES.get(instance.module.lower(), instance.module.lower())
+        for instance in resolved.instances
+        if instance.module.lower() not in {"vsource", "isource"}
+    }
+    if required <= modules.keys():
+        return modules
+
     for reference, directory in resolved.loads:
         candidates = [directory / reference, *(Path(p) / reference for p in module_paths)]
+        candidates += [p.with_suffix(".va") for p in candidates if p.suffix == ".osdi"]
         path = next((p.resolve() for p in candidates if p.is_file()), None)
         if path is None:
             msg = f"OSDI load {reference!r} not found in {candidates}"
@@ -187,30 +215,55 @@ def _provision_modules(
     # Libraries without an explicit `load` statement (e.g. plain ngspice model
     # cards, whose `.model` type names a module registered externally, the way
     # ngspice's own `.spiceinit` does with `osdi '<path>'`) register directly.
-    for path in osdi_modules:
-        register(Path(path).resolve())
-
     return modules
 
 
-def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
+@cache
+def _shared_descriptor(
+    path: str,
+    ports: tuple[str, ...],
+    temperature: float,
+    analysis: str,
+    state_policy: str,
+    simparams: tuple[tuple[str, float], ...] | None,
+) -> Any:
+    """Share one native model definition across parameterized registrations.
+
+    @tags circulax-simulation
+    """
+    if osdi_component is None:
+        msg = "OSDI registrations require circulax[verilog-a]"
+        raise ImportError(msg)
+
+    return osdi_component(
+        path,
+        ports=ports,
+        temperature=temperature,
+        analysis=analysis,
+        state_policy=state_policy,
+        simparams=dict(simparams) if simparams is not None else None,
+    )
+
+
+def build_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
     resolved: ResolvedCircuit,
     *,
     module_paths: tuple[Path, ...] = (),
     osdi_modules: tuple[Path, ...] = (),
     compiler: str | None = None,
     cache_dir: Path | None = None,
-    backend: str = "dense",
     analysis: str = "dc",
     state_policy: str = "reject",
     simparams: Mapping[str, float] | None = None,
-) -> Circuit:
-    """Compile original model cards; reject runtime features bosdi cannot represent."""
-    from bosdi.circulax import osdi_component
+    modules: dict[str, tuple[Path, dict[str, str]]] | None = None,
+    expose_internal_nodes: bool = True,
+) -> tuple[kfnl.Netlist, dict[str, Any], dict[str, tuple[Path, dict[str, str]]]]:
+    """Build canonical topology and shared descriptors without creating a solver.
 
-    from circulax.circuit import compile_circuit
-
-    modules = _provision_modules(resolved, module_paths, osdi_modules, compiler, cache_dir)
+    @tags circulax-simulation
+    """
+    if modules is None:
+        modules = _provision_modules(resolved, module_paths, osdi_modules, compiler, cache_dir)
 
     netlist = kfnl.Netlist()
     netlist.create_inst(name="GND", kcl="", component="ground")
@@ -232,13 +285,13 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
             path, aliases = modules[component]
             names = tuple(f"p{i}" for i in range(len(instance.nodes)))
             if component not in models:
-                models[component] = osdi_component(
+                models[component] = _shared_descriptor(
                     str(path),
                     ports=names,
                     temperature=resolved.temperature_c + 273.15,
                     analysis=analysis,
                     state_policy=state_policy,
-                    simparams=simparams,
+                    simparams=tuple(sorted(simparams.items())) if simparams is not None else None,
                 )
             elif models[component].ports != names:
                 msg = f"{instance.name}: inconsistent terminal count for {module}"
@@ -261,7 +314,7 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
         for name, node in zip(names, instance.nodes, strict=True):
             nodes.setdefault(node, []).append(kfnl.PortRef(instance=key, port=name))
     # Expose all flattened nodes, plus the public wrapper's formal port aliases.
-    ports = {node: node for node in nodes}
+    ports = {node: node for node in nodes} if expose_internal_nodes else {}
     for port, node in resolved.ports.items():
         if node not in nodes:
             msg = f"unconnected public terminal {port!r}"
@@ -273,6 +326,35 @@ def compile_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
     for members in nodes.values():
         netlist.create_net(*members)
     netlist.sort()
+    return netlist, models, modules
+
+
+def compile_resolved(
+    resolved: ResolvedCircuit,
+    *,
+    module_paths: tuple[Path, ...] = (),
+    osdi_modules: tuple[Path, ...] = (),
+    compiler: str | None = None,
+    cache_dir: Path | None = None,
+    backend: str = "dense",
+    analysis: str = "dc",
+    state_policy: str = "reject",
+    simparams: Mapping[str, float] | None = None,
+) -> Circuit:
+    """Compile original cards using the same topology builder as registrations.
+
+    @tags circulax-simulation
+    """
+    netlist, models, _ = build_resolved(
+        resolved,
+        module_paths=module_paths,
+        osdi_modules=osdi_modules,
+        compiler=compiler,
+        cache_dir=cache_dir,
+        analysis=analysis,
+        state_policy=state_policy,
+        simparams=simparams,
+    )
     return compile_circuit(
         netlist,
         models,
