@@ -58,3 +58,21 @@ Arguments must be finite, and frequency, delay and damping must be nonnegative.
 Unknown waveform kinds and invalid argument counts raise `NetlistError`.
 The caller selects the analysis and evaluates the waveform; this helper does
 not replace a separately declared DC operating-point value.
+
+`netlist_io.sources.parse_source` / `parse_waveform` read the value part of a SPICE V/I
+source card (`[DC] value`, `SIN(...)`, `PULSE(...)`, `PWL(...) [r=] [td=]`) into keyword
+settings for `WaveformVoltageSource` and `WaveformCurrentSource`. Numbers use SPICE suffix
+semantics (uppercase `M` is milli). `AC` clauses, unknown waveforms and invalid values raise
+`NetlistError`. `dc_given` distinguishes omitted DC from an explicit zero override. Without
+an override, the operating point uses the waveform's time-zero value. Transient initialization
+always uses the waveform at zero; harmonic balance uses the waveform at every sample.
+
+Numeric `source_mode` selects DC or waveform evaluation independently of time. Source stepping
+scales the complete DC value through `source_scale`, including inferred values. Zero and omitted
+PULSE rise/fall times use `TSTEP`; width/period use `TSTOP`. Zero/omitted SIN frequency uses
+`1/TSTOP`. Defaults remain finite deferred values until analysis settings are available.
+`Circuit.transient` uses `dt0` (or its explicit `tstep` argument) and `t1`; harmonic balance uses
+its sample interval and period. Parser-supplied `tstep`/`tstop` override these defaults per source.
+PWL accepts `r`/`td` after parentheses; `r` must match a point before the last point, or be `-1`.
+`pwl_points` pads every kind to a common PWL length so mixed kinds batch together.
+See `docs/waveform_sources.md` and the ngspice parity tests.

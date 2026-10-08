@@ -80,12 +80,14 @@ class _Frame:
         self.subcircuits: dict[str, tuple[Statement, _Frame]] = {}
         self.calls: list[Statement] = []
 
-    def find(self, name: str, table: str) -> Any:
-        values = getattr(self, table)
-        if name in values:
-            return values[name]
+    def find(self, name: str, *tables: str) -> tuple[str, Any] | None:
+        """Search each lexical scope before its parent, in table precedence order."""
+        for table in tables:
+            values = getattr(self, table)
+            if name in values:
+                return table, values[name]
         if self.parent is not None:
-            return self.parent.find(name, table)
+            return self.parent.find(name, *tables)
         return None
 
 
@@ -274,10 +276,11 @@ class Library:
         if found is None:
             msg = f"unknown subcircuit {subcircuit!r}"
             raise NetlistError(msg)
-        ports = tuple(_nodes(found[0].node))
+        _, definition = found
+        ports = tuple(_nodes(definition[0].node))
         actual_nodes = nodes if nodes is not None else ports
         instances: list[ResolvedInstance] = []
-        self._instantiate(found, actual_nodes, settings or {}, name, instances, ())
+        self._instantiate(definition, actual_nodes, settings or {}, name, instances, ())
         return ResolvedCircuit(instances, list(self.loads), dict(zip(ports, actual_nodes, strict=True)), self.temperature_c)
 
     def resolve(self) -> ResolvedCircuit:
@@ -334,7 +337,7 @@ class Library:
                 settings.update(zip(("val0", "val1", "delay", "rise", "fall", "width", "period"), values, strict=True))
         return settings
 
-    def _calls(  # noqa: C901, PLR0912, PLR0915 -- native call and lexical model dispatch
+    def _calls(  # noqa: C901, PLR0912 -- native call and lexical model dispatch
         self, frame: _Frame, terminals: dict[str, str], prefix: str, instances: list[ResolvedInstance], active: tuple[int, ...]
     ) -> None:
         for statement in frame.calls:
@@ -358,15 +361,9 @@ class Library:
                 else:
                     call_name, *nodes, master = symbols
                 master = master.lower()
-                lookup = frame
-                model = None
-                subcircuit = None
-                while lookup is not None:
-                    model = lookup.models.get(master)
-                    subcircuit = lookup.subcircuits.get(master) if model is None else None
-                    if model is not None or subcircuit is not None:
-                        break
-                    lookup = lookup.parent
+                definition = frame.find(master, "models", "subcircuits")
+                model = definition[1] if definition is not None and definition[0] == "models" else None
+                subcircuit = definition[1] if definition is not None and definition[0] == "subcircuits" else None
             name = f"{prefix}/{call_name}" if prefix else call_name
             mapped = tuple(
                 "0" if n in self.grounds else terminals.get(n, n if n in self.globals or not prefix else f"{prefix}/{n}")

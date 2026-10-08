@@ -151,8 +151,11 @@ def evaluate(node: Any, scope: Scope) -> float | str:  # noqa: C901, PLR0911, PL
     raise NetlistError(msg)
 
 
-def evaluate_source(expression: str, settings: dict[str, float]) -> float:
+def evaluate_source(expression: str, settings: dict[str, float], dialect: str = "ngspice") -> float:
     """Parse a parameter expression using the same safe interpreter.
+
+    ``dialect="spice"`` reads an uppercase ``M`` suffix as milli, as SPICE source
+    cards do; other dialects read it as mega.
 
     @tags circulax-simulation
     """
@@ -161,32 +164,23 @@ def evaluate_source(expression: str, settings: dict[str, float]) -> float:
         msg = f"invalid property expression {expression!r}"
         raise NetlistError(msg)
     scope = Scope()
+    scope.dialect = dialect
     scope.bindings.update(settings)
     return evaluate(parameters(children(root, "Parameters")[0])["value"], scope)
 
 
-def parse_sine_waveform(waveform: str) -> dict[str, float]:
+def parse_sine_waveform(waveform: str, dialect: str = "spice") -> dict[str, float]:
     """Resolve SPICE-style SIN(offset amplitude frequency [delay damping phase]).
 
     Phase is supplied in degrees and returned in radians. Numeric arguments use
-    the same safe expression/unit interpreter as model cards. Other waveform
-    kinds are rejected so callers cannot silently substitute a DC source.
+    the same safe expression/unit interpreter as model cards, read with SPICE
+    suffix semantics by default (``M`` is milli). Other waveform kinds are
+    rejected so callers cannot silently substitute a DC source.
 
     @tags circulax-simulation
     """
-    match = re.fullmatch(r"(?i:sin)\s*\(([^()]*)\)", waveform.strip())
-    if match is None:
-        msg = f"unsupported transient source waveform {waveform!r}"
-        raise NetlistError(msg)
-    arguments = [part for part in re.split(r"[\s,]+", match[1].strip()) if part]
-    if not 3 <= len(arguments) <= 6:
-        msg = "SIN requires offset, amplitude, frequency and at most three optional arguments"
-        raise NetlistError(msg)
-    names = ("offset", "amplitude", "freq", "delay", "damping", "phase")
-    result = dict.fromkeys(names, 0.0)
-    result.update({name: float(evaluate_source(value, {})) for name, value in zip(names, arguments, strict=False)})
-    if any(not math.isfinite(value) for value in result.values()) or any(result[name] < 0 for name in ("freq", "delay", "damping")):
-        msg = "SIN requires finite values and nonnegative frequency, delay and damping"
-        raise NetlistError(msg)
-    result["phase"] = math.radians(result["phase"])
-    return result
+    # Keep the original import path without mixing waveform parsing into the
+    # expression evaluator. Import lazily because sources uses evaluate_source.
+    from circulax.netlist_io.sources import parse_sine_waveform as parse_sine
+
+    return parse_sine(waveform, dialect)

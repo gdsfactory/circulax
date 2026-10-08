@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.netlist import _is_recursive_netlist
+from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
 
 if TYPE_CHECKING:
@@ -173,7 +174,7 @@ class Circuit:
         updated = self.groups
         for name, value in params.items():
             if "." not in name:
-                updated = apply_global_params(updated, {name: value})
+                updated = record_dc_override(apply_global_params(updated, {name: value}), name)
                 for group_name, group in updated.items():
                     if hasattr(group, "model_id"):
                         col = _osdi_param_columns(group).get(name.lower())
@@ -192,7 +193,9 @@ class Circuit:
                     if not hasattr(group.params, param_key):
                         msg = f"Instance '{instance_name}' has no parameter '{param_key}'."
                         raise ValueError(msg)
-                    updated = update_params_dict(updated, group_name, instance_name, param_key, value)
+                    updated = record_dc_override(
+                        update_params_dict(updated, group_name, instance_name, param_key, value), param_key, instance_name
+                    )
                 break
             else:
                 msg = f"Instance '{instance_name}' not found in compiled circuit."
@@ -403,6 +406,7 @@ class Circuit:
         saveat: Any = None,
         params: dict[str, Any] | None = None,
         transient_solver: Any = None,
+        tstep: float | None = None,
         **kwargs: Any,
     ) -> Any:
         """Run transient (time-domain) analysis.
@@ -411,7 +415,9 @@ class Circuit:
             t0: Start time.
             t1: End time.
             dt0: Initial time step.
-            y0: Initial state vector. If ``None``, a DC solve is run first.
+            y0: Initial state vector. If ``None``, solve the time-zero operating
+                point using transient source values.
+            tstep: SPICE source-default time step; defaults to ``dt0``.
             saveat: Times at which to save the solution. Accepts an array of
                 timestamps or a ``diffrax.SaveAt`` object.
             params: Parameter updates (same format as :meth:`dc`).
@@ -434,10 +440,20 @@ class Circuit:
         transient_circuit = self._for_analysis("tran")
         groups = transient_circuit._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
         if y0 is None:
-            y0 = self.dc(params=updates)
+            from circulax.solvers.source_settings import waveform_groups
+
+            dc_circuit = self._for_analysis("dc")
+            initial_groups = waveform_groups(
+                dc_circuit._with_param_values(arrays),  # noqa: SLF001 -- another Circuit analysis variant
+                tstep=dt0 if tstep is None else tstep,
+                tstop=t1,
+            )
+            y0 = dc_circuit.solver.solve_dc(
+                initial_groups, self._zero_guess(), rtol=self.rtol, atol=self.atol, max_steps=self.max_steps
+            )
         saveat_obj = SaveAt(ts=saveat) if saveat is not None and not isinstance(saveat, SaveAt) else saveat
         run_transient = setup_transient(groups=groups, linear_strategy=transient_circuit.solver, transient_solver=transient_solver)
-        return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, **kwargs)
+        return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, tstep=tstep, **kwargs)
 
     def sp(
         self,
