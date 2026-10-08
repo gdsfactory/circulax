@@ -1,5 +1,8 @@
 """Electronic components."""
 
+from collections.abc import Sequence
+
+import jax
 import jax.nn as jnn
 import jax.numpy as jnp
 
@@ -160,6 +163,163 @@ def PulseVoltageSource(
 def CurrentSource(signals: Signals, I: float = 0.0) -> PhysicsReturn:
     """Constant current source."""
     return {"p1": I, "p2": -I}, {}
+
+
+# ---------------------------------------------------------------------------
+# Unified waveform sources: DC bias + SIN / PULSE / PWL
+# ---------------------------------------------------------------------------
+
+#: Numeric waveform codes for the ``kind`` field. A traced number rather than a
+#: static string, so instances of different kinds share one batched group.
+WAVE_DC = 0.0
+WAVE_SIN = 1.0
+WAVE_PULSE = 2.0
+WAVE_PWL = 3.0
+
+_TINY = 1e-30  # floor for edge times so ideal (zero-width) edges stay finite
+
+
+def waveform_value(
+    t: float,
+    *,
+    kind: float,
+    dc: float,
+    delay: float,
+    offset: float,
+    amplitude: float,
+    freq: float,
+    damping: float,
+    phase: float,
+    v1: float,
+    v2: float,
+    tr: float,
+    tf: float,
+    pw: float,
+    per: float,
+    pwl_t: Sequence[float],
+    pwl_v: Sequence[float],
+    repeat: float,
+) -> jax.Array:
+    """Source value at time ``t`` for the unified waveform sources.
+
+    Operating point contract: ``t <= 0`` returns ``dc`` for every ``kind``, so
+    DC solves, source stepping and the default transient initial state see the
+    bias only. For ``t > 0`` the selected waveform applies (``kind == WAVE_DC``
+    keeps ``dc``). The waveform is *not* required to equal ``dc`` at ``t = 0``;
+    any difference is a step at ``t = 0+``.
+
+    Boundary behaviour follows SPICE. Every branch is evaluated, so inputs of
+    unselected branches are guarded to keep values and gradients finite.
+    """
+    x = t - delay  # time since waveform start; <= 0 holds the initial value
+
+    # SIN: before ``delay`` hold offset + amplitude * sin(phase).
+    xs = jnp.where(x > 0, x, 0.0)
+    v_sin = offset + amplitude * jnp.exp(-xs * damping) * jnp.sin(2.0 * jnp.pi * freq * xs + phase)
+
+    # PULSE: v1 before ``delay``; ``per <= 0`` means a single, non-repeating pulse.
+    periodic = (per > 0) & (x >= 0)
+    xp = jnp.where(periodic, jnp.mod(x, jnp.where(per > 0, per, 1.0)), x)
+    rise = jnp.clip(xp / jnp.maximum(tr, _TINY), 0.0, 1.0)
+    fall = jnp.clip((xp - tr - pw) / jnp.maximum(tf, _TINY), 0.0, 1.0)
+    v_pulse = v1 + (v2 - v1) * (rise - fall)
+
+    # PWL: hold the first value before the first point and the last value after
+    # the last. ``repeat >= 0`` loops the segment [repeat, t_last) forever.
+    xp_t = jnp.asarray(pwl_t)
+    xp_v = jnp.asarray(pwl_v)
+    if xp_t.shape[0] == 1:
+        xp_t, xp_v = jnp.concatenate([xp_t, xp_t]), jnp.concatenate([xp_v, xp_v])
+    t_last = xp_t[-1]
+    looping = (repeat >= 0) & (repeat < t_last) & (x > t_last)
+    xw = jnp.where(looping, repeat + jnp.mod(x - repeat, jnp.where(looping, t_last - repeat, 1.0)), x)
+    v_pwl = jnp.interp(xw, xp_t, xp_v)
+
+    wave = jnp.select([kind == WAVE_SIN, kind == WAVE_PULSE, kind == WAVE_PWL], [v_sin, v_pulse, v_pwl], default=dc)
+    return jnp.where(t > 0, wave, dc)
+
+
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="dc", port_aliases=_PN_ALIASES, holomorphic=True)
+def WaveformVoltageSource(
+    signals: Signals,
+    t: float,
+    kind: float = WAVE_DC,
+    dc: float = 0.0,
+    delay: float = 0.0,
+    offset: float = 0.0,
+    amplitude: float = 0.0,
+    freq: float = 0.0,
+    damping: float = 0.0,
+    phase: float = 0.0,
+    v1: float = 0.0,
+    v2: float = 0.0,
+    tr: float = 0.0,
+    tf: float = 0.0,
+    pw: float = float("inf"),
+    per: float = 0.0,
+    pwl_t: tuple = (0.0, 0.0),
+    pwl_v: tuple = (0.0, 0.0),
+    repeat: float = -1.0,
+) -> PhysicsReturn:
+    """Independent voltage source with a DC bias and a SIN, PULSE or PWL transient waveform.
+
+    ``V(p1) - V(p2) = waveform_value(t)``; see :func:`waveform_value` for the
+    operating-point contract and boundary behaviour. ``dc`` is the bias used by
+    DC solves and ramped by source stepping; it is independent of the waveform
+    parameters, which only apply for ``t > 0``.
+
+    Parameters (all per-instance and batched; ``delay`` is shared by every kind):
+
+    - ``kind``: ``WAVE_DC`` (0, bias only), ``WAVE_SIN`` (1), ``WAVE_PULSE`` (2), ``WAVE_PWL`` (3).
+    - SIN: ``offset, amplitude, freq, delay, damping, phase`` (phase in radians).
+    - PULSE: ``v1, v2, delay, tr, tf, pw, per``; ``per = 0`` is a single pulse.
+    - PWL: ``pwl_t, pwl_v, delay, repeat``; ``repeat >= 0`` loops from that time.
+
+    ``circulax.netlist_io.sources.parse_source`` produces exactly these keyword
+    arguments from SPICE text, so ``WaveformVoltageSource(**settings)`` binds them.
+    """
+    v_val = waveform_value(
+        t, kind=kind, dc=dc, delay=delay, offset=offset, amplitude=amplitude, freq=freq, damping=damping, phase=phase,
+        v1=v1, v2=v2, tr=tr, tf=tf, pw=pw, per=per, pwl_t=pwl_t, pwl_v=pwl_v, repeat=repeat,
+    )  # fmt: skip
+    constraint = (signals.p1 - signals.p2) - v_val
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
+
+
+@source(ports=("p1", "p2"), amplitude_param="dc", port_aliases=_PN_ALIASES, holomorphic=True)
+def WaveformCurrentSource(
+    signals: Signals,
+    t: float,
+    kind: float = WAVE_DC,
+    dc: float = 0.0,
+    delay: float = 0.0,
+    offset: float = 0.0,
+    amplitude: float = 0.0,
+    freq: float = 0.0,
+    damping: float = 0.0,
+    phase: float = 0.0,
+    v1: float = 0.0,
+    v2: float = 0.0,
+    tr: float = 0.0,
+    tf: float = 0.0,
+    pw: float = float("inf"),
+    per: float = 0.0,
+    pwl_t: tuple = (0.0, 0.0),
+    pwl_v: tuple = (0.0, 0.0),
+    repeat: float = -1.0,
+) -> PhysicsReturn:
+    """Independent current source with a DC bias and a SIN, PULSE or PWL transient waveform.
+
+    Same parameters and contract as :class:`WaveformVoltageSource`, with the
+    waveform value interpreted as a current (``v1``/``v2``/``offset``/``amplitude``
+    in amperes). Sign convention matches :func:`CurrentSource`: the value leaves
+    ``p1`` and enters ``p2`` through the source.
+    """
+    i_val = waveform_value(
+        t, kind=kind, dc=dc, delay=delay, offset=offset, amplitude=amplitude, freq=freq, damping=damping, phase=phase,
+        v1=v1, v2=v2, tr=tr, tf=tf, pw=pw, per=per, pwl_t=pwl_t, pwl_v=pwl_v, repeat=repeat,
+    )  # fmt: skip
+    return {"p1": i_val, "p2": -i_val}, {}
 
 
 # ===========================================================================
