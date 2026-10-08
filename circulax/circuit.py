@@ -557,6 +557,10 @@ class Circuit:
     ) -> tuple[jax.Array, jax.Array]:
         """Run harmonic balance to find the periodic steady state.
 
+        Native OSDI devices without ABI state slots use transient-mode F/Q
+        evaluation. Differentiating through the converged native solve is
+        not yet supported.
+
         Args:
             freq: Fundamental frequency in Hz.
             harmonics: Number of harmonics (K = 2*harmonics + 1 time samples).
@@ -580,21 +584,17 @@ class Circuit:
         """
         from circulax.solvers import setup_harmonic_balance
 
-        if self._analysis_factory is not None:
-            msg = "Native OSDI harmonic balance is not supported"
+        if any(getattr(group, "num_states", 0) > 0 for group in self.groups.values()):
+            msg = "Native OSDI harmonic balance with ABI state slots is not supported"
             raise NotImplementedError(msg)
 
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "hb")
-        groups = self._with_param_values(arrays)
+        # HB evaluates large-signal F/Q over one period, so use transient
+        # registrations rather than the small-signal AC evaluation mode.
+        groups = self._for_analysis("tran")._with_param_values(arrays)
         if y0 is None:
-            y0 = self.solver.solve_dc(
-                groups,
-                self._zero_guess(),
-                rtol=self.rtol,
-                atol=self.atol,
-                max_steps=self.max_steps,
-            )
+            y0 = self.dc(params=updates)
         osc_idx = self._resolve_port_node(osc_node) if isinstance(osc_node, str) else osc_node
         run_hb = setup_harmonic_balance(
             groups,
@@ -918,6 +918,11 @@ def _infer_is_complex(groups: dict) -> bool:
 
 def _group_outputs_complex(group: Any) -> bool:
     if getattr(group, "is_fdomain", False) or hasattr(group, "model_id"):
+        return False
+    if not hasattr(group, "physics_func"):
+        # Group types that bypass the physics_func interface entirely (e.g.
+        # bosdi's OsdiComponentGroup, which evaluates via the OSDI FFI) are
+        # real-valued electronic devices, not a detection failure.
         return False
     try:
         count = group.var_indices.shape[0]

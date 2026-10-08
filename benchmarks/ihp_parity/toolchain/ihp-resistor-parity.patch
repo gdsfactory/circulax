@@ -1,0 +1,39 @@
+diff --git a/ihp/models/vacask/models/resistors_mod.lib b/ihp/models/vacask/models/resistors_mod.lib
+--- a/ihp/models/vacask/models/resistors_mod.lib
++++ b/ihp/models/vacask/models/resistors_mod.lib
+@@ -56,3 +56,3 @@
+   l=leff w=weff $mfactor=m a1=a a2=a p1=p p2=p c1=1 c2=1 trise=trise sw_et=sw_et
+-  sw_mman=0 nsmm_rsh=1 nsmm_w=1 nsmm_l=1
++  sw_mman=1 nsmm_rsh=1 nsmm_w=1 nsmm_l=1
+ )
+@@ -73,3 +73,3 @@
+   l=leff w=weff $mfactor=m a1=a a2=a p1=p p2=p c1=1 c2=1 trise=trise sw_et=sw_et
+-  sw_mman=0 nsmm_rsh=1 nsmm_w=1 nsmm_l=1
++  sw_mman=1 nsmm_rsh=1 nsmm_w=1 nsmm_l=1
+ )
+@@ -90,3 +90,3 @@
+   l=leff w=weff $mfactor=m a1=a a2=a p1=p p2=p c1=1 c2=1 trise=trise sw_et=sw_et
+-  sw_mman=0 nsmm_rsh=1 nsmm_w=1 nsmm_l=1
++  sw_mman=1 nsmm_rsh=1 nsmm_w=1 nsmm_l=1
+ )
+diff --git a/tests/test_vacask_resistor_parity.py b/tests/test_vacask_resistor_parity.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_vacask_resistor_parity.py
+@@ -0,0 +1,16 @@
++"""Keep shipped resistor settings consistent across simulation dialects."""
++
++import re
++from pathlib import Path
++
++ROOT = Path(__file__).resolve().parents[1]
++VACASK_MODELS = ROOT / "ihp/models/vacask/models"
++
++
++def test_converted_resistors_preserve_manual_mismatch_switch() -> None:
++    """Keep deterministic manual offsets identical across both model dialects."""
++    native = (ROOT / "ihp/models/ngspice/models/resistors_mod.lib").read_text()
++    converted = (VACASK_MODELS / "resistors_mod.lib").read_text()
++    pattern = r"\bsw_mman\s*=\s*(\d+)"
++    assert re.findall(pattern, native, re.IGNORECASE) == ["1", "1", "1"]
++    assert re.findall(pattern, converted, re.IGNORECASE) == ["1", "1", "1"]

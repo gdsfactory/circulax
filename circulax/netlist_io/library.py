@@ -115,10 +115,20 @@ class Library:
     Libraries retain their lexical scopes, local nodes and conditional branches.
     """
 
-    def __init__(self, *, temperature_c: float = 27.0, include_paths: tuple[Path, ...] = (), dialect: str = "ngspice") -> None:
+    def __init__(
+        self,
+        *,
+        temperature_c: float = 27.0,
+        include_paths: tuple[Path, ...] = (),
+        dialect: str = "ngspice",
+        statistical_mode: str = "reject",
+    ) -> None:
         """Create an empty model library at the requested card temperature."""
         if not math.isfinite(temperature_c) or temperature_c <= -273.15:
             msg = "temperature_c must be finite and above absolute zero"
+            raise NetlistError(msg)
+        if statistical_mode not in {"reject", "nominal"}:
+            msg = "statistical_mode must be 'reject' or 'nominal'"
             raise NetlistError(msg)
         self.temperature_c = temperature_c
         self.include_paths = tuple(Path(p) for p in include_paths)
@@ -128,6 +138,7 @@ class Library:
         self.grounds = {"0"}
         self.scope = Scope()
         self.scope.dialect = dialect
+        self.scope.statistical_mode = statistical_mode
         self.scope.bindings["$temp"] = temperature_c
         self.frame = _Frame(self.scope)
         self._parsed: dict[Path, list[Statement]] = {}
@@ -141,9 +152,14 @@ class Library:
         temperature_c: float = 27.0,
         include_paths: tuple[Path, ...] = (),
         dialect: str = "ngspice",
+        statistical_mode: str = "reject",
     ) -> Library:
-        """Read a library and select a named corner section when requested."""
-        library = cls(temperature_c=temperature_c, include_paths=include_paths, dialect=dialect)
+        """Read a library and select a named corner section when requested.
+
+        statistical_mode="nominal" explicitly evaluates agauss at its nominal
+        value. The default rejects random functions; sampling is unsupported.
+        """
+        library = cls(temperature_c=temperature_c, include_paths=include_paths, dialect=dialect, statistical_mode=statistical_mode)
         library.include(path, section=section)
         return library
 
@@ -226,7 +242,7 @@ class Library:
             elif kind == "Subckt":
                 name = children(node, "Identifier")[0].text
                 frame.subcircuits[name.lower()] = (statement, frame)
-            elif kind in {"SubcktCall", "OSDIDevice", "Diode", "Resistor", "Capacitor", "Inductor"}:
+            elif kind in {"SubcktCall", "OSDIDevice", "Diode", "Resistor", "Capacitor", "Inductor", "Voltage", "Current"}:
                 frame.calls.append(statement)
             elif kind == "HDLStatement":
                 reference = children(node, "StringLiteral")[0].text.strip('"')
@@ -297,13 +313,37 @@ class Library:
     # model reference at all (e.g. `R1 1 2 R=1k`) when used without one.
     _INLINE_BUILTINS: ClassVar[dict[str, str]] = {"Resistor": "r", "Capacitor": "c", "Inductor": "l"}
 
-    def _calls(
+    @staticmethod
+    def _source_settings(node: Any, scope: Scope) -> dict[str, Any]:
+        settings = {}
+        for source in children(node):
+            if source.kind not in {"DCSource", "ACSource", "TranSource"}:
+                continue
+            values = [evaluate(v, scope) for v in children(source) if v.kind not in {"Keyword", "Notation"}]
+            if source.kind == "DCSource":
+                settings["dc"] = values[0]
+            elif source.kind == "ACSource":
+                settings["mag"] = values[0] if values else 1.0
+                settings["phase"] = values[1] if len(values) > 1 else 0.0
+            else:
+                waveform = children(source, "Keyword")[0].text.lower()
+                if waveform != "pulse" or len(values) != 7:
+                    msg = "native transient sources require PULSE(v1 v2 td tr tf pw per)"
+                    raise NetlistError(msg)
+                settings["type"] = "pulse"
+                settings.update(zip(("val0", "val1", "delay", "rise", "fall", "width", "period"), values, strict=True))
+        return settings
+
+    def _calls(  # noqa: C901, PLR0912, PLR0915 -- native call and lexical model dispatch
         self, frame: _Frame, terminals: dict[str, str], prefix: str, instances: list[ResolvedInstance], active: tuple[int, ...]
     ) -> None:
         for statement in frame.calls:
             node = statement.node
             symbols = _nodes(node)
-            inline_builtin = self._INLINE_BUILTINS.get(statement.kind)
+            is_source = statement.kind in {"Voltage", "Current"}
+            inline_builtin = {"Voltage": "vsource", "Current": "isource"}.get(
+                statement.kind, self._INLINE_BUILTINS.get(statement.kind)
+            )
             is_inline = inline_builtin is not None and not children(node, "NameRef")
             if is_inline:
                 call_name, *nodes = symbols
@@ -332,7 +372,20 @@ class Library:
                 "0" if n in self.grounds else terminals.get(n, n if n in self.globals or not prefix else f"{prefix}/{n}")
                 for n in nodes
             )
-            settings = {k: evaluate(v, frame.scope) for k, v in parameters(node).items()}
+            settings = (
+                self._source_settings(node, frame.scope)
+                if is_source
+                else {k: evaluate(v, frame.scope) for k, v in parameters(node).items()}
+            )
+            if is_inline and not is_source:
+                # Positional R/C/L values are expression children, rather than
+                # Parameter nodes (e.g. `R1 in out 1k`).
+                values = [v for v in children(node) if v.kind in {"LiteralExpr", "Brace", "Prime", "BinaryExpression"}]
+                if values:
+                    if len(values) != 1 or any(k.lower() == master for k in settings):
+                        msg = f"{name}: ambiguous inline {master} value"
+                        raise NetlistError(msg)
+                    settings[master] = evaluate(values[0], frame.scope)
             if subcircuit is not None:
                 self._instantiate(subcircuit, mapped, settings, name, instances, active)
                 continue
