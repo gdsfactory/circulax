@@ -61,49 +61,6 @@ def _sp(net: dict, ports: list[str]) -> jnp.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Parameter validation
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("cls", "kwargs"),
-    [
-        (CoupledInductors, {"L1": 0.0}),
-        (CoupledInductors, {"L1": -1e-9}),
-        (CoupledInductors, {"L2": -1e-9}),
-        (CoupledInductors, {"k": 1.01}),
-        (CoupledInductors, {"k": -1.01}),
-        (IdealTransformer, {"n": 0.0}),
-        (IdealTransformer, {"n": -2.0}),
-    ],
-)
-def test_invalid_parameters_raise(cls: type, kwargs: dict) -> None:
-    with pytest.raises(ValueError, match=next(iter(kwargs))):
-        cls(**kwargs)
-
-
-def test_invalid_parameters_raise_through_compiler() -> None:
-    net = _two_port({"L1": -1e-6})
-    with pytest.raises(ValueError, match="L1"):
-        compile_netlist(net, MODELS)
-    net = {
-        "instances": {"GND": {"component": "ground"}, "X": {"component": "IdealTransformer", "settings": {"n": -1.0}}},
-        "connections": {"GND,p1": ("X,p2", "X,s2")},
-    }
-    with pytest.raises(ValueError, match="n"):
-        compile_netlist(net, MODELS)
-
-
-def test_valid_boundaries_and_tracers_accepted() -> None:
-    CoupledInductors(k=1.0)
-    CoupledInductors(k=-1.0)
-    CoupledInductors(L1=jnp.array([1e-9, 2e-9]), k=jnp.array([0.1, -0.2]))
-    # Traced parameters (grad / vmap paths) must not trip validation.
-    jax.grad(lambda k: CoupledInductors(k=k).k)(0.5)
-    jax.vmap(lambda n: IdealTransformer(n=n).n)(jnp.array([1.0, 2.0]))
-
-
-# ---------------------------------------------------------------------------
 # AC / S-parameters
 # ---------------------------------------------------------------------------
 

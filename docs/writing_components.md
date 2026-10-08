@@ -115,7 +115,7 @@ def Inductor(signals: Signals, L: float = 1e-9):
 | `CoupledInductors` | `L1`, `L2`, `k` | `L1, L2 > 0`, `-1 <= k <= 1` | `v1 = L1 di1/dt + M di2/dt`, `v2 = M di1/dt + L2 di2/dt`, `M = k sqrt(L1 L2)` |
 | `IdealTransformer` | `n = N1/N2` | `n > 0` | `v1 = n v2`, `i2 = -n i1` |
 
-Parameters are validated when the component is constructed with concrete values (including through `compile_netlist`); traced values under `jax.grad`/`jax.vmap` skip the check. Instances with different `L1`/`L2`/`k`/`n` share one batched component group.
+Instances with different `L1`/`L2`/`k`/`n` share one batched component group.
 
 DC and singular limits:
 

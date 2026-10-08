@@ -1,11 +1,7 @@
 """Electronic components."""
 
-from collections.abc import Callable
-
-import jax
 import jax.nn as jnn
 import jax.numpy as jnp
-import numpy as np
 
 from circulax.components.base_component import (
     PhysicsReturn,
@@ -41,33 +37,20 @@ def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
     return ({"p1": signals.i_L, "p2": -signals.i_L, "i_L": v_drop}, {"i_L": -L * signals.i_L})
 
 
-def _concrete(value: object) -> np.ndarray | None:
-    """Return ``value`` as a NumPy array, or ``None`` if it is a JAX tracer.
-
-    Parameter validation only runs on concrete settings so that ``jax.grad``,
-    ``jax.vmap`` and sensitivity paths that rebuild components with traced
-    parameters are unaffected.
-    """
-    if isinstance(value, jax.core.Tracer):
-        return None
-    return np.asarray(value)
-
-
-def _require(name: str, value: object, ok: Callable[[np.ndarray], np.ndarray], rule: str, comp: str) -> None:
-    arr = _concrete(value)
-    if arr is not None and not np.all(ok(arr)):
-        msg = f"{comp}: {name} must satisfy {rule}; got {value!r}"
-        raise ValueError(msg)
-
-
 @component(
     ports=("p1", "p2", "s1", "s2"),
     states=("i1", "i2"),
     port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
     holomorphic=True,
 )
-def _CoupledInductors(signals: Signals, L1: float = 1e-9, L2: float = 1e-9, k: float = 0.5) -> PhysicsReturn:
-    """Two magnetically coupled inductors (see :class:`CoupledInductors`)."""
+def CoupledInductors(signals: Signals, L1: float = 1e-9, L2: float = 1e-9, k: float = 0.5) -> PhysicsReturn:
+    """Two magnetically coupled inductors with ``M = k * sqrt(L1 * L2)``.
+
+    Dots are on ``p1`` and ``s1``; currents are positive into the dotted
+    terminals. The parameters should satisfy ``L1, L2 > 0`` and ``|k| <= 1``.
+    At ``k = 0`` the windings are independent. For ``|k| = 1`` the inductance
+    matrix is singular.
+    """
     m = k * jnp.sqrt(L1 * L2)
     v1 = signals.p1 - signals.p2
     v2 = signals.s1 - signals.s2
@@ -77,52 +60,18 @@ def _CoupledInductors(signals: Signals, L1: float = 1e-9, L2: float = 1e-9, k: f
     )
 
 
-class CoupledInductors(_CoupledInductors):
-    """Two magnetically coupled inductors with mutual inductance ``M = k * sqrt(L1 * L2)``.
-
-    Terminal and polarity contract (dot convention):
-
-    - Winding 1 is ``p1``/``p2`` and winding 2 is ``s1``/``s2``.
-    - The dots are on ``p1`` and ``s1``. Winding currents ``i1``, ``i2`` are
-      positive when flowing *into* the dotted terminal, so with ``k > 0`` a
-      rising ``i1`` induces a positive ``v(s1) - v(s2)``.
-    - Reverse polarity by swapping ``s1`` and ``s2`` in the netlist or by using
-      a negative ``k``; the two are equivalent.
-
-    Equations (flux form, same sign convention as :func:`Inductor`)::
-
-        v1 = L1 di1/dt + M di2/dt
-        v2 = M di1/dt + L2 di2/dt
-
-    Parameters are validated on construction when concrete: ``L1, L2 > 0`` and
-    ``-1 <= k <= 1``. ``k = 0`` reduces to two independent inductors.
-
-    DC behaviour and limits:
-
-    - At DC each winding is a short circuit (``v1 = v2 = 0``). A winding with no
-      DC path to a reference leaves its nodes floating, so ground ``p2``/``s2``
-      (or set ``g_leak``) to obtain a non-singular DC Jacobian.
-    - For ``|k| = 1`` the inductance matrix is singular: windings are forced to
-      share flux, and inconsistent winding voltages have no solution. The
-      transient/AC solves are then ill-posed. For perfect coupling use an
-      :class:`IdealTransformer` with a magnetizing :func:`Inductor` instead.
-    """
-
-    def __check_init__(self) -> None:
-        name = type(self).__name__
-        _require("L1", self.L1, lambda a: a > 0, "L1 > 0", name)
-        _require("L2", self.L2, lambda a: a > 0, "L2 > 0", name)
-        _require("k", self.k, lambda a: np.abs(a) <= 1, "-1 <= k <= 1", name)
-
-
 @component(
     ports=("p1", "p2", "s1", "s2"),
     states=("i_p",),
     port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
     holomorphic=True,
 )
-def _IdealTransformer(signals: Signals, n: float = 1.0) -> PhysicsReturn:
-    """Ideal transformer (see :class:`IdealTransformer`)."""
+def IdealTransformer(signals: Signals, n: float = 1.0) -> PhysicsReturn:
+    """Ideal transformer with turns ratio ``n = N1 / N2`` (``n > 0``).
+
+    Dots are on ``p1`` and ``s1``. It passes DC; add a magnetizing inductor
+    across the primary to model low-frequency roll-off.
+    """
     v1 = signals.p1 - signals.p2
     v2 = signals.s1 - signals.s2
     return {
@@ -132,31 +81,6 @@ def _IdealTransformer(signals: Signals, n: float = 1.0) -> PhysicsReturn:
         "s2": n * signals.i_p,
         "i_p": v1 - n * v2,
     }, {}
-
-
-class IdealTransformer(_IdealTransformer):
-    """Ideal (lossless, infinite-inductance) transformer with turns ratio ``n = N1 / N2``.
-
-    Same terminal contract as :class:`CoupledInductors`: primary ``p1``/``p2``,
-    secondary ``s1``/``s2``, dots on ``p1`` and ``s1``. Constitutive relations::
-
-        v1 = n * v2
-        i2 = -n * i1      (currents positive into the dotted terminals)
-
-    which conserve power, ``v1*i1 + v2*i2 = 0``. A load ``Z`` on the secondary
-    appears as ``n**2 * Z`` at the primary. ``n > 0`` is required; reverse
-    polarity by swapping ``s1`` and ``s2``.
-
-    The ideal transformer has no frequency dependence and **passes DC**
-    (``v1 = n * v2`` holds at ``omega = 0``), which a physical transformer does
-    not. Add a magnetizing :func:`Inductor` across the primary to model the
-    low-frequency roll-off. As with :class:`CoupledInductors`, ground a
-    reference terminal on each side (or set ``g_leak``) to avoid a floating,
-    singular DC Jacobian.
-    """
-
-    def __check_init__(self) -> None:
-        _require("n", self.n, lambda a: a > 0, "n > 0", type(self).__name__)
 
 
 @component(
