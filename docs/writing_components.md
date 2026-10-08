@@ -106,6 +106,23 @@ def Inductor(signals: Signals, L: float = 1e-9):
     )
 ```
 
+#### Example: Coupled Inductors and an Ideal Transformer
+
+`CoupledInductors` and `IdealTransformer` (in `circulax.components.electronic`) are two-winding primitives with the same terminal contract: primary `p1`/`p2`, secondary `s1`/`s2`, **dots on `p1` and `s1`**, winding currents positive into the dotted terminal. Swap `s1`/`s2` (or negate `k`) to reverse polarity.
+
+| Component | Parameters | Valid range | Equations |
+|-----------|------------|-------------|-----------|
+| `CoupledInductors` | `L1`, `L2`, `k` | `L1, L2 > 0`, `-1 <= k <= 1` | `v1 = L1 di1/dt + M di2/dt`, `v2 = M di1/dt + L2 di2/dt`, `M = k sqrt(L1 L2)` |
+| `IdealTransformer` | `n = N1/N2` | `n > 0` | `v1 = n v2`, `i2 = -n i1` |
+
+Parameters are validated when the component is constructed with concrete values (including through `compile_netlist`); traced values under `jax.grad`/`jax.vmap` skip the check. Instances with different `L1`/`L2`/`k`/`n` share one batched component group.
+
+DC and singular limits:
+
+- At DC each winding of `CoupledInductors` is a short circuit. A winding with no DC path to a reference leaves its nodes floating and the DC Jacobian singular, so ground `p2` and `s2` (or set `g_leak`).
+- `|k| = 1` makes the inductance matrix singular: inconsistent winding voltages have no solution and transient/AC solves are ill-posed. For perfect coupling use an `IdealTransformer` plus a magnetizing `Inductor` on the primary.
+- `IdealTransformer` has no frequency dependence and **passes DC** (`v1 = n v2` at `ω = 0`), unlike a physical transformer. Add a magnetizing inductor for low-frequency roll-off.
+
 ---
 
 ## `@source` — Time-Dependent Sources
