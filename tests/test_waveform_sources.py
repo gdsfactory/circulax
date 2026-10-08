@@ -12,6 +12,7 @@ from circulax.components.electronic import (
     WAVE_PULSE,
     WAVE_PWL,
     WAVE_SIN,
+    Capacitor,
     Diode,
     Resistor,
     VoltageSourceAC,
@@ -37,9 +38,9 @@ MODELS = {
     "ground": lambda: 0,
 }
 _BASE = {
-    "kind": WAVE_DC, "dc": 0.5, "delay": 0.0, "offset": 0.0, "amplitude": 0.0, "freq": 0.0, "damping": 0.0, "phase": 0.0,
-    "v1": 0.0, "v2": 0.0, "tr": 0.0, "tf": 0.0, "pw": float("inf"), "per": 0.0,
-    "pwl_t": (0.0, 0.0), "pwl_v": (0.0, 0.0), "repeat": -1.0,
+    "kind": WAVE_DC, "delay": 0.0, "offset": 0.0, "amplitude": 0.0, "freq": 0.0, "damping": 0.0, "phase": 0.0,
+    "v1": 0.0, "v2": 0.0, "tr": 0.0, "tf": 0.0, "pw": 0.0, "per": 0.0,
+    "pwl_t": (0.0, 0.0), "pwl_v": (0.0, 0.0), "repeat": -1.0, "tstep": 1e-9, "tstop": 1000.0,
 }  # fmt: skip
 
 
@@ -63,16 +64,25 @@ def _divider(settings_by_source: dict[str, dict], component: str = "vsrc") -> di
 # --- waveform boundaries ------------------------------------------------------------------------------------------
 
 
-def test_operating_point_is_dc_for_every_kind() -> None:
-    """t <= 0 returns the DC bias whatever the waveform is."""
-    for kw in ({"kind": WAVE_SIN, "offset": 0.9, "amplitude": 1.0, "freq": 1e3}, {"kind": WAVE_PULSE, "v1": 2.0, "v2": 3.0},
-               {"kind": WAVE_PWL, "pwl_t": (0.0, 1.0), "pwl_v": (7.0, 8.0)}):  # fmt: skip
-        assert _w(0.0, **kw) == 0.5
-        assert _w(-1.0, **kw) == 0.5
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        ("SIN(0.9 1 1k)", 0.9),
+        ("PULSE(2 3)", 2.0),
+        ("PWL(0 7 1 8)", 7.0),
+        ("DC 0 SIN(0.9 1 1k)", 0.0),
+        ("DC 0.5 SIN(0.9 1 1k)", 0.5),
+    ],
+)
+def test_operating_point_uses_override_or_waveform_at_zero(spec: str, expected: float) -> None:
+    circuit = compile_circuit(_divider({"V1": parse_source(spec)}), MODELS)
+    assert float(circuit.port(circuit.dc(), "V1,p1")) == pytest.approx(expected)
 
 
-def test_dc_kind_ignores_waveform_fields() -> None:
-    assert _w(1.0, kind=WAVE_DC, offset=9.0, amplitude=9.0, freq=1.0, v1=4.0, v2=5.0) == 0.5
+def test_constructor_remembers_an_explicit_zero_dc_override() -> None:
+    assert WaveformVoltageSource(kind=WAVE_SIN).dc_given == 0.0
+    assert WaveformVoltageSource(kind=WAVE_SIN, dc=0.0).dc_given == 1.0
+    assert WaveformCurrentSource(kind=WAVE_PULSE, dc=0.0).dc_given == 1.0
 
 
 def test_sin_holds_initial_phase_value_before_delay_then_damps() -> None:
@@ -90,10 +100,22 @@ def test_pulse_boundaries_and_period() -> None:
         assert _w(t, **kw) == pytest.approx(v), t
 
 
-def test_pulse_without_period_is_single_shot_and_ideal_edges_are_finite() -> None:
-    single = {"kind": WAVE_PULSE, "v1": 0.0, "v2": 1.0, "delay": 1.0, "pw": 1.0}
-    assert [_w(t, **single) for t in (0.5, 1.5, 2.5, 100.0)] == [0.0, 1.0, 0.0, 0.0]
-    assert _w(5.0, kind=WAVE_PULSE, v1=0.0, v2=2.0) == 2.0  # omitted width holds high
+def test_pulse_zero_edges_and_period_use_analysis_defaults() -> None:
+    pulse = {
+        "kind": WAVE_PULSE,
+        "v1": -1.0,
+        "v2": 2.0,
+        "delay": 1.0,
+        "tr": 0.0,
+        "pw": 2.0,
+        "tf": 0.0,
+        "per": 0.0,
+        "tstep": 1.0,
+        "tstop": 6.0,
+    }
+    expect = {1.0: -1.0, 1.5: 0.5, 2.0: 2.0, 4.0: 2.0, 4.5: 0.5, 5.0: -1.0, 7.5: 0.5}
+    for t, value in expect.items():
+        assert _w(t, **pulse) == pytest.approx(value)
 
 
 def test_pwl_holds_ends_and_interpolates_with_delay() -> None:
@@ -119,10 +141,10 @@ def test_gradients_stay_finite_for_unselected_branches() -> None:
     for kind in (WAVE_DC, WAVE_SIN, WAVE_PULSE, WAVE_PWL):
         base = {**_BASE, "kind": kind, "v2": 1.0, "amplitude": 1.0, "pwl_t": (0.0, 1.0), "pwl_v": (0.0, 1.0)}
 
-        def value(pw: float, tr: float, per: float, freq: float, base: dict = base) -> jax.Array:
-            return waveform_value(1.5, **{**base, "pw": pw, "tr": tr, "per": per, "freq": freq})
+        def value(pw: float, tr: float, per: float, freq: float, tf: float, base: dict = base) -> jax.Array:
+            return waveform_value(1.5, **{**base, "pw": pw, "tr": tr, "per": per, "freq": freq, "tf": tf})
 
-        grads = jax.grad(value, argnums=(0, 1, 2, 3))(2.0 if kind == WAVE_PULSE else float("inf"), 0.0, 0.0, 1.0)
+        grads = jax.grad(value, argnums=(0, 1, 2, 3, 4))(2.0 if kind == WAVE_PULSE else 0.0, 0.0, 0.0, 1.0, 0.0)
         assert all(np.isfinite(g) for g in grads), kind
 
 
@@ -137,7 +159,7 @@ def test_voltage_source_dc_bias_is_independent_of_transient_waveform() -> None:
     ts = jnp.array([0.0, 0.1e-3, 0.25e-3, 0.6e-3])
     sol = circuit.transient(t0=0.0, t1=0.6e-3, dt0=1e-6, saveat=ts)
     v = np.asarray(sol.ys[:, circuit.port_map["V1,p1"]])
-    expect = np.where(np.asarray(ts) > 0, 0.9 + np.sin(2 * np.pi * 1e3 * np.asarray(ts)), 0.5)
+    expect = 0.9 + np.sin(2 * np.pi * 1e3 * np.asarray(ts))
     np.testing.assert_allclose(v, expect, atol=1e-6)
 
 
@@ -201,7 +223,7 @@ def test_source_stepping_ramps_the_dc_bias_and_matches_plain_dc() -> None:
     }
     circuit = compile_circuit(net, MODELS)
     groups = circuit.groups
-    assert groups["vsrc"].amplitude_param == "dc"
+    assert groups["vsrc"].amplitude_param == "source_scale"
     solver = analyze_circuit(groups, circuit.sys_size, is_complex=False)
     y0 = jnp.zeros(circuit.sys_size)
     plain = solver.solve_dc(groups, y0)
@@ -222,7 +244,7 @@ _SCHEMES = [BDF2VectorizedTransientSolver, SDIRK3VectorizedTransientSolver, SDIR
 
 @pytest.mark.parametrize("solver", _SCHEMES)
 def test_transient_solver_schemes_follow_the_waveform_not_the_bias(solver: type) -> None:
-    """Stage times t_n > 0 see the waveform; only the t = 0 initial state sees dc."""
+    """Transient stage times see the waveform independently of the DC override."""
     circuit = compile_circuit(_divider({"V1": parse_source("DC 0.5 SIN(0.9 1 1k)")}), MODELS)
     ts = jnp.array([0.1e-3, 0.25e-3, 0.6e-3])
     sol = circuit.transient(t0=0.0, t1=0.6e-3, dt0=1e-6, saveat=ts, transient_solver=solver)
@@ -237,18 +259,10 @@ def _hb_node_voltage(component: str, settings: dict) -> np.ndarray:
     return np.asarray(y_time[:, circuit.port_map["V1,p1"]])
 
 
-def test_harmonic_balance_needs_dc_equal_to_the_waveform_at_time_zero() -> None:
-    """HB samples t = 0 as a time point, where the source returns ``dc``.
-
-    With ``dc`` equal to the waveform's t = 0 value (0 for ``SIN(0 ...)``) HB matches
-    ``VoltageSourceAC``. Any other ``dc`` corrupts only that first sample.
-    """
+def test_harmonic_balance_ignores_the_dc_override_at_every_sample() -> None:
     reference = _hb_node_voltage("vac", {"V": 1.0, "freq": 1e3})
-    matched = _hb_node_voltage("vsrc", parse_source("DC 0 SIN(0 1 1k)"))
-    np.testing.assert_allclose(matched, reference, atol=1e-9)
-    mismatched = _hb_node_voltage("vsrc", parse_source("DC 0.9 SIN(0 1 1k)"))
-    np.testing.assert_allclose(mismatched[1:], reference[1:], atol=1e-9)
-    assert mismatched[0] == pytest.approx(0.9)
+    for spec in ("SIN(0 1 1k)", "DC 0 SIN(0 1 1k)", "DC 0.9 SIN(0 1 1k)"):
+        np.testing.assert_allclose(_hb_node_voltage("vsrc", parse_source(spec)), reference, atol=1e-9)
 
 
 def test_kfnetlist_binding_batches_mixed_kinds_in_one_group() -> None:
@@ -269,3 +283,50 @@ def test_kfnetlist_binding_batches_mixed_kinds_in_one_group() -> None:
     sol = circuit.transient(t0=0.0, t1=0.3e-3, dt0=1e-6, saveat=jnp.array([0.25e-3]))
     got = [float(sol.ys[0, circuit.port_map[f"{n},p1"]]) for n in specs]
     np.testing.assert_allclose(got, [1.0, 5.0, 1.5], atol=1e-6)
+
+
+def test_source_stepping_scales_an_inferred_operating_point() -> None:
+    circuit = compile_circuit(_divider({"V1": parse_source("SIN(2 1 1k)")}), MODELS)
+    result = circuit.solver.solve_dc_source(circuit.groups, jnp.zeros(circuit.sys_size), n_steps=4)
+    assert float(circuit.port(result, "V1,p1")) == pytest.approx(2.0)
+
+
+def test_dc_parameter_updates_create_an_explicit_override() -> None:
+    circuit = compile_circuit(_divider({"V1": parse_source("SIN(0.9 1 1k)")}), MODELS)
+    assert float(circuit.port(circuit.dc(params={"V1.dc": 0.0}), "V1,p1")) == pytest.approx(0.0)
+    assert float(circuit.port(circuit.dc(dc=0.0), "V1,p1")) == pytest.approx(0.0)
+    assert float(circuit.port(circuit.dc(), "V1,p1")) == pytest.approx(0.9)
+    assert float(jax.grad(lambda tf: circuit.dc(params={"V1.tf": tf})[circuit.port_map["V1,p1"]])(0.0)) == 0.0
+
+
+def test_transient_source_defaults_are_bound_under_jit() -> None:
+    circuit = compile_circuit(_divider({"V1": parse_source("PULSE(2 3)")}), MODELS)
+    times = jnp.array([0.0, 0.1e-6, 0.2e-6, 0.5e-6])
+    run = jax.jit(lambda: circuit.transient(t0=0.0, t1=0.5e-6, dt0=0.05e-6, tstep=0.2e-6, saveat=times))
+    np.testing.assert_allclose(circuit.port(run().ys, "V1,p1"), [2.0, 2.5, 3.0, 3.0], atol=1e-7)
+
+
+def test_transient_initializes_capacitor_from_waveform_instead_of_dc_override() -> None:
+    net = {
+        "instances": {
+            "GND": {"component": "ground"},
+            "V1": {"component": "vsrc", "settings": parse_source("DC 0.5 SIN(0.9 1 1k)")},
+            "R1": {"component": "resistor", "settings": {"R": 1000.0}},
+            "C1": {"component": "capacitor", "settings": {"C": 1e-9}},
+        },
+        "connections": {"V1,p1": "R1,p1", "R1,p2": "C1,p1", "V1,p2": "GND,p1", "C1,p2": "GND,p1"},
+    }
+    circuit = compile_circuit(net, {**MODELS, "capacitor": Capacitor})
+    assert float(circuit.port(circuit.dc(), "C1,p1")) == pytest.approx(0.5)
+    solution = circuit.transient(t0=0.0, t1=1e-7, dt0=1e-8, saveat=jnp.array([0.0, 1e-7]))
+    assert float(circuit.port(solution.ys, "C1,p1")[0]) == pytest.approx(0.9)
+    supplied = circuit.transient(t0=0.0, t1=1e-7, dt0=1e-8, saveat=jnp.array([0.0]), y0=circuit.dc())
+    assert float(circuit.port(supplied.ys, "C1,p1")[0]) == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize("double", [False, True])
+def test_all_source_parameter_gradients_are_finite_without_analysis_defaults(double: bool) -> None:
+    with jax.experimental.enable_x64(double):
+        source = WaveformVoltageSource(kind=WAVE_SIN, offset=0.9, amplitude=1.0, freq=1e3)
+        gradients = jax.grad(lambda params: -params(t=0.0)[0]["i_src"])(source)
+        assert all(np.all(np.isfinite(leaf)) for leaf in jax.tree.leaves(gradients))

@@ -36,13 +36,14 @@ def test_pulse_all_arguments_and_defaults() -> None:
     assert (s["delay"], s["tr"], s["tf"], s["pw"], s["per"]) == pytest.approx((1e-9, 2e-9, 3e-9, 10e-9, 40e-9))
     minimal = parse_waveform("PULSE(0 1)")
     assert (minimal["tr"], minimal["tf"], minimal["per"], minimal["delay"]) == (0.0, 0.0, 0.0, 0.0)
-    assert math.isinf(minimal["pw"])
+    assert minimal["pw"] == 0.0
 
 
 def test_pulse_spice_defaults_come_from_caller() -> None:
     """@tags circulax-simulation"""
     s = parse_waveform("PULSE(0 1)", tstep=1e-9, tstop=1e-6)
-    assert (s["tr"], s["tf"], s["pw"]) == (1e-9, 1e-9, 1e-6)
+    assert (s["tr"], s["tf"], s["pw"], s["per"]) == (0.0, 0.0, 0.0, 0.0)
+    assert (s["tstep"], s["tstop"]) == (1e-9, 1e-6)
 
 
 def test_pwl_points_and_options() -> None:
@@ -72,20 +73,21 @@ def test_source_dc_bias_is_independent_of_waveform() -> None:
     assert both["offset"] == 0.9
     assert parse_source("SIN(0.9 1 1k) DC 0.5")["dc"] == 0.5
     assert parse_source("SIN(0.9 1 1k)")["dc"] == 0.0
-    assert parse_source("2.5") == {"kind": WAVE_DC, "dc": 2.5}
-    assert parse_source("dc 1m") == {"kind": WAVE_DC, "dc": pytest.approx(1e-3)}
+    assert parse_source("2.5") == {"kind": WAVE_DC, "dc": 2.5, "dc_given": 1.0}
+    assert parse_source("dc 1m") == {"kind": WAVE_DC, "dc": pytest.approx(1e-3), "dc_given": 1.0}
+    assert parse_source("SIN(0.9 1 1k)")["dc_given"] == 0.0
+    assert parse_source("DC 0 SIN(0.9 1 1k)")["dc_given"] == 1.0
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        "",
-        "SIN(0 1)",
+        "DC",
+        "DC SIN(0 1 1k)",
         "SIN(0 1 -1k)",
         "PULSE(0)",
         "PULSE(0 1 0 1 1 1 1 1)",
         "PULSE(0 1 0 -1n)",
-        "PULSE(0 1 0 1n 1n 10n 5n)",
         "PWL()",
         "PWL(0 0 1)",
         "PWL(1 0 0 1)",
@@ -100,6 +102,8 @@ def test_source_dc_bias_is_independent_of_waveform() -> None:
         "SIN(0 1 1k",
         "SIN(0 1 1kHz)",
         "SIN(0 1 {1/0})",
+        "SIN(0 1 1/0)",
+        "PWL(0 0 1 1 2 0) r=0.5",
         "1 2",
     ],
 )
@@ -119,8 +123,29 @@ def test_pwl_points_below_two_fails_for_every_kind(text: str) -> None:
         parse_source(text, pwl_points=1)
 
 
-def test_sin_frequency_defaults_to_inverse_tstop_like_spice() -> None:
-    """@tags circulax-simulation"""
-    assert parse_waveform("SIN(0 1)", tstop=2e-3)["freq"] == pytest.approx(500.0)
-    with pytest.raises(NetlistError):
-        parse_waveform("SIN(0 1)")
+def test_sin_frequency_default_is_resolved_with_analysis_settings() -> None:
+    """Omitted and zero frequency both defer to 1/TSTOP."""
+    for text in ("SIN(0 1)", "SIN(0 1 0)"):
+        settings = parse_waveform(text, tstop=2e-3)
+        assert settings["freq"] == 0.0
+        assert settings["tstop"] == 2e-3
+    assert parse_waveform("SIN(0 1)")["freq"] == 0.0
+
+
+def test_standard_pwl_options_after_parentheses_with_dc_on_either_side() -> None:
+    for text in ("DC 0.5 PWL(0 0 1m 1 2m 0) r=1m td=10u", "PWL(0 0 1m 1 2m 0) r = 1m td = 10u DC 0.5"):
+        settings = parse_source(text)
+        assert settings["repeat"] == pytest.approx(1e-3)
+        assert settings["delay"] == pytest.approx(10e-6)
+        assert settings["dc"] == 0.5
+
+
+@pytest.mark.parametrize("name", ["tstep", "tstop"])
+@pytest.mark.parametrize("value", [0.0, -1.0, float("nan"), float("inf")])
+def test_invalid_analysis_defaults_fail(name: str, value: float) -> None:
+    with pytest.raises(NetlistError, match="finite positive"):
+        parse_waveform("PULSE(0 1)", **{name: value})
+
+
+def test_empty_specification_is_a_zero_source() -> None:
+    assert parse_source("") == {"kind": WAVE_DC, "dc": 0.0, "dc_given": 0.0}

@@ -60,15 +60,19 @@ The caller selects the analysis and evaluates the waveform; this helper does
 not replace a separately declared DC operating-point value.
 
 `netlist_io.sources.parse_source` / `parse_waveform` read the value part of a SPICE V/I
-source card (`[DC] value`, `SIN(...)`, `PULSE(...)`, `PWL(... [r=] [td=])`) into keyword
-settings named like the fields of `components.electronic.WaveformVoltageSource` and
-`WaveformCurrentSource`, so clients bind with `Cls(**settings)`. Numbers use SPICE suffix
+source card (`[DC] value`, `SIN(...)`, `PULSE(...)`, `PWL(...) [r=] [td=]`) into keyword
+settings for `WaveformVoltageSource` and `WaveformCurrentSource`. Numbers use SPICE suffix
 semantics (uppercase `M` is milli). `AC` clauses, unknown waveforms and invalid values raise
-`NetlistError`; the DC bias is never inferred from the waveform (`dc` is `0.0` when absent).
-`pwl_points` pads every kind to a common PWL length so mixed kinds batch in one group.
-The components return `dc` for `t <= 0` (DC solve, source stepping, default transient
-initial state) and the waveform for `t > 0`; source stepping scales `dc` only. See
-`docs/waveform_sources.md`.
-Harmonic balance samples `t = 0`, where the sources return `dc`; it matches `VoltageSourceAC` only when
-`dc` equals the waveform's `t = 0` value. An omitted SIN frequency defaults to `1 / tstop` when the
-caller supplies `tstop` (as in SPICE) and is otherwise an error.
+`NetlistError`. `dc_given` distinguishes omitted DC from an explicit zero override. Without
+an override, the operating point uses the waveform's time-zero value. Transient initialization
+always uses the waveform at zero; harmonic balance uses the waveform at every sample.
+
+Numeric `source_mode` selects DC or waveform evaluation independently of time. Source stepping
+scales the complete DC value through `source_scale`, including inferred values. Zero and omitted
+PULSE rise/fall times use `TSTEP`; width/period use `TSTOP`. Zero/omitted SIN frequency uses
+`1/TSTOP`. Defaults remain finite deferred values until analysis settings are available.
+`Circuit.transient` uses `dt0` (or its explicit `tstep` argument) and `t1`; harmonic balance uses
+its sample interval and period. Parser-supplied `tstep`/`tstop` override these defaults per source.
+PWL accepts `r`/`td` after parentheses; `r` must match a point before the last point, or be `-1`.
+`pwl_points` pads every kind to a common PWL length so mixed kinds batch together.
+See `docs/waveform_sources.md` and the ngspice parity tests.
