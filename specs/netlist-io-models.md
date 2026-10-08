@@ -49,3 +49,12 @@ instance values and map to `sp_resistor`, `sp_capacitor` and `sp_inductor` nativ
 modules respectively. RF wrappers retain internal R/L/C connections.
 Standalone resolved compilation exposes node probes; wrapper registrations expose
 only their public terminals. This API does not change simulation-window behavior.
+
+`netlist_io.expressions.parse_sine_waveform` reads SPICE-style
+`SIN(offset amplitude frequency [delay damping phase])` specifications using the
+same safe numeric expression and engineering-suffix evaluator as model cards.
+It returns numeric parameters; phase is converted from degrees to radians.
+Arguments must be finite, and frequency, delay and damping must be nonnegative.
+Unknown waveform kinds and invalid argument counts raise `NetlistError`.
+The caller selects the analysis and evaluates the waveform; this helper does
+not replace a separately declared DC operating-point value.
