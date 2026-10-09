@@ -43,6 +43,52 @@ def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
 
 
 @component(
+    ports=("p1", "p2", "s1", "s2"),
+    states=("i1", "i2"),
+    port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
+    holomorphic=True,
+)
+def CoupledInductors(signals: Signals, L1: float = 1e-9, L2: float = 1e-9, k: float = 0.5) -> PhysicsReturn:
+    """Two magnetically coupled inductors with ``M = k * sqrt(L1 * L2)``.
+
+    Dots are on ``p1`` and ``s1``; currents are positive into the dotted
+    terminals. The parameters should satisfy ``L1, L2 > 0`` and ``|k| <= 1``.
+    At ``k = 0`` the windings are independent. For ``|k| = 1`` the inductance
+    matrix is singular.
+    """
+    m = k * jnp.sqrt(L1 * L2)
+    v1 = signals.p1 - signals.p2
+    v2 = signals.s1 - signals.s2
+    return (
+        {"p1": signals.i1, "p2": -signals.i1, "s1": signals.i2, "s2": -signals.i2, "i1": v1, "i2": v2},
+        {"i1": -(L1 * signals.i1 + m * signals.i2), "i2": -(m * signals.i1 + L2 * signals.i2)},
+    )
+
+
+@component(
+    ports=("p1", "p2", "s1", "s2"),
+    states=("i_p",),
+    port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
+    holomorphic=True,
+)
+def IdealTransformer(signals: Signals, n: float = 1.0) -> PhysicsReturn:
+    """Ideal transformer with turns ratio ``n = N1 / N2`` (``n > 0``).
+
+    Dots are on ``p1`` and ``s1``. It passes DC; add a magnetizing inductor
+    across the primary to model low-frequency roll-off.
+    """
+    v1 = signals.p1 - signals.p2
+    v2 = signals.s1 - signals.s2
+    return {
+        "p1": signals.i_p,
+        "p2": -signals.i_p,
+        "s1": -n * signals.i_p,
+        "s2": n * signals.i_p,
+        "i_p": v1 - n * v2,
+    }, {}
+
+
+@component(
     ports=("p1", "p2"),
     states=("a1", "a2"),
     port_aliases=_PN_ALIASES,
