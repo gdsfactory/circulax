@@ -91,7 +91,11 @@ def wavelength_scattering(
     selected = tuple(ports)
     _validate_boundary(circuit, selected)
     coordinates = _validate_coordinates(wavelengths, amplitude, amplitude_unit, z0)
-    device = deepcopy(circuit.source_netlist)
+    device = (
+        kfnl.Netlist.from_dict(circuit.source_netlist.to_dict())
+        if isinstance(circuit.source_netlist, kfnl.Netlist)
+        else deepcopy(circuit.source_netlist)
+    )
     instances = device.instances if isinstance(device, kfnl.Netlist) else device["instances"]
     models = dict(circuit.source_models)
     model_key = "__circulax_matched_port__"
@@ -103,7 +107,7 @@ def wavelength_scattering(
         name = f"__circulax_analysis_{index}"
         while name in instances:
             name += "_"
-        fixtures[port] = {"name": name, "component": model_key, "settings": {"z0": z0, "incident": 0j}}
+        fixtures[port] = {"name": name, "component": model_key, "settings": {"z0": z0}}
     bench = compile_fn(
         attach_testbench(device, sources=fixtures),
         models,

@@ -8,6 +8,7 @@ from circulax import Circuit, compile_circuit
 from circulax.components.base_component import PhysicsReturn, Signals, component
 from circulax.components.electronic import Resistor, VoltageSource
 from circulax.components.photonic import OpticalSource
+from circulax.netlist import sax_to_kfnetlist
 
 
 def _optical(wl: float = 1.55) -> sax.SDict:
@@ -157,3 +158,17 @@ def test_physical_optical_source_baseline_is_subtracted() -> None:
     assert not jnp.allclose(first["baseline_solution"], second["baseline_solution"])
     assert jnp.allclose(first["s"], second["s"], atol=1e-6)
     assert "laser" in circuit.source_netlist["instances"]
+
+
+def test_wavelength_characterization_accepts_canonical_kfnetlist() -> None:
+    """Native kfnetlist inputs preserve their boundary through analysis fixtures.
+
+    @tags circulax simulation
+    """
+    original = _device()
+    native, overrides = sax_to_kfnetlist(original.source_netlist)
+    assert overrides == {}
+    circuit = compile_circuit(native, original.source_models, is_complex=True, g_leak=0)
+    result = circuit.sp_wavelength(ports=["in", "out"], wavelengths=jnp.array([1.55]), amplitude_unit="sqrt(W)")
+    assert jnp.allclose(result["s"][0, 1, 0], 0.6 * jnp.exp(1.55j), atol=1e-6)
+    assert set(circuit.ports) == {"in", "out", "bias"}
