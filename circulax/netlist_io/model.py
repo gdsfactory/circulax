@@ -187,6 +187,9 @@ class LibraryModel:
             "resolved": {
                 "ports": dict(resolved.ports),
                 "temperature_c": resolved.temperature_c,
+                "corner": {**self.defaults, **(settings or {})}.get(
+                    "corner", self._source[1] if self._source is not None else None
+                ),
                 "instances": [
                     {
                         "name": instance.name,

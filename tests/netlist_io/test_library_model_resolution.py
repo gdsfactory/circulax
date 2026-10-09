@@ -57,6 +57,8 @@ N2 mid n core
     monkeypatch.setattr("circulax.netlist_io.osdi.compile_va", forbidden)
     settings = {"corner": "ff", "width": 4}
     resolved = model.resolve(settings)
+    assert model.inspection_identity()["resolved"]["corner"] == "tt"
+    assert model.inspection_identity(settings)["resolved"]["corner"] == "ff"
     assert settings == {"corner": "ff", "width": 4}
     assert resolved.ports == {"P": "p", "N": "n"}
     assert len(resolved.instances) == 2
