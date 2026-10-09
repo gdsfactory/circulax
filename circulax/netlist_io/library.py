@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -147,6 +148,7 @@ class Library:
         self.scope.bindings["$temp"] = temperature_c
         self.frame = _Frame(self.scope)
         self._parsed: dict[Path, list[Statement]] = {}
+        self._parsed_fingerprints: dict[Path, str] = {}
         self._sources: list[tuple[Path, str | None]] = []
 
     @classmethod
@@ -197,9 +199,32 @@ class Library:
             library.include(path, section=section)
         return library
 
+    def inspection_sources(self) -> list[dict[str, str]]:
+        """Fingerprint actual parsed source dependencies without native loading.
+
+        @tags circulax-simulation
+        """
+        return [
+            {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in sorted(self._parsed, key=str)
+        ]
+
+    def refreshed(self) -> Library:
+        """Reuse unchanged parsed cards or reparse edited source dependencies.
+
+        @tags circulax-simulation
+        """
+        records = self.inspection_sources()
+        if all(record["sha256"] == self._parsed_fingerprints[Path(record["path"])] for record in records):
+            return self
+        return self.with_temperature(self.temperature_c)
+
     def _read(
         self, path: Path, section: str | None, active: tuple[Path, ...], seen: set[tuple[Path, str | None]]
     ) -> list[Statement]:
+        """Read scoped dependencies and retain their parsed content revisions.
+
+        @tags circulax-simulation
+        """
         if path in active:
             msg = f"include cycle: {' -> '.join(map(str, (*active, path)))}"
             raise NetlistError(msg)
@@ -208,6 +233,7 @@ class Library:
         seen.add((path, section))
         if path not in self._parsed:
             self._parsed[path] = parse_file(path, self.dialect)
+            self._parsed_fingerprints[path] = hashlib.sha256(path.read_bytes()).hexdigest()
         statements = self._parsed[path]
         sections = [s for s in statements if s.kind == "LibStatement"]
         if section is not None and not any(children(s.node, "Identifier")[0].text == section for s in sections):

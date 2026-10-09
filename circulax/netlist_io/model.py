@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -127,18 +129,78 @@ class LibraryModel:
                     temperature_c=temperature_c,
                     include_paths=include_paths,
                 )
-            library = self._libraries[key]
+            library = self._refresh_cached_library(key)
         elif library is not None:
+            previous = library
+            library = library.refreshed()
+            if library is not previous:
+                self._modules.pop(id(previous), None)
+                self.library = library
             temperature_c = float(values.pop("temperature_c", library.temperature_c))
             if temperature_c != library.temperature_c:
                 key = (None, temperature_c)
                 if key not in self._libraries:
                     self._libraries[key] = library.with_temperature(temperature_c)
-                library = self._libraries[key]
+                library = self._refresh_cached_library(key)
         if library is None:
             msg = "LibraryModel requires a library or file registration"
             raise ValueError(msg)
         return library
+
+    def _refresh_cached_library(self, key: tuple[str | None, float]) -> Library:
+        """Refresh source-dependent parsed cards and their provisioning cache.
+
+        @tags circulax-simulation
+        """
+        previous = self._libraries[key]
+        library = previous.refreshed()
+        if library is not previous:
+            self._modules.pop(id(previous), None)
+            self._libraries[key] = library
+        return library
+
+    def inspection_identity(self, settings: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """Return deterministic read-only provenance and resolved topology.
+
+        Source/include contents and available native artifact bytes contribute
+        to the fingerprint. Native artifacts are not loaded or ABI-validated;
+        this identity does not establish backend readiness.
+
+        @tags circulax-simulation
+        """
+        resolved = self.resolve(settings)
+        library = self._select_library({**self.defaults, **(settings or {})})
+        artifacts = {Path(path).resolve() for path in self.options["osdi_modules"]}
+        artifacts.update(Path(path).resolve() for _, path in resolved.loads)
+        artifacts.update(Path(path).resolve() for path, _ in self._modules.get(id(library), {}).values())
+        native: list[dict[str, Any]] = []
+        for path in sorted(artifacts, key=str):
+            record: dict[str, Any] = {"path": str(path)}
+            if path.is_file():
+                record["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            else:
+                record["missing"] = True
+            native.append(record)
+        identity = {
+            "sources": library.inspection_sources(),
+            "native_artifacts": native,
+            "resolved": {
+                "ports": dict(resolved.ports),
+                "temperature_c": resolved.temperature_c,
+                "instances": [
+                    {
+                        "name": instance.name,
+                        "module": instance.module,
+                        "nodes": list(instance.nodes),
+                        "parameters": dict(instance.parameters),
+                    }
+                    for instance in resolved.instances
+                ],
+                "loads": [{"name": name, "path": str(path)} for name, path in resolved.loads],
+            },
+        }
+        identity["fingerprint"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return identity
 
     def resolve(self, settings: Mapping[str, Any] | None = None) -> ResolvedCircuit:
         """Evaluate settings and cards without building or provisioning models.

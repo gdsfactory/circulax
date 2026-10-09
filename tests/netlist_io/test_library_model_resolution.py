@@ -153,3 +153,63 @@ def test_temperature_override_without_source_provenance_is_explicitly_rejected()
     model = LibraryModel(Library(), "device")
     with pytest.raises(ValueError, match="source"):
         model.resolve({"temperature_c": 80.0})
+
+
+def test_card_and_include_edits_refresh_resolved_values_and_inspection_identity(tmp_path: Path) -> None:
+    """Source revisions invalidate parsed cards while unchanged sources reuse them.
+
+    @tags circulax simulation
+    """
+    include = tmp_path / "parameters.lib"
+    include.write_text("* parameter\n.param base=2\n")
+    card = tmp_path / "card.lib"
+    template = (
+        '* card\n.include "parameters.lib"\n.subckt device p n\n.param value={}\n'
+        ".model vs vsource dc='value+base'\nN1 p n vs\n.ends\n"
+    )
+    card.write_text(template.format(1))
+    model = LibraryModel.from_file(card, "device")
+    first = model.resolve()
+    identity = model.inspection_identity()
+    cached = tuple(model._libraries.values())  # noqa: SLF001 -- verify unchanged parsed library reuse
+    assert first.instances[0].parameters["dc"] == 3
+    assert model.inspection_identity() == identity
+    assert tuple(model._libraries.values()) == cached  # noqa: SLF001 -- no redundant reparsing
+    assert {record["path"] for record in identity["sources"]} == {str(card), str(include)}
+    card.write_text(template.format(4))
+    assert model.resolve().instances[0].parameters["dc"] == 6
+    changed = model.inspection_identity()
+    assert changed["fingerprint"] != identity["fingerprint"]
+    include.write_text("* parameter\n.param base=5\n")
+    assert model.resolve().instances[0].parameters["dc"] == 9
+    assert model.inspection_identity()["fingerprint"] != changed["fingerprint"]
+
+
+def test_inspection_identity_tracks_available_artifacts_without_native_loading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Artifact provenance is reported without proving ABI readiness or compiling.
+
+    @tags circulax simulation
+    """
+    card = tmp_path / "card.lib"
+    card.write_text("* card\n.subckt device p n\n.model vs vsource dc=1\nN1 p n vs\n.ends\n")
+    artifact = tmp_path / "native.osdi"
+    artifact.write_bytes(b"provenance-only-not-a-native-module")
+    model = LibraryModel.from_file(card, "device", osdi_modules=(artifact,))
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        """Discovery must not load, validate or provision native modules.
+
+        @tags circulax simulation
+        """
+        pytest.fail("identity inspection cannot load native artifacts")
+
+    monkeypatch.setattr("circulax.netlist_io.model.build_resolved", forbidden)
+    monkeypatch.setattr("circulax.netlist_io.osdi.module_metadata", forbidden)
+    first = model.inspection_identity()
+    artifact.write_bytes(b"changed-provenance-still-not-an-osdi-module")
+    second = model.inspection_identity()
+    assert first["fingerprint"] != second["fingerprint"]
+    assert second["resolved"]["temperature_c"] == 27
+    assert second["native_artifacts"][0]["path"] == str(artifact)
