@@ -163,6 +163,59 @@ def renormalize(
     return jax.vmap(_renorm_one)(S, z0_from, z0_to)
 
 
+def setup_ac_response(
+    groups: dict[str, Any],
+    num_vars: int,
+    *,
+    is_complex: bool = False,
+    dc_groups: dict[str, Any] | None = None,
+) -> Callable[[Array, Array, Array], Array]:
+    """Linearize physical response without scattering-port terminations.
+
+    The caller supplies an independent-source RHS, leaving DC bias intact.
+    Native AC charge registrations, delays and frequency-domain admittances
+    use the same assembly as scattering analysis.
+
+    @tags circulax simulation
+    """
+    rows, cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
+    rows = jnp.asarray(rows)
+    cols = jnp.asarray(cols)
+    ground = jnp.asarray(ground_idxs)
+    assemble = assemble_gc_complex if is_complex else assemble_gc_real
+
+    def run_response(y_dc: Array, freqs: Array, rhs: Array) -> Array:
+        """Solve one physical excitation at each frequency.
+
+        @tags circulax simulation
+        """
+        g_values, c_values = assemble(y_dc, groups)
+        if dc_groups is not None:
+            g_values, _ = assemble(y_dc, dc_groups)
+        conductance = jnp.zeros((num_vars, num_vars), dtype=jnp.complex128).at[rows, cols].add(g_values)
+        capacitance = jnp.zeros_like(conductance).at[rows, cols].add(c_values)
+
+        def solve_frequency(freq: Array) -> Array:
+            """Include dynamic component admittances before solving the RHS.
+
+            @tags circulax simulation
+            """
+            admittance = conductance + 2j * jnp.pi * freq * capacitance
+            for group in groups.values():
+                if getattr(group, "is_fdomain", False):
+                    values = jax.vmap(functools.partial(group.physics_func, freq))(group.params)
+                    admittance = admittance.at[group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)].add(values.reshape(-1))
+                if getattr(group, "has_delay", False):
+                    values = _delay_admittance(group, y_dc, freq, is_complex=is_complex)
+                    admittance = admittance.at[group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)].add(values.reshape(-1))
+            admittance = admittance.at[ground, ground].add(GROUND_STIFFNESS)
+            return jnp.linalg.solve(admittance, rhs)
+
+        return jax.vmap(solve_frequency)(freqs)
+
+    return run_response
+
+
 def setup_ac_sweep(
     groups: dict[str, Any],
     num_vars: int,

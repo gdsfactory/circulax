@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.netlist import _is_recursive_netlist
+from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
 
@@ -518,6 +519,65 @@ class Circuit:
             dc_groups=dc_groups,
         )
         return run_ac(y_dc, jnp.asarray(freqs))
+
+    def ac_response(
+        self,
+        *,
+        freqs: jax.Array,
+        sources: Mapping[str, complex],
+        y_dc: jax.Array | None = None,
+        params: dict[str, Any] | None = None,
+        holomorphic: bool | str = "auto",
+        **param_updates: Any,
+    ) -> dict[str, Any]:
+        """Return physical small-signal response to independent source phasors.
+
+        ``sources`` maps source instance names to complex peak amplitudes in
+        their physical source units. Unspecified sources have zero AC drive;
+        DC bias and schematic waveforms remain unchanged. No matching loads
+        or scattering normalization are added, and no external ports are needed.
+        ``solution`` has shape ``(len(freqs), sys_size)`` with complex physical
+        unknowns; ``port_map`` retains node and state aliases. Parameter batching
+        is available through external JAX vmap, as for scattering analysis.
+
+        Non-holomorphic optical response requires a quadrature/sideband result
+        contract and is explicitly unsupported by this interface.
+
+        @tags circulax simulation
+        """
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._require_scalar_params(updates, "ac_response")
+        groups = self._for_analysis("ac")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+        if self.solver.is_complex and (not _infer_holomorphic(groups) or holomorphic is False):
+            msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
+            raise ValueError(msg)
+        rhs = jnp.zeros(self.sys_size, dtype=jnp.complex128)
+        for name, amplitude in sources.items():
+            matches = [group for group in groups.values() if name in (getattr(group, "index_map", None) or {})]
+            if len(matches) != 1 or not getattr(matches[0], "ac_source_stamp", ()):
+                msg = f"AC source '{name}' must identify one instance with an independent-source excitation stamp"
+                raise ValueError(msg)
+            value = jnp.asarray(amplitude)
+            if value.ndim != 0:
+                msg = f"AC source '{name}' needs a scalar phasor; use jax.vmap for batches"
+                raise ValueError(msg)
+            group = matches[0]
+            instance = group.index_map[name]
+            for local_row, coefficient in group.ac_source_stamp:
+                rhs = rhs.at[group.eq_indices[instance, local_row]].add(coefficient * value)
+        if y_dc is None:
+            y_dc = self.dc(params=updates)
+        dc_groups = (
+            self._for_analysis("dc")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+            if self._analysis_factory is not None
+            else None
+        )
+        frequencies = jnp.asarray(freqs)
+        if frequencies.ndim != 1:
+            msg = "AC response frequencies must be a one-dimensional array"
+            raise ValueError(msg)
+        run = setup_ac_response(groups, self.sys_size, is_complex=self.solver.is_complex, dc_groups=dc_groups)
+        return {"freqs": frequencies, "y_dc": y_dc, "solution": run(y_dc, frequencies, rhs), "port_map": dict(self.port_map)}
 
     def ac(
         self,

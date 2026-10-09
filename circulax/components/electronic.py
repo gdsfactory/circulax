@@ -82,9 +82,12 @@ def TransmissionLine(
 # ===========================================================================
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True, ac_source_stamp={"i_src": 1.0})
 def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0) -> PhysicsReturn:
-    """Step voltage source."""
+    """Step voltage source.
+
+    @tags circulax simulation
+    """
     v_val = jnp.where(t >= delay, V, 0.0)
     constraint = (signals.p1 - signals.p2) - v_val
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
@@ -161,9 +164,12 @@ def PulseVoltageSource(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True)
+@component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True, ac_source_stamp={"p1": -1.0, "p2": 1.0})
 def CurrentSource(signals: Signals, I: float = 0.0) -> PhysicsReturn:
-    """Constant current source."""
+    """Constant current source.
+
+    @tags circulax simulation
+    """
     return {"p1": I, "p2": -I}, {}
 
 
@@ -263,7 +269,14 @@ def _source_value(
     return jnp.where(source_mode > 0, jnp.where(kind == WAVE_DC, dc, wave), source_scale * dc_value)
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="source_scale", port_aliases=_PN_ALIASES, holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="source_scale",
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+)
 def WaveformVoltageSource(
     signals: Signals,
     t: float,
@@ -301,6 +314,8 @@ def WaveformVoltageSource(
     scales the complete DC value through ``source_scale``. ``dc_given`` records
     whether ``dc`` was supplied, including an explicit zero; constructors and
     ``parse_source`` set it automatically.
+
+    @tags circulax simulation
     """
     v_val = _source_value(
         t, kind=kind, dc=dc, dc_given=dc_given, source_mode=source_mode, source_scale=source_scale,
@@ -311,7 +326,13 @@ def WaveformVoltageSource(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), amplitude_param="source_scale", port_aliases=_PN_ALIASES, holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    amplitude_param="source_scale",
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+    ac_source_stamp={"p1": -1.0, "p2": 1.0},
+)
 def WaveformCurrentSource(
     signals: Signals,
     t: float,
@@ -344,6 +365,8 @@ def WaveformCurrentSource(
     waveform value interpreted as a current (``v1``/``v2``/``offset``/``amplitude``
     in amperes). Sign convention matches :func:`CurrentSource`: the value leaves
     ``p1`` and enters ``p2`` through the source.
+
+    @tags circulax simulation
     """
     i_val = _source_value(
         t, kind=kind, dc=dc, dc_given=dc_given, source_mode=source_mode, source_scale=source_scale,

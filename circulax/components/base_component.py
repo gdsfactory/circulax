@@ -311,6 +311,7 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
     differentiable_params: "tuple[str, ...] | None" = None,
     port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
     holomorphic: bool = False,
+    ac_source_stamp: dict[str, float] | None = None,
 ) -> type[CircuitComponent]:
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
@@ -333,12 +334,16 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
             physics function accepts a time argument ``t``.
         amplitude_param: Name of the parameter representing the source
             amplitude for DC homotopy stepping.  Empty string for passives.
+        ac_source_stamp: Local residual row names mapped to unit AC RHS
+            coefficients, independent of DC stepping parameters.
         port_aliases: Optional mapping from a canonical port name (must be a
             member of ``ports``) to one or more alternate port names that may
             appear in a netlist instead (e.g. ``{"p1": "P", "p2": "N"}``).
             Consumed by ``compiler.py``'s ``_resolve_port_index`` so callers
             can wire up a netlist using either name without duplicating the
             physics.
+
+    @tags circulax simulation
 
     Returns:
         A new :class:`CircuitComponent` subclass named after ``fn``.
@@ -635,6 +640,9 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
         "_uses_time": uses_time,
         "_holomorphic": holomorphic,
         "amplitude_param": amplitude_param,
+        "_ac_source_stamp": tuple(
+            ((ports + states).index(row), coefficient) for row, coefficient in (ac_source_stamp or {}).items()
+        ),
         "_has_init_arg": has_init_arg,
         "_setup_fn_ref": None,
         "setup": classmethod(_register_setup),
@@ -667,6 +675,7 @@ def component(
     amplitude_param: str = "",
     port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
     holomorphic: bool = False,
+    ac_source_stamp: dict[str, float] | None = None,
 ) -> Any:
     """Decorator for defining a time-independent circuit component.
 
@@ -685,6 +694,8 @@ def component(
             amplitude (e.g. ``"I"`` for a current source). When non-empty,
             DC homotopy solvers will scale this parameter during stepping.
             Leave empty (default) for passive components.
+        ac_source_stamp: Local residual row names mapped to unit AC RHS
+            coefficients. Independent of DC or transient amplitudes.
         port_aliases: Optional mapping from a canonical port name to one or
             more alternate names a netlist may use instead, e.g.
             ``{"p1": "P", "p2": "N"}``. Lets integrators (e.g. Mosaic/kfnetlist)
@@ -702,6 +713,8 @@ def component(
         A decorator that accepts a physics function and returns a
         :class:`CircuitComponent` subclass.
 
+    @tags circulax simulation
+
     Example::
 
         @component(ports=("p1", "p2"))
@@ -711,7 +724,14 @@ def component(
 
     """
     return lambda fn: _build_component(
-        fn, ports, states, uses_time=False, amplitude_param=amplitude_param, port_aliases=port_aliases, holomorphic=holomorphic
+        fn,
+        ports,
+        states,
+        uses_time=False,
+        amplitude_param=amplitude_param,
+        port_aliases=port_aliases,
+        holomorphic=holomorphic,
+        ac_source_stamp=ac_source_stamp,
     )
 
 
@@ -721,6 +741,7 @@ def source(
     amplitude_param: str = "",
     port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
     holomorphic: bool = False,
+    ac_source_stamp: dict[str, float] | None = None,
 ) -> Any:
     """Decorator for defining a time-dependent circuit component.
 
@@ -742,10 +763,14 @@ def source(
             :func:`component`.
         holomorphic: If ``True``, the component's physics is holomorphic.
             Defaults to ``False`` (safe).  See :func:`component`.
+        ac_source_stamp: Local residual row names mapped to unit AC RHS
+            coefficients, independent of DC or transient amplitudes.
 
     Returns:
         A decorator that accepts a physics function and returns a
         :class:`CircuitComponent` subclass.
+
+    @tags circulax simulation
 
     Example::
 
@@ -756,5 +781,12 @@ def source(
 
     """
     return lambda fn: _build_component(
-        fn, ports, states, uses_time=True, amplitude_param=amplitude_param, port_aliases=port_aliases, holomorphic=holomorphic
+        fn,
+        ports,
+        states,
+        uses_time=True,
+        amplitude_param=amplitude_param,
+        port_aliases=port_aliases,
+        holomorphic=holomorphic,
+        ac_source_stamp=ac_source_stamp,
     )

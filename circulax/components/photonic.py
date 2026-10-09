@@ -274,7 +274,7 @@ def DirectionalCoupler(
 # ===========================================================================
 
 
-@component(ports=("p1", "p2"), states=("i_src",), holomorphic=True)
+@component(ports=("p1", "p2"), states=("i_src",), holomorphic=True, ac_source_stamp={"i_src": 1.0})
 def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> PhysicsReturn:
     """Ideal CW optical source for DC and small-signal AC analysis.
 
@@ -285,6 +285,8 @@ def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> P
         signals: Port fields and source-current state ``i_src``.
         power: Output optical power in watts. Defaults to ``1.0``.
         phase: Output field phase in radians. Defaults to ``0.0``.
+
+    @tags circulax simulation
 
     """
     v_val = jnp.sqrt(power) * jnp.exp(1j * phase)
