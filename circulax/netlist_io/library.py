@@ -125,7 +125,10 @@ class Library:
         dialect: str = "ngspice",
         statistical_mode: str = "reject",
     ) -> None:
-        """Create an empty model library at the requested card temperature."""
+        """Create an empty model library at the requested card temperature.
+
+        @tags circulax-simulation
+        """
         if not math.isfinite(temperature_c) or temperature_c <= -273.15:
             msg = "temperature_c must be finite and above absolute zero"
             raise NetlistError(msg)
@@ -144,6 +147,7 @@ class Library:
         self.scope.bindings["$temp"] = temperature_c
         self.frame = _Frame(self.scope)
         self._parsed: dict[Path, list[Statement]] = {}
+        self._sources: list[tuple[Path, str | None]] = []
 
     @classmethod
     def from_file(
@@ -166,9 +170,32 @@ class Library:
         return library
 
     def include(self, path: str | Path, *, section: str | None = None) -> None:
-        """Add a library to the same root scope, preserving declaration order."""
-        statements = self._read(Path(path).resolve(), section, (), set())
+        """Add a library to the same root scope, preserving declaration order.
+
+        @tags circulax-simulation
+        """
+        source = Path(path).resolve()
+        statements = self._read(source, section, (), set())
         self._populate(self.frame, statements)
+        self._sources.append((source, section))
+
+    def with_temperature(self, temperature_c: float) -> Library:
+        """Reparse source declarations at a new temperature without mutation.
+
+        @tags circulax-simulation
+        """
+        if not self._sources:
+            msg = "Temperature override requires reparsable library source declarations"
+            raise ValueError(msg)
+        library = type(self)(
+            temperature_c=temperature_c,
+            include_paths=self.include_paths,
+            dialect=self.dialect,
+            statistical_mode=self.scope.statistical_mode,
+        )
+        for path, section in self._sources:
+            library.include(path, section=section)
+        return library
 
     def _read(
         self, path: Path, section: str | None, active: tuple[Path, ...], seen: set[tuple[Path, str | None]]

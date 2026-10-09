@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from circulax.netlist_io import LibraryModel, ResolvedCircuit
+from circulax.netlist_io import Library, LibraryModel, ResolvedCircuit
 
 
 def test_resolve_preserves_corner_units_parameters_and_topology_without_building(
@@ -96,3 +96,60 @@ def test_instantiate_uses_public_resolver_before_building(tmp_path: Path, monkey
     assert len(seen) == 1
     assert seen[0].instances[0].parameters["dc"] == 1
     assert definition.source_netlist.instances["device0"].settings["V"] == 1
+
+
+def test_temperature_is_reserved_and_native_build_receives_selected_temperature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run temperature reparses cards without becoming a device parameter.
+
+    @tags circulax simulation
+    """
+    path = tmp_path / "temperature.lib"
+    path.write_text("* card\n.subckt device p n\n.model vs vsource dc=1\nN1 p n vs\n.ends\n")
+    model = LibraryModel.from_file(path, "device", temperature_c=27.0)
+    default = model.resolve()
+    hot = model.resolve({"temperature_c": 80.0})
+    assert default.temperature_c == 27.0
+    assert hot.temperature_c == 80.0
+    assert hot.instances[0].parameters == default.instances[0].parameters == {"dc": 1.0}
+    seen = []
+
+    def build(resolved: ResolvedCircuit, **_options: Any) -> tuple[Any, dict, dict]:
+        """Capture the temperature passed to native topology construction.
+
+        @tags circulax simulation
+        """
+        seen.append(resolved.temperature_c)
+        return None, {}, {}
+
+    monkeypatch.setattr("circulax.netlist_io.model.build_resolved", build)
+    model.instantiate({"temperature_c": 80.0})
+    model.instantiate()
+    assert seen == [80.0, 27.0]
+    assert len(model._libraries) == 2  # noqa: SLF001 -- temperature/corner cache isolation
+    model.resolve({"temperature_c": 80.0})
+    assert len(model._libraries) == 2  # noqa: SLF001 -- repeated runs reuse parsed cards
+
+
+def test_base_library_temperature_override_reparses_available_sources(tmp_path: Path) -> None:
+    """Preparsed registration supports overrides without mutating its defaults.
+
+    @tags circulax simulation
+    """
+    path = tmp_path / "temperature.lib"
+    path.write_text("* card\n.subckt device p n\n.model vs vsource dc=1\nN1 p n vs\n.ends\n")
+    library = Library.from_file(path)
+    model = LibraryModel(library, "device")
+    assert model.resolve({"temperature_c": 80}).temperature_c == 80
+    assert library.temperature_c == model.resolve().temperature_c == 27
+
+
+def test_temperature_override_without_source_provenance_is_explicitly_rejected() -> None:
+    """In-memory cards cannot silently ignore an unsupported temperature change.
+
+    @tags circulax simulation
+    """
+    model = LibraryModel(Library(), "device")
+    with pytest.raises(ValueError, match="source"):
+        model.resolve({"temperature_c": 80.0})

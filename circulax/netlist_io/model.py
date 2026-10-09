@@ -106,7 +106,7 @@ class LibraryModel:
         return model
 
     def _select_library(self, values: dict[str, Any]) -> Library:
-        """Resolve and cache the explicitly selected corner library.
+        """Resolve and cache the explicitly selected corner and temperature.
 
         @tags circulax-simulation
         """
@@ -114,18 +114,27 @@ class LibraryModel:
         if self._source is not None:
             path, section, sections, dialect, temperature_c, include_paths = self._source
             selected = values.pop("corner", section)
+            temperature_c = float(values.pop("temperature_c", temperature_c))
             if sections and selected not in sections:
                 msg = f"unsupported corner {selected!r}; expected one of {sections!r}"
                 raise ValueError(msg)
-            if selected not in self._libraries:
-                self._libraries[selected] = Library.from_file(
+            key = (selected, temperature_c)
+            if key not in self._libraries:
+                self._libraries[key] = Library.from_file(
                     path,
                     section=selected,
                     dialect=dialect,
                     temperature_c=temperature_c,
                     include_paths=include_paths,
                 )
-            library = self._libraries[selected]
+            library = self._libraries[key]
+        elif library is not None:
+            temperature_c = float(values.pop("temperature_c", library.temperature_c))
+            if temperature_c != library.temperature_c:
+                key = (None, temperature_c)
+                if key not in self._libraries:
+                    self._libraries[key] = library.with_temperature(temperature_c)
+                library = self._libraries[key]
         if library is None:
             msg = "LibraryModel requires a library or file registration"
             raise ValueError(msg)
