@@ -495,30 +495,16 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
             q_vals = [q_dict.get(k, 0.0) for k in full_keys]
             return jnp.array(f_vals), jnp.array(q_vals)
 
-    if uses_time:
-
-        def _invoke_physics(
-            self: CircuitComponent,
-            signals: Any,
-            t: float,
-            params: Any,
-        ) -> tuple[dict, dict]:
-            kw = {name: _extract_param(params, name) for name in _param_names}
-            init_value = _resolve_init(kw) if has_init_arg else None
-            positional = _build_positional(signals, t, init_value)
-            return _user_fn(*positional, **kw)
-    else:
-
-        def _invoke_physics(
-            self: CircuitComponent,
-            signals: Any,
-            t: float,
-            params: Any,
-        ) -> tuple[dict, dict]:
-            kw = {name: _extract_param(params, name) for name in _param_names}
-            init_value = _resolve_init(kw) if has_init_arg else None
-            positional = _build_positional(signals, t, init_value)
-            return _user_fn(*positional, **kw)
+    def _invoke_physics(
+        self: CircuitComponent,
+        signals: Any,
+        t: float,
+        params: Any,
+    ) -> tuple[dict, dict]:
+        kw = {name: _extract_param(params, name) for name in _param_names}
+        init_value = _resolve_init(kw) if has_init_arg else None
+        positional = _build_positional(signals, t, init_value)
+        return _user_fn(*positional, **kw)
 
     annotations = {p.name: (p.annotation if p.annotation is not inspect.Parameter.empty else Any) for p in param_specs}
 
