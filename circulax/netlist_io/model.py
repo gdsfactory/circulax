@@ -10,7 +10,7 @@ from typing import Any
 import kfnetlist as kfnl
 
 from circulax.netlist_io.expressions import evaluate_source
-from circulax.netlist_io.library import Library
+from circulax.netlist_io.library import Library, ResolvedCircuit
 from circulax.netlist_io.osdi import build_resolved
 from circulax.netlist_io.units import convert_unit
 
@@ -131,8 +131,13 @@ class LibraryModel:
             raise ValueError(msg)
         return library
 
-    def instantiate(self, settings: Mapping[str, Any] | None = None) -> NetlistDefinition:
-        """Evaluate this instance's cards and retain reusable native models.
+    def resolve(self, settings: Mapping[str, Any] | None = None) -> ResolvedCircuit:
+        """Evaluate settings and cards without building or provisioning models.
+
+        Returns ordered electrical leaf topology and public terminal aliases
+        using the same corner, unit and expression bindings as execution.
+        Source files may be parsed and cached; no native model, compiler or
+        simulator is loaded or executed by this operation.
 
         @tags circulax-simulation
         """
@@ -162,6 +167,15 @@ class LibraryModel:
             ports = {name: node for name, node in resolved.ports.items() if name not in self.port_map.values()}
             ports.update({alias: resolved.ports[terminal] for alias, terminal in self.port_map.items()})
             resolved.ports = ports
+        return resolved
+
+    def instantiate(self, settings: Mapping[str, Any] | None = None) -> NetlistDefinition:
+        """Build the resolved topology and retain reusable native models.
+
+        @tags circulax-simulation
+        """
+        resolved = self.resolve(settings)
+        library = self._select_library({**self.defaults, **(settings or {})})
         netlist, models, modules = build_resolved(
             resolved,
             **self.options,
