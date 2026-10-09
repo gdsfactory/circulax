@@ -119,6 +119,48 @@ class Circuit:
                 self._analysis_variants[analysis] = variant
         return self._analysis_variants[analysis]
 
+    def prepare_analysis(self, analysis: str) -> Circuit:
+        """Prepare immutable native registrations without solving the circuit.
+
+        Return the selected DC, AC or transient registration variant. Builtin
+        circuits return themselves. The original circuit caches required
+        variants so callers may retain it for later execution. DC bias setup is
+        also prepared for AC, transient and HB, without calculating that bias.
+
+        Supported names are op, dc, sp_wavelength, ac_response, sp_frequency,
+        tran and hb. Native HB state-history and non-holomorphic optical
+        driven-AC limitations are rejected before simulation execution.
+
+        @tags circulax simulation
+        """
+        modes = {
+            "op": "dc",
+            "dc": "dc",
+            "sp_wavelength": "dc",
+            "ac_response": "ac",
+            "sp_frequency": "ac",
+            "tran": "tran",
+            "hb": "tran",
+        }
+        if analysis not in modes:
+            msg = f"Unsupported Circulax analysis {analysis!r}"
+            raise ValueError(msg)
+        if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in self.groups.values()):
+            msg = "Native OSDI harmonic balance with ABI state slots is not supported"
+            raise NotImplementedError(msg)
+        if analysis == "ac_response" and self.solver.is_complex and not _infer_holomorphic(self.groups):
+            msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
+            raise ValueError(msg)
+        self._for_analysis("dc")
+        selected = self._for_analysis(modes[analysis])
+        if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in selected.groups.values()):
+            msg = "Native OSDI harmonic balance with ABI state slots is not supported"
+            raise NotImplementedError(msg)
+        if analysis == "ac_response" and selected.solver.is_complex and not _infer_holomorphic(selected.groups):
+            msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
+            raise ValueError(msg)
+        return selected
+
     @property
     def ports(self) -> tuple[str, ...]:
         """External port names declared in the source netlist."""
