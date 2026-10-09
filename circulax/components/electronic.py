@@ -82,7 +82,14 @@ def TransmissionLine(
 # ===========================================================================
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True, ac_source_stamp={"i_src": 1.0})
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0) -> PhysicsReturn:
     """Step voltage source.
 
@@ -93,7 +100,14 @@ def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def SmoothPulse(
     signals: Signals,
     t: float,
@@ -101,14 +115,24 @@ def SmoothPulse(
     delay: float = 1e-9,
     tr: float = 1e-10,
 ) -> PhysicsReturn:
-    """Sigmoid-smoothed pulse."""
+    """Sigmoid-smoothed pulse.
+
+    @tags circulax simulation
+    """
     k = 10.0 / tr
     v_val = V * jnn.sigmoid(k * (t - delay))
     constraint = (signals.p1 - signals.p2) - v_val
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def VoltageSourceAC(
     signals: Signals,
     t: float,
@@ -117,7 +141,10 @@ def VoltageSourceAC(
     phase: float = 0.0,
     delay: float = 0.0,
 ) -> PhysicsReturn:
-    """Sinusoidal voltage source."""
+    """Sinusoidal voltage source.
+
+    @tags circulax simulation
+    """
     omega = 2.0 * jnp.pi * freq
     v_ac = V * jnp.sin(omega * t + phase)
     v_val = jnp.where(t >= delay, v_ac, 0.0)
@@ -125,7 +152,14 @@ def VoltageSourceAC(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="v2", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="v2",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def PulseVoltageSource(
     signals: Signals,
     t: float,
@@ -148,6 +182,8 @@ def PulseVoltageSource(
     tf  : fall time (v2 → v1)
     pw  : pulse width (time at v2)
     per : period (must satisfy per >= td + tr + pw + tf)
+
+    @tags circulax simulation
 
     """
     t_shifted = jnp.where(t >= td, t - td, 0.0)
@@ -276,6 +312,7 @@ def _source_value(
     port_aliases=_PN_ALIASES,
     holomorphic=True,
     ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
 )
 def WaveformVoltageSource(
     signals: Signals,

@@ -312,6 +312,7 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
     port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
     holomorphic: bool = False,
     ac_source_stamp: dict[str, float] | None = None,
+    ideal_voltage_constraint_ports: tuple[str, ...] = (),
 ) -> type[CircuitComponent]:
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
@@ -336,6 +337,8 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
             amplitude for DC homotopy stepping.  Empty string for passives.
         ac_source_stamp: Local residual row names mapped to unit AC RHS
             coefficients, independent of DC stepping parameters.
+        ideal_voltage_constraint_ports: Terminals constrained by an independent
+            ideal voltage/field source, used to validate matched boundaries.
         port_aliases: Optional mapping from a canonical port name (must be a
             member of ``ports``) to one or more alternate port names that may
             appear in a netlist instead (e.g. ``{"p1": "P", "p2": "N"}``).
@@ -643,6 +646,7 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
         "_ac_source_stamp": tuple(
             ((ports + states).index(row), coefficient) for row, coefficient in (ac_source_stamp or {}).items()
         ),
+        "_ideal_voltage_constraint_ports": tuple(ports.index(port) for port in ideal_voltage_constraint_ports),
         "_has_init_arg": has_init_arg,
         "_setup_fn_ref": None,
         "setup": classmethod(_register_setup),
@@ -676,6 +680,7 @@ def component(
     port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
     holomorphic: bool = False,
     ac_source_stamp: dict[str, float] | None = None,
+    ideal_voltage_constraint_ports: tuple[str, ...] = (),
 ) -> Any:
     """Decorator for defining a time-independent circuit component.
 
@@ -696,6 +701,8 @@ def component(
             Leave empty (default) for passive components.
         ac_source_stamp: Local residual row names mapped to unit AC RHS
             coefficients. Independent of DC or transient amplitudes.
+        ideal_voltage_constraint_ports: Independent ideal voltage/field source
+            terminals, used to validate analysis-owned matched boundaries.
         port_aliases: Optional mapping from a canonical port name to one or
             more alternate names a netlist may use instead, e.g.
             ``{"p1": "P", "p2": "N"}``. Lets integrators (e.g. Mosaic/kfnetlist)
@@ -732,6 +739,7 @@ def component(
         port_aliases=port_aliases,
         holomorphic=holomorphic,
         ac_source_stamp=ac_source_stamp,
+        ideal_voltage_constraint_ports=ideal_voltage_constraint_ports,
     )
 
 
@@ -742,6 +750,7 @@ def source(
     port_aliases: "dict[str, str | tuple[str, ...]] | None" = None,
     holomorphic: bool = False,
     ac_source_stamp: dict[str, float] | None = None,
+    ideal_voltage_constraint_ports: tuple[str, ...] = (),
 ) -> Any:
     """Decorator for defining a time-dependent circuit component.
 
@@ -765,6 +774,8 @@ def source(
             Defaults to ``False`` (safe).  See :func:`component`.
         ac_source_stamp: Local residual row names mapped to unit AC RHS
             coefficients, independent of DC or transient amplitudes.
+        ideal_voltage_constraint_ports: Independent ideal voltage/field source
+            terminals, used to validate analysis-owned matched boundaries.
 
     Returns:
         A decorator that accepts a physics function and returns a
@@ -789,4 +800,5 @@ def source(
         port_aliases=port_aliases,
         holomorphic=holomorphic,
         ac_source_stamp=ac_source_stamp,
+        ideal_voltage_constraint_ports=ideal_voltage_constraint_ports,
     )

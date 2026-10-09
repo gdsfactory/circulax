@@ -16,6 +16,7 @@ from circulax.netlist import _is_recursive_netlist
 from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
+from circulax.wavelength import wavelength_scattering
 
 if TYPE_CHECKING:
     from circulax.solvers.linear import CircuitLinearSolver
@@ -519,6 +520,39 @@ class Circuit:
             dc_groups=dc_groups,
         )
         return run_ac(y_dc, jnp.asarray(freqs))
+
+    def sp_wavelength(
+        self,
+        *,
+        ports: Sequence[str],
+        wavelengths: jax.Array,
+        amplitude_unit: str,
+        amplitude: float = 1e-4,
+        params: Mapping[str, Any] | None = None,
+        z0: float = 1.0,
+        wl_param: str = "wl",
+    ) -> dict[str, Any]:
+        """Characterize declared optical ports with normalized low-power DC waves.
+
+        The caller declares optical discipline and field power normalization;
+        z0=1 is the SAX optical reference. Temporary matching and excitation
+        preserve physical DUT sources, loads and electrical bias. Independent
+        input columns and their zero-incident baseline use scan continuation
+        over wavelength. ``s`` has shape (wavelength, output_port, input_port).
+
+        @tags circulax simulation
+        """
+        return wavelength_scattering(
+            self,
+            compile_circuit,
+            ports=ports,
+            wavelengths=wavelengths,
+            amplitude=amplitude,
+            amplitude_unit=amplitude_unit,
+            params=params,
+            z0=z0,
+            wl_param=wl_param,
+        )
 
     def ac_response(
         self,

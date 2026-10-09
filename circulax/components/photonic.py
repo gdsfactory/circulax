@@ -274,7 +274,13 @@ def DirectionalCoupler(
 # ===========================================================================
 
 
-@component(ports=("p1", "p2"), states=("i_src",), holomorphic=True, ac_source_stamp={"i_src": 1.0})
+@component(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> PhysicsReturn:
     """Ideal CW optical source for DC and small-signal AC analysis.
 
@@ -295,7 +301,13 @@ def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> P
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def OpticalSourcePulse(
     signals: Signals,
     t: float,
@@ -317,6 +329,8 @@ def OpticalSourcePulse(
         phase: Output field phase in radians. Defaults to ``0.0``.
         delay: Turn-on delay in seconds. Defaults to ``0.2e-9``.
         rise: Sigmoid rise time constant in seconds. Defaults to ``0.05e-9``.
+
+    @tags circulax simulation
 
     """
     val = jnp.sqrt(power) * jnn.sigmoid((t - delay) / rise)
