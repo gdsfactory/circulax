@@ -34,6 +34,15 @@ compile_netlist(net_dict, models) → [ComponentGroup, ...]
         → setup_harmonic_balance()
 ```
 
+`Circuit.dc_checked()` selects the same native DC variant and accepts the same
+parameter updates, tolerances and initial guess as `Circuit.dc()`. It returns
+`(solution, converged)`, with convergence taken directly from the Newton solver's
+result status. A failed solve can return a finite final estimate. Scalar inputs
+return a scalar boolean; array-valued parameter inputs preserve shared device
+registrations and `jax.vmap` batching, returning a boolean per leading batch
+point. Both outputs support JIT. Callers retain requested sweep coordinates and
+use the flags to classify failures rather than infer success from finite values.
+
 ---
 
 ## Spec index

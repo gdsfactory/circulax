@@ -374,6 +374,44 @@ class Circuit:
 
         return self._batched_solve(params, param_updates, solve_fn)
 
+    def dc_checked(
+        self,
+        y_guess: jax.Array | None = None,
+        *,
+        params: dict[str, Any] | None = None,
+        rtol: float | None = None,
+        atol: float | None = None,
+        max_steps: int | None = None,
+        **param_updates: Any,
+    ) -> tuple[jax.Array, jax.Array]:
+        """Return the DC solution and the solver's explicit convergence flag.
+
+        Scalar parameters return a scalar boolean; array parameters use the
+        same shared native registrations and vmap batching as dc, returning
+        one boolean per leading batch point. Failed estimates can be finite;
+        callers must use this flag rather than infer success from sample values.
+        Both results remain JAX arrays and can be consumed inside jit.
+
+        @tags circulax simulation
+        """
+        dc_circuit = self._for_analysis("dc")
+        if dc_circuit is not self:
+            return dc_circuit.dc_checked(y_guess=y_guess, params=params, rtol=rtol, atol=atol, max_steps=max_steps, **param_updates)
+        rtol = self.rtol if rtol is None else rtol
+        atol = self.atol if atol is None else atol
+        max_steps = self.max_steps if max_steps is None else max_steps
+        if y_guess is None:
+            y_guess = self._zero_guess()
+
+        def solve_fn(groups: dict) -> tuple[jax.Array, jax.Array]:
+            """Retain native convergence evidence for each batched solve.
+
+            @tags circulax simulation
+            """
+            return self.solver.solve_dc_checked(groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
+
+        return self._batched_solve(params, param_updates, solve_fn)
+
     def check_sax_compatibility(self) -> bool:
         """Return True if this circuit can be represented as a pure SAX S-parameter network.
 
