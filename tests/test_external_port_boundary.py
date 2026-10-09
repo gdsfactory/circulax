@@ -74,6 +74,24 @@ def test_attachment_preserves_declared_boundary(representation: str) -> None:
     attached = _attach(device)
     assert _declared_ports(attached) == {"input", "output"}
     assert _declared_ports(device) == {"input", "output"}
+    if isinstance(attached, kfnl.Netlist):
+        for name in ("input", "output"):
+            assert any(kfnl.NetlistPort(name) in net for net in attached.nets)
+    else:
+        assert attached["ports"] == device["ports"]
+
+
+def test_unselected_disconnected_port_remains_declared_and_connected_to_its_net() -> None:
+    """An unselected boundary marker survives even without a device terminal.
+
+    @tags circulax simulation
+    """
+    device = _device("kfnetlist")
+    device.create_port("unconnected")
+    device.create_net(kfnl.NetlistPort("unconnected"))
+    attached = _attach(device)
+    assert _declared_ports(attached) == {"input", "output", "unconnected"}
+    assert any(list(net) == [kfnl.NetlistPort("unconnected")] for net in attached.nets)
 
 
 @pytest.mark.parametrize("representation", ["kfnetlist", "sax"])
