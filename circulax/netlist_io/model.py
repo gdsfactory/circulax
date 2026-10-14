@@ -12,7 +12,7 @@ from typing import Any
 import kfnetlist as kfnl
 
 from circulax.netlist_io.expressions import evaluate_source
-from circulax.netlist_io.library import Library, ResolvedCircuit
+from circulax.netlist_io.library import FileDigests, Library, ResolvedCircuit
 from circulax.netlist_io.osdi import build_resolved
 from circulax.netlist_io.units import convert_unit
 
@@ -82,7 +82,10 @@ class LibraryModel:
             "state_policy": state_policy,
             "simparams": simparams,
         }
+        # Provisioned modules per Library.revision, with the artifact signature they were built from.
         self._modules = {}
+        self._module_signatures = {}
+        self._digests = FileDigests()
         self._source = None
         self._libraries = {}
 
@@ -134,7 +137,7 @@ class LibraryModel:
             previous = library
             library = library.refreshed()
             if library is not previous:
-                self._modules.pop(id(previous), None)
+                self._drop_modules(previous)
                 self.library = library
             temperature_c = float(values.pop("temperature_c", library.temperature_c))
             if temperature_c != library.temperature_c:
@@ -147,12 +150,29 @@ class LibraryModel:
             raise ValueError(msg)
         return library
 
+    def _drop_modules(self, library: Library) -> None:
+        self._modules.pop(library.revision, None)
+        self._module_signatures.pop(library.revision, None)
+
+    def _artifact_signature(self, resolved: ResolvedCircuit) -> tuple[tuple[Path, str | None], ...]:
+        """Digest every native artifact candidate the provisioning step may select.
+
+        Covers explicit modules and each load's search candidates (including their ``.va``
+        sources), so a rebuilt, removed or newly shadowing file changes the signature.
+        Bytes are hashed only; nothing is loaded or ABI-validated.
+        """
+        paths = [Path(path).resolve() for path in self.options["osdi_modules"]]
+        for reference, directory in resolved.loads:
+            candidates = [directory / reference, *(Path(p) / reference for p in self.options["module_paths"])]
+            paths += [p.resolve() for p in (*candidates, *(c.with_suffix(".va") for c in candidates if c.suffix == ".osdi"))]
+        return tuple((path, self._digests.digest(path)) for path in dict.fromkeys(paths))
+
     def _refresh_cached_library(self, key: tuple[str | None, float]) -> Library:
         """Refresh source-dependent parsed cards and their provisioning cache."""
         previous = self._libraries[key]
         library = previous.refreshed()
         if library is not previous:
-            self._modules.pop(id(previous), None)
+            self._drop_modules(previous)
             self._libraries[key] = library
         return library
 
@@ -167,7 +187,7 @@ class LibraryModel:
         library = self._select_library({**self.defaults, **(settings or {})})
         artifacts = {Path(path).resolve() for path in self.options["osdi_modules"]}
         artifacts.update(Path(path).resolve() for _, path in resolved.loads)
-        artifacts.update(Path(path).resolve() for path, _ in self._modules.get(id(library), {}).values())
+        artifacts.update(Path(path).resolve() for path, _ in self._modules.get(library.revision, {}).values())
         native: list[dict[str, Any]] = []
         for path in sorted(artifacts, key=str):
             record: dict[str, Any] = {"path": str(path)}
@@ -242,11 +262,9 @@ class LibraryModel:
         """Build the resolved topology and retain reusable native models."""
         resolved = self.resolve(settings)
         library = self._select_library({**self.defaults, **(settings or {})})
-        netlist, models, modules = build_resolved(
-            resolved,
-            **self.options,
-            modules=self._modules.get(id(library)),
-            expose_internal_nodes=False,
-        )
-        self._modules[id(library)] = modules
+        signature = self._artifact_signature(resolved)
+        cached = self._modules.get(library.revision) if self._module_signatures.get(library.revision) == signature else None
+        netlist, models, modules = build_resolved(resolved, **self.options, modules=cached, expose_internal_nodes=False)
+        self._modules[library.revision] = modules
+        self._module_signatures[library.revision] = signature
         return NetlistDefinition(netlist, models)

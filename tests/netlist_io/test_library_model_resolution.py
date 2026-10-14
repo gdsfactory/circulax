@@ -1,5 +1,6 @@
 """Capability inspection elaborates cards without provisioning native models."""
 
+import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 import pytest
 
 from circulax.netlist_io import Library, LibraryModel, ResolvedCircuit
+from circulax.netlist_io.syntax import NetlistError
 
 
 def test_resolve_preserves_corner_units_parameters_and_topology_without_building(
@@ -182,3 +184,125 @@ def test_inspection_identity_tracks_available_artifacts_without_native_loading(
     assert first["fingerprint"] != second["fingerprint"]
     assert second["resolved"]["temperature_c"] == 27
     assert second["native_artifacts"][0]["path"] == str(artifact)
+
+
+_CARD = "* card\n.subckt device p n\n.model vs vsource dc=1\nN1 p n vs\n.ends\n"
+
+
+def _age(*paths: Path) -> None:
+    """Make files look long-unchanged so the (mtime, size) fast path may trust them."""
+    old = 1_000_000_000_000_000_000
+    for path in paths:
+        os.utime(path, ns=(old, old))
+
+
+def test_native_artifact_edits_invalidate_cached_provisioning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A rebuilt artifact is re-provisioned; unchanged artifacts keep the cached modules."""
+    card = tmp_path / "card.lib"
+    card.write_text(_CARD)
+    artifact = tmp_path / "native.osdi"
+    artifact.write_bytes(b"first-build")
+    model = LibraryModel.from_file(card, "device", osdi_modules=(artifact,))
+    seen = []
+
+    def build(_resolved: ResolvedCircuit, *, modules: Any = None, **_options: Any) -> tuple[Any, dict, dict]:
+        """Record the provisioning cache offered to each build."""
+        seen.append(modules)
+        return None, {}, {"native": (artifact, {})}
+
+    monkeypatch.setattr("circulax.netlist_io.model.build_resolved", build)
+    model.instantiate()
+    model.instantiate()
+    assert seen[0] is None
+    assert seen[1] is not None
+    artifact.write_bytes(b"second-build")
+    model.instantiate()
+    assert seen[2] is None
+    model.instantiate()
+    assert seen[3] is not None
+
+
+def test_native_module_search_paths_invalidate_cached_provisioning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A module that appears earlier on the load search path is noticed."""
+    card = tmp_path / "card.lib"
+    card.write_text(_CARD.replace("* card", '* card\n.hdl "native.osdi"'))
+    first, second = tmp_path / "a", tmp_path / "b"
+    first.mkdir()
+    second.mkdir()
+    (second / "native.osdi").write_bytes(b"later")
+    model = LibraryModel.from_file(card, "device", module_paths=(first, second))
+    seen = []
+
+    def build(_resolved: ResolvedCircuit, *, modules: Any = None, **_options: Any) -> tuple[Any, dict, dict]:
+        """Record the provisioning cache offered to each build."""
+        seen.append(modules)
+        return None, {}, {"native": (second / "native.osdi", {})}
+
+    monkeypatch.setattr("circulax.netlist_io.model.build_resolved", build)
+    model.instantiate()
+    model.instantiate()
+    (first / "native.osdi").write_bytes(b"earlier")
+    model.instantiate()
+    assert [modules is None for modules in seen] == [True, False, True]
+
+
+def test_deleted_include_is_a_netlist_error(tmp_path: Path) -> None:
+    """Removing a dependency reports a clear error instead of a raw FileNotFoundError."""
+    include = tmp_path / "parameters.lib"
+    include.write_text("* parameter\n.param base=2\n")
+    card = tmp_path / "card.lib"
+    card.write_text('* card\n.include "parameters.lib"\n' + _CARD.split("\n", 1)[1])
+    model = LibraryModel.from_file(card, "device")
+    model.resolve()
+    include.unlink()
+    with pytest.raises(NetlistError, match="not found"):
+        model.resolve()
+    card.unlink()
+    with pytest.raises(NetlistError, match="not found"):
+        model.resolve()
+
+
+def test_new_file_shadowing_an_earlier_include_path_is_noticed(tmp_path: Path) -> None:
+    """A file created earlier on the include search order replaces the previously found one."""
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    (second / "parameters.lib").write_text("* parameter\n.param base=2\n")
+    card = tmp_path / "card.lib"
+    card.write_text('* card\n.include "parameters.lib"\n.subckt device p n\n.model vs vsource dc=base\nN1 p n vs\n.ends\n')
+    model = LibraryModel.from_file(card, "device", include_paths=(first, second))
+    assert model.resolve().instances[0].parameters["dc"] == 2
+    (first / "parameters.lib").write_text("* parameter\n.param base=7\n")
+    assert model.resolve().instances[0].parameters["dc"] == 7
+
+
+def test_unchanged_sources_are_not_reread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Repeated calls stat dependencies and hash contents only when (mtime, size) change."""
+    include = tmp_path / "parameters.lib"
+    include.write_text("* parameter\n.param base=2\n")
+    card = tmp_path / "card.lib"
+    card.write_text('* card\n.include "parameters.lib"\n.subckt device p n\n.model vs vsource dc=base\nN1 p n vs\n.ends\n')
+    _age(card, include)
+    model = LibraryModel.from_file(card, "device")
+    assert model.resolve().instances[0].parameters["dc"] == 2
+    reads: list[Path] = []
+    original = Path.read_bytes
+
+    def counting(self: Path) -> bytes:
+        """Count content reads."""
+        reads.append(self)
+        return original(self)
+
+    monkeypatch.setattr(Path, "read_bytes", counting)
+    for _ in range(3):
+        assert model.resolve().instances[0].parameters["dc"] == 2
+    assert reads == []
+    include.write_text("* parameter\n.param base=50\n")
+    assert model.resolve().instances[0].parameters["dc"] == 50
+    assert include in reads
+
+
+def test_library_revisions_are_unique() -> None:
+    """Provisioning caches are keyed by a counter that is never reused, not by object identity."""
+    revisions = [Library().revision for _ in range(5)]
+    assert revisions == sorted(set(revisions))
