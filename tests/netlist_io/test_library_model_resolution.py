@@ -306,3 +306,29 @@ def test_library_revisions_are_unique() -> None:
     """Provisioning caches are keyed by a counter that is never reused, not by object identity."""
     revisions = [Library().revision for _ in range(5)]
     assert revisions == sorted(set(revisions))
+
+
+_TEMPERATURE_CARD = "* card\n.subckt device p n\n.param value=0\n.model vs vsource dc=value\nN1 p n vs\n.ends\n"
+
+
+def test_temperature_setting_remains_visible_to_expressions(tmp_path: Path) -> None:
+    """The run temperature selects the card corner and is still an expression input."""
+    card = tmp_path / "card.lib"
+    card.write_text(_TEMPERATURE_CARD)
+    model = LibraryModel.from_file(card, "device", expressions={"value": "temperature_c * 2"})
+    resolved = model.resolve({"temperature_c": 80.0})
+    assert resolved.temperature_c == 80.0
+    assert resolved.instances[0].parameters["dc"] == 160.0
+    assert model.resolve({"temperature_c": 27.0}).instances[0].parameters["dc"] == 54.0
+
+
+def test_temperature_setting_reaches_the_library_only_when_explicitly_mapped(tmp_path: Path) -> None:
+    """An explicit params_map entry forwards it; otherwise it is not a library parameter."""
+    card = tmp_path / "card.lib"
+    card.write_text(_TEMPERATURE_CARD)
+    mapped = LibraryModel.from_file(card, "device", params_map={"temperature_c": "value"})
+    resolved = mapped.resolve({"temperature_c": 80.0})
+    assert resolved.temperature_c == 80.0
+    assert resolved.instances[0].parameters["dc"] == 80.0
+    plain = LibraryModel.from_file(card, "device")
+    assert plain.resolve({"temperature_c": 80.0}).instances[0].parameters["dc"] == 0

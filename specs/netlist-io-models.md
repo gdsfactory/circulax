@@ -29,6 +29,9 @@ device batches; registration does not create a new OSDI model per instance.
   settings reach the library; unused factory settings remain outside model cards.
 - `port_map` maps public schematic aliases to the wrapper's original terminals.
   Inner leaf ports and connections remain intact.
+- A `temperature_c` setting (degrees Celsius) selects the card temperature and reparses cards.
+  It remains an input to `expressions`, and reaches the library only through an explicit
+  `params_map` entry.
 - Instance `corner` selects an allowed section, with `section` as the default.
   Parsed corner libraries are cached; model-card values remain per instance.
 

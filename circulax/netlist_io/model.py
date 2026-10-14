@@ -38,6 +38,10 @@ class LibraryModel:
     schematic settings. Defaults use the same source units. ``expressions``
     maps library parameter names to safe expressions over converted settings.
     Unspecified defaults remain owned by the original library cards.
+
+    A ``temperature_c`` setting (degrees Celsius) selects the card temperature. It stays
+    available to ``expressions`` and ``parameter_units``/``parameter_values``, but is
+    forwarded to the library as a parameter only when ``params_map`` names it.
     """
 
     _is_circulax_library_model = True
@@ -119,7 +123,7 @@ class LibraryModel:
         if self._source is not None:
             path, section, sections, dialect, temperature_c, include_paths = self._source
             selected = values.pop("corner", section)
-            temperature_c = float(values.pop("temperature_c", temperature_c))
+            temperature_c = float(values.get("temperature_c", temperature_c))
             if sections and selected not in sections:
                 msg = f"unsupported corner {selected!r}; expected one of {sections!r}"
                 raise ValueError(msg)
@@ -139,7 +143,7 @@ class LibraryModel:
             if library is not previous:
                 self._drop_modules(previous)
                 self.library = library
-            temperature_c = float(values.pop("temperature_c", library.temperature_c))
+            temperature_c = float(values.get("temperature_c", library.temperature_c))
             if temperature_c != library.temperature_c:
                 key = (None, temperature_c)
                 if key not in self._libraries:
@@ -244,7 +248,7 @@ class LibraryModel:
         mapped = {
             self.params_map.get(name, name): value
             for name, value in values.items()
-            if not self.expressions or name in self.params_map
+            if name in self.params_map or (not self.expressions and name != "temperature_c")
         }
         mapped.update({name: evaluate_source(expression, values) for name, expression in self.expressions.items()})
         resolved = library.instantiate(self.subcircuit, settings=mapped)
