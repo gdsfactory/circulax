@@ -1,5 +1,6 @@
 """Wavelength characterization uses declared optical boundaries and matched waves."""
 
+import jax
 import jax.numpy as jnp
 import pytest
 import sax
@@ -142,3 +143,176 @@ def test_wavelength_characterization_accepts_canonical_kfnetlist() -> None:
     result = circuit.sp_wavelength(ports=["in", "out"], wavelengths=jnp.array([1.55]), amplitude_unit="sqrt(W)")
     assert jnp.allclose(result["s"][0, 1, 0], 0.6 * jnp.exp(1.55j), atol=1e-6)
     assert set(circuit.ports) == {"in", "out", "bias"}
+
+
+def _two_port(model: object, *, settings: dict | None = None, **kwargs: object) -> Circuit:
+    """Compile a lone two-terminal-pair model whose terminals are both declared ports."""
+    return compile_circuit(
+        {
+            "instances": {"X": {"component": "m", "settings": settings or {}}, "GND": {"component": "ground"}},
+            "connections": {},
+            "ports": {"a": "X,p1", "b": "X,p2"},
+        },
+        {"m": model},
+        is_complex=True,
+        g_leak=0,
+        **kwargs,
+    )
+
+
+_WL = jnp.array([1.55])
+
+
+@component(ports=("p1", "p2"), holomorphic=True)
+def _series_conductance(signals: Signals, g: float = 1.0) -> PhysicsReturn:
+    """Linear series conductance g between the two ports."""
+    current = g * (signals.p1 - signals.p2)
+    return {"p1": current, "p2": -current}, {}
+
+
+@component(ports=("p1", "p2"), holomorphic=True)
+def _cubic_conductance(signals: Signals, g: float = 1.0, k: float = 1e6) -> PhysicsReturn:
+    """Weakly nonlinear conductance whose S depends on excitation amplitude."""
+    voltage = signals.p1 - signals.p2
+    current = g * voltage + k * voltage**3
+    return {"p1": current, "p2": -current}, {}
+
+
+@component(ports=("p1", "p2"), holomorphic=False)
+def _conjugate_conductance(signals: Signals, alpha: float = 0.5) -> PhysicsReturn:
+    """Response that is real-linear but not complex-linear in the field."""
+    voltage = signals.p1 - signals.p2
+    current = voltage + alpha * jnp.conj(voltage)
+    return {"p1": current, "p2": -current}, {}
+
+
+def test_series_element_has_nonzero_reflection_with_correct_sign() -> None:
+    """S11 = z/(z+2) and S21 = 2/(z+2) for a series impedance z between matched ports (z0=1)."""
+    result = _two_port(_series_conductance, settings={"g": 1 / 3}).sp_wavelength(
+        ports=["a", "b"], wavelengths=_WL, amplitude_unit="sqrt(W)"
+    )
+    s = result["s"][0]
+    assert jnp.allclose(s, jnp.array([[0.6, 0.4], [0.4, 0.6]]), atol=1e-9)
+
+
+def test_nonreciprocal_two_port_orientation_is_output_from_input() -> None:
+    """S[output, input] follows (I - Y)(I + Y)^-1 for an asymmetric admittance matrix.
+
+    A transposed result would pass every reciprocal fixture above.
+    """
+    y = jnp.array([[1.0, 0.2], [0.7, 0.5]])
+
+    @component(ports=("a", "b"), holomorphic=True)
+    def nonreciprocal(signals: Signals) -> PhysicsReturn:
+        return {"a": y[0, 0] * signals.a + y[0, 1] * signals.b, "b": y[1, 0] * signals.a + y[1, 1] * signals.b}, {}
+
+    circuit = compile_circuit(
+        {
+            "instances": {"X": {"component": "m"}, "GND": {"component": "ground"}},
+            "connections": {},
+            "ports": {"a": "X,a", "b": "X,b"},
+        },
+        {"m": nonreciprocal},
+        is_complex=True,
+        g_leak=0,
+    )
+    s = circuit.sp_wavelength(ports=["a", "b"], wavelengths=_WL, amplitude_unit="sqrt(W)")["s"][0]
+    identity = jnp.eye(2)
+    expected = (identity - y) @ jnp.linalg.inv(identity + y)
+    assert jnp.allclose(s, expected, atol=1e-9)
+    assert not jnp.allclose(s, expected.T, atol=1e-3)
+
+
+def test_normalized_s_is_amplitude_independent_in_linear_regime_only() -> None:
+    """Two small amplitudes agree for a linear model; a nonlinear model separates them.
+
+    The fixture proves the check can fail: S moves with amplitude once the model leaves its linear regime.
+    """
+    kwargs = {"ports": ["a", "b"], "wavelengths": _WL, "amplitude_unit": "sqrt(W)"}
+    linear = _two_port(_series_conductance)
+    small, smaller = (linear.sp_wavelength(**kwargs, amplitude=a)["s"] for a in (1e-4, 1e-5))
+    assert jnp.allclose(small, smaller, atol=1e-9)
+    nonlinear = _two_port(_cubic_conductance)
+    large, small = (nonlinear.sp_wavelength(**kwargs, amplitude=a)["s"] for a in (2e-4, 1e-6))
+    assert not jnp.allclose(large, small, atol=1e-3)
+
+
+def test_unconverged_dc_solve_is_reported_not_returned_as_scattering() -> None:
+    """An exhausted Newton budget raises instead of returning a finite but wrong S."""
+    circuit = _two_port(_cubic_conductance, max_steps=1)
+    with pytest.raises(ValueError, match="did not converge"):
+        circuit.sp_wavelength(ports=["a", "b"], wavelengths=_WL, amplitude=1.0, amplitude_unit="sqrt(W)")
+
+
+def test_converged_flags_are_returned_per_wavelength_and_column() -> None:
+    """The result carries one flag per wavelength, baseline and excitation."""
+    result = _device().sp_wavelength(ports=["in", "out"], wavelengths=jnp.array([1.5, 1.6]), amplitude_unit="sqrt(W)")
+    assert result["converged"].shape == (2, 3)
+    assert bool(jnp.all(result["converged"]))
+
+
+def test_response_that_is_not_complex_linear_is_refused() -> None:
+    """A conjugate-coupled model is real-linear only and must not be reported as a complex S."""
+    circuit = _two_port(_conjugate_conductance)
+    with pytest.raises(ValueError, match="not complex-linear"):
+        circuit.sp_wavelength(ports=["a", "b"], wavelengths=_WL, amplitude_unit="sqrt(W)")
+
+
+def test_ground_and_aliased_ports_are_rejected() -> None:
+    """Selected ports must be distinct non-ground boundary nodes."""
+    circuit = compile_circuit(
+        {
+            "instances": {"R": {"component": "r", "settings": {"R": 1.0}}, "GND": {"component": "ground"}},
+            "connections": {"R,p2": "GND,p1"},
+            "ports": {"a": "R,p1", "a_alias": "R,p1", "gnd": "GND,p1"},
+        },
+        {"r": Resistor},
+        is_complex=True,
+        g_leak=0,
+    )
+    kwargs = {"wavelengths": _WL, "amplitude_unit": "sqrt(W)"}
+    with pytest.raises(ValueError, match="distinct non-ground"):
+        circuit.sp_wavelength(ports=["a", "a_alias"], **kwargs)
+    with pytest.raises(ValueError, match="distinct non-ground"):
+        circuit.sp_wavelength(ports=["a", "gnd"], **kwargs)
+
+
+def test_circuit_g_leak_is_forwarded_to_the_characterization_bench() -> None:
+    """A floating electrical island that solves in the circuit also solves in the bench."""
+
+    @component(ports=("o1", "o2", "e"), holomorphic=True)
+    def through(signals: Signals) -> PhysicsReturn:
+        return {"o1": signals.o1 - 0.5 * signals.o2, "o2": signals.o2 - 0.5 * signals.o1, "e": 0.0}, {}
+
+    circuit = compile_circuit(
+        {
+            "instances": {
+                "T": {"component": "t"},
+                "F1": {"component": "r", "settings": {"R": 10.0}},
+                "F2": {"component": "r", "settings": {"R": 10.0}},
+                "GND": {"component": "ground"},
+            },
+            "connections": {"F1,p1": ("T,e", "F2,p2"), "F1,p2": "F2,p1"},
+            "ports": {"in": "T,o1", "out": "T,o2"},
+        },
+        {"t": through, "r": Resistor},
+        is_complex=True,
+        g_leak=1e-12,
+    )
+    result = circuit.sp_wavelength(ports=["in", "out"], wavelengths=_WL, amplitude_unit="sqrt(W)")
+    assert jnp.allclose(result["s"][0, 1, 0], 4 / 15, atol=1e-6)
+
+
+def test_sp_wavelength_is_jittable_and_differentiable() -> None:
+    """Concrete checks are skipped under tracing so the analysis composes with jit and grad."""
+    circuit = _two_port(_series_conductance, settings={"g": 1.0})
+
+    def s11(g: jax.Array) -> jax.Array:
+        return circuit.sp_wavelength(ports=["a", "b"], wavelengths=_WL, amplitude_unit="sqrt(W)", params={"X.g": g})["s"][
+            0, 0, 0
+        ].real
+
+    z = 1 / 2.0
+    assert jnp.allclose(jax.jit(s11)(2.0), z / (z + 2), atol=1e-9)
+    # d/dg [ (1/g) / (1/g + 2) ] = d/dg [ 1 / (1 + 2g) ] = -2 / (1 + 2g)^2
+    assert jnp.allclose(jax.grad(s11)(2.0), -2 / (1 + 2 * 2.0) ** 2, atol=1e-7)

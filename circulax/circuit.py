@@ -612,6 +612,13 @@ class Circuit:
         preserve physical DUT sources, loads and electrical bias. Independent
         input columns and their zero-incident baseline use scan continuation
         over wavelength. ``s`` has shape (wavelength, output_port, input_port).
+
+        ``converged`` has shape (wavelength, 1 + len(ports)): the baseline and each
+        excitation. Concrete results raise if any solve failed to converge or is
+        not finite, and if a quadrature probe at the first wavelength shows the
+        response is not complex-linear (a non-holomorphic model, or an amplitude
+        outside the linear regime). Under jit these checks are skipped; inspect
+        ``converged`` instead. The bench inherits this circuit's ``g_leak``.
         """
         return wavelength_scattering(
             self,

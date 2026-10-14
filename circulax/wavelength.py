@@ -34,7 +34,13 @@ def _validate_coordinates(
         msg = "Optical incident amplitude and reference z0 must be finite and positive"
         raise ValueError(msg)
     coordinates = jnp.asarray(wavelengths)
-    if coordinates.ndim != 1 or not len(coordinates) or not np.all(np.isfinite(coordinates)) or np.any(coordinates <= 0):
+    # Value checks need concrete numbers; a traced grid is the caller's responsibility.
+    concrete = None if isinstance(wavelengths, jax.core.Tracer) else np.asarray(wavelengths)
+    if (
+        coordinates.ndim != 1
+        or not len(coordinates)
+        or (concrete is not None and not np.all(np.isfinite(concrete) & (concrete > 0)))
+    ):
         msg = "Wavelength coordinates must be a nonempty positive finite one-dimensional array"
         raise ValueError(msg)
     return coordinates
@@ -57,6 +63,24 @@ def _validate_boundary(circuit: Any, selected: tuple[str, ...]) -> None:
             if np.any(np.isin(np.asarray(group.var_indices[:, local]), nodes)):
                 msg = "An ideal voltage/field constraint clamps a selected optical characterization port"
                 raise ValueError(msg)
+
+
+_COMPLEX_LINEAR_RTOL = 0.05
+
+
+def _check_complex_linear(response: jax.Array, rotated: jax.Array) -> None:
+    """Require the response to a quadrature incident wave to be the rotated in-phase response.
+
+    A response that mixes the field with its conjugate is real-linear only; reporting it as a
+    complex S-parameter would be wrong. Power-dependent phase-invariant models pass.
+    """
+    scale = jnp.maximum(jnp.max(jnp.abs(response)), jnp.finfo(jnp.float64).tiny)
+    if not bool(jnp.max(jnp.abs(rotated - 1j * response)) <= _COMPLEX_LINEAR_RTOL * scale):
+        msg = (
+            "Wavelength scattering response is not complex-linear in the incident wave: "
+            "the model is non-holomorphic or outside its linear regime at this amplitude"
+        )
+        raise ValueError(msg)
 
 
 def wavelength_scattering(
@@ -97,38 +121,51 @@ def wavelength_scattering(
         while name in instances:
             name += "_"
         fixtures[port] = {"name": name, "component": model_key, "settings": {"z0": z0}}
-    bench = compile_fn(
-        attach_testbench(device, sources=fixtures),
-        models,
-        is_complex=True,
-        g_leak=0,
-        rtol=circuit.rtol,
-        atol=circuit.atol,
-        max_steps=circuit.max_steps,
-    )
+    # Topology is static: compile eagerly even when the caller is tracing so index arrays stay concrete.
+    with jax.ensure_compile_time_eval():
+        bench = compile_fn(
+            attach_testbench(device, sources=fixtures),
+            models,
+            is_complex=True,
+            g_leak=getattr(circuit.solver, "g_leak", 1e-9),
+            rtol=circuit.rtol,
+            atol=circuit.atol,
+            max_steps=circuit.max_steps,
+        )
     count = len(selected)
     excitations = jnp.concatenate([jnp.zeros((1, count)), amplitude * jnp.eye(count)])
     guesses = jnp.zeros((count + 1, 2 * bench.sys_size))
 
+    def solve(guess: jax.Array, incident: jax.Array, wavelength: jax.Array) -> tuple[jax.Array, jax.Array]:
+        """Solve the DUT with fixed bias and this incident-wave column."""
+        updates = {**(params or {}), wl_param: wavelength}
+        updates.update({f"{fixtures[port]['name']}.incident": incident[index] for index, port in enumerate(selected)})
+        return bench.dc_checked(guess, params=updates)
+
     def sweep_point(previous: jax.Array, wavelength: jax.Array) -> tuple[jax.Array, jax.Array]:
         """Maintain separate continuation guesses for baseline and each column."""
+        solved, converged = jax.vmap(solve, in_axes=(0, 0, None))(previous, excitations, wavelength)
+        return solved, (solved, converged)
 
-        def solve(guess: jax.Array, incident: jax.Array) -> jax.Array:
-            """Solve the DUT with fixed bias and this incident-wave column."""
-            updates = {**(params or {}), wl_param: wavelength}
-            updates.update({f"{fixtures[port]['name']}.incident": incident[index] for index, port in enumerate(selected)})
-            return bench.dc(guess, params=updates)
-
-        solved = jax.vmap(solve)(previous, excitations)
-        return solved, solved
-
-    _, solved = jax.lax.scan(sweep_point, guesses, coordinates)
-    if not bool(jnp.all(jnp.isfinite(solved))):
-        msg = "Wavelength scattering produced nonfinite baseline or excited solutions"
-        raise ValueError(msg)
-    physical = solved[..., : bench.sys_size] + 1j * solved[..., bench.sys_size :]
+    _, (solved, converged) = jax.lax.scan(sweep_point, guesses, coordinates)
+    size = bench.sys_size
+    physical = solved[..., :size] + 1j * solved[..., size:]
     baseline = physical[:, 0]
     excited = physical[:, 1:]
+    if not isinstance(solved, jax.core.Tracer):
+        # Concrete results are validated here; under jit callers inspect ``converged`` instead.
+        if not bool(jnp.all(converged)):
+            msg = "Wavelength scattering DC solve did not converge for at least one wavelength or excitation"
+            raise ValueError(msg)
+        if not bool(jnp.all(jnp.isfinite(solved))):
+            msg = "Wavelength scattering produced nonfinite baseline or excited solutions"
+            raise ValueError(msg)
+        # One quadrature probe at the first wavelength detects responses that are not complex-linear.
+        probe, probe_ok = solve(solved[0, 1], 1j * excitations[1], coordinates[0])
+        if not bool(probe_ok):
+            msg = "Wavelength scattering quadrature probe did not converge"
+            raise ValueError(msg)
+        _check_complex_linear(excited[0, 0] - baseline[0], probe[:size] + 1j * probe[size:] - baseline[0])
     port_nodes = jnp.asarray([bench.port_map[port] for port in selected])
     outgoing = (excited[..., port_nodes] - baseline[:, None, port_nodes]) / jnp.sqrt(z0) / amplitude
     scattering = jnp.swapaxes(outgoing, 1, 2) - jnp.eye(count)
@@ -138,6 +175,7 @@ def wavelength_scattering(
         "s": scattering,
         "amplitude": amplitude,
         "amplitude_unit": amplitude_unit,
+        "converged": converged,
         "baseline_solution": baseline,
         "solution": excited,
         "port_map": dict(bench.port_map),

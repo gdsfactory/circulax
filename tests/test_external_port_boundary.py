@@ -1,6 +1,5 @@
 """Declared characterization boundaries survive physical testbench attachment.
 
-Contract: GF+ specs/circulax-simulation.md, Circuit and model boundary.
 Sources and loads remain instances; their terminals and internal DUT nodes
 never become additional declared analysis ports.
 """
