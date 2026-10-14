@@ -292,8 +292,6 @@ def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> P
         power: Output optical power in watts. Defaults to ``1.0``.
         phase: Output field phase in radians. Defaults to ``0.0``.
 
-    @tags circulax simulation
-
     """
     v_val = jnp.sqrt(power) * jnp.exp(1j * phase)
     constraint = (signals.p1 - signals.p2) - v_val
@@ -329,8 +327,6 @@ def OpticalSourcePulse(
         phase: Output field phase in radians. Defaults to ``0.0``.
         delay: Turn-on delay in seconds. Defaults to ``0.2e-9``.
         rise: Sigmoid rise time constant in seconds. Defaults to ``0.05e-9``.
-
-    @tags circulax simulation
 
     """
     val = jnp.sqrt(power) * jnn.sigmoid((t - delay) / rise)

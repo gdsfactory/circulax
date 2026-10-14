@@ -28,10 +28,7 @@ def _attach_testbench_kfnetlist(
     loads: dict[str, dict[str, Any]],
     gnd_list: list[str],
 ) -> kfnl.Netlist:
-    """Attach fixtures without changing the declared device boundary.
-
-    @tags circulax simulation
-    """
+    """Attach fixtures without changing the declared device boundary."""
     device_port_names = {p.name for p in device.ports}
 
     used = [*sources, *loads, *gnd_list]
@@ -82,10 +79,7 @@ def _attach_testbench_kfnetlist(
     source_or_load_refs: dict[str, tuple[kfnl.PortRef, kfnl.PortRef]] = {}
 
     def _add_terminator_instance(device_port: str, default_prefix: str, spec: dict[str, Any]) -> None:
-        """Add a physical fixture instance at a declared port.
-
-        @tags circulax simulation
-        """
+        """Add a physical fixture instance at a declared port."""
         name = spec.get("name") or f"{default_prefix}_{device_port}"
         if nl.has_instance(name):
             msg = f"Instance name '{name}' already exists in device netlist"
@@ -139,8 +133,6 @@ def attach_testbench(
     Accepts either a SAX-format dict or a ``kfnetlist.Netlist``.
     Returns the same type as the input, retaining its external port declarations
     independently of the added source, load and ground components.
-
-    @tags circulax simulation
     """
     sources = sources or {}
     loads = loads or {}
@@ -184,10 +176,7 @@ def attach_testbench(
     nets.extend(device.get("nets", []))
 
     def _add_terminator(device_port: str, default_prefix: str, spec: dict[str, Any]) -> None:
-        """Connect a physical fixture without consuming the device port.
-
-        @tags circulax simulation
-        """
+        """Connect a physical fixture without consuming the device port."""
         name = spec.get("name") or f"{default_prefix}_{device_port}"
         if name in instances:
             msg = f"Instance name '{name}' already exists in device netlist"

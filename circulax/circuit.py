@@ -130,8 +130,6 @@ class Circuit:
         Supported names are op, dc, sp_wavelength, ac_response, sp_frequency,
         tran and hb. Native HB state-history and non-holomorphic optical
         driven-AC limitations are rejected before simulation execution.
-
-        @tags circulax simulation
         """
         modes = {
             "op": "dc",
@@ -391,8 +389,6 @@ class Circuit:
         one boolean per leading batch point. Failed estimates can be finite;
         callers must use this flag rather than infer success from sample values.
         Both results remain JAX arrays and can be consumed inside jit.
-
-        @tags circulax simulation
         """
         dc_circuit = self._for_analysis("dc")
         if dc_circuit is not self:
@@ -404,10 +400,7 @@ class Circuit:
             y_guess = self._zero_guess()
 
         def solve_fn(groups: dict) -> tuple[jax.Array, jax.Array]:
-            """Retain native convergence evidence for each batched solve.
-
-            @tags circulax simulation
-            """
+            """Retain native convergence evidence for each batched solve."""
             return self.solver.solve_dc_checked(groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
 
         return self._batched_solve(params, param_updates, solve_fn)
@@ -619,8 +612,6 @@ class Circuit:
         preserve physical DUT sources, loads and electrical bias. Independent
         input columns and their zero-incident baseline use scan continuation
         over wavelength. ``s`` has shape (wavelength, output_port, input_port).
-
-        @tags circulax simulation
         """
         return wavelength_scattering(
             self,
@@ -656,8 +647,6 @@ class Circuit:
 
         Non-holomorphic optical response requires a quadrature/sideband result
         contract and is explicitly unsupported by this interface.
-
-        @tags circulax simulation
         """
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "ac_response")

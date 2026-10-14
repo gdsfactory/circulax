@@ -15,10 +15,7 @@ from circulax.netlist import sax_to_kfnetlist
 
 
 def _device(representation: str) -> dict | kfnl.Netlist:
-    """Build a boundary with an internal node and physical bias/load instances.
-
-    @tags circulax simulation
-    """
+    """Build a boundary with an internal node and physical bias/load instances."""
     device = {
         "instances": {
             "Ra": {"component": "resistor", "settings": {"R": 50.0}},
@@ -43,20 +40,14 @@ def _device(representation: str) -> dict | kfnl.Netlist:
 
 
 def _declared_ports(device: dict | kfnl.Netlist) -> set[str]:
-    """Read external declarations without inferring ports from terminals.
-
-    @tags circulax simulation
-    """
+    """Read external declarations without inferring ports from terminals."""
     if isinstance(device, kfnl.Netlist):
         return {port.name for port in device.ports}
     return set(device.get("ports", {}))
 
 
 def _attach(device: dict | kfnl.Netlist) -> dict | kfnl.Netlist:
-    """Attach named analysis fixtures separately from physical DUT components.
-
-    @tags circulax simulation
-    """
+    """Attach named analysis fixtures separately from physical DUT components."""
     return attach_testbench(
         device,
         sources={"input": {"name": "analysis_source", "component": "optical_source", "settings": {"power": 1e-9}}},
@@ -66,10 +57,7 @@ def _attach(device: dict | kfnl.Netlist) -> dict | kfnl.Netlist:
 
 @pytest.mark.parametrize("representation", ["kfnetlist", "sax"])
 def test_attachment_preserves_declared_boundary(representation: str) -> None:
-    """Attaching source/load fixtures preserves exactly the declared ports.
-
-    @tags circulax simulation
-    """
+    """Attaching source/load fixtures preserves exactly the declared ports."""
     device = _device(representation)
     attached = _attach(device)
     assert _declared_ports(attached) == {"input", "output"}
@@ -82,10 +70,7 @@ def test_attachment_preserves_declared_boundary(representation: str) -> None:
 
 
 def test_unselected_disconnected_port_remains_declared_and_connected_to_its_net() -> None:
-    """An unselected boundary marker survives even without a device terminal.
-
-    @tags circulax simulation
-    """
+    """An unselected boundary marker survives even without a device terminal."""
     device = _device("kfnetlist")
     device.create_port("unconnected")
     device.create_net(kfnl.NetlistPort("unconnected"))
@@ -96,10 +81,7 @@ def test_unselected_disconnected_port_remains_declared_and_connected_to_its_net(
 
 @pytest.mark.parametrize("representation", ["kfnetlist", "sax"])
 def test_physical_sources_and_loads_remain_distinct_instances(representation: str) -> None:
-    """Attachment neither consumes nor rewrites DUT source/load components.
-
-    @tags circulax simulation
-    """
+    """Attachment neither consumes nor rewrites DUT source/load components."""
     device = _device(representation)
     attached = _attach(device)
     original_instances = device.instances if isinstance(device, kfnl.Netlist) else device["instances"]
@@ -112,10 +94,7 @@ def test_physical_sources_and_loads_remain_distinct_instances(representation: st
 @pytest.mark.parametrize("representation", ["kfnetlist", "sax"])
 @pytest.mark.parametrize("attached", [False, True])
 def test_compiled_ports_exclude_internal_nodes_and_source_terminals(representation: str, *, attached: bool) -> None:
-    """Compilation retains the external boundary rather than all node aliases.
-
-    @tags circulax simulation
-    """
+    """Compilation retains the external boundary rather than all node aliases."""
     device = _device(representation)
     if attached:
         device = _attach(device)

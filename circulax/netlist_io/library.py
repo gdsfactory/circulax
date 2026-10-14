@@ -126,10 +126,7 @@ class Library:
         dialect: str = "ngspice",
         statistical_mode: str = "reject",
     ) -> None:
-        """Create an empty model library at the requested card temperature.
-
-        @tags circulax-simulation
-        """
+        """Create an empty model library at the requested card temperature."""
         if not math.isfinite(temperature_c) or temperature_c <= -273.15:
             msg = "temperature_c must be finite and above absolute zero"
             raise NetlistError(msg)
@@ -172,20 +169,14 @@ class Library:
         return library
 
     def include(self, path: str | Path, *, section: str | None = None) -> None:
-        """Add a library to the same root scope, preserving declaration order.
-
-        @tags circulax-simulation
-        """
+        """Add a library to the same root scope, preserving declaration order."""
         source = Path(path).resolve()
         statements = self._read(source, section, (), set())
         self._populate(self.frame, statements)
         self._sources.append((source, section))
 
     def with_temperature(self, temperature_c: float) -> Library:
-        """Reparse source declarations at a new temperature without mutation.
-
-        @tags circulax-simulation
-        """
+        """Reparse source declarations at a new temperature without mutation."""
         if not self._sources:
             msg = "Temperature override requires reparsable library source declarations"
             raise ValueError(msg)
@@ -200,19 +191,13 @@ class Library:
         return library
 
     def inspection_sources(self) -> list[dict[str, str]]:
-        """Fingerprint actual parsed source dependencies without native loading.
-
-        @tags circulax-simulation
-        """
+        """Fingerprint actual parsed source dependencies without native loading."""
         return [
             {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in sorted(self._parsed, key=str)
         ]
 
     def refreshed(self) -> Library:
-        """Reuse unchanged parsed cards or reparse edited source dependencies.
-
-        @tags circulax-simulation
-        """
+        """Reuse unchanged parsed cards or reparse edited source dependencies."""
         records = self.inspection_sources()
         if all(record["sha256"] == self._parsed_fingerprints[Path(record["path"])] for record in records):
             return self
@@ -221,10 +206,7 @@ class Library:
     def _read(
         self, path: Path, section: str | None, active: tuple[Path, ...], seen: set[tuple[Path, str | None]]
     ) -> list[Statement]:
-        """Read scoped dependencies and retain their parsed content revisions.
-
-        @tags circulax-simulation
-        """
+        """Read scoped dependencies and retain their parsed content revisions."""
         if path in active:
             msg = f"include cycle: {' -> '.join(map(str, (*active, path)))}"
             raise NetlistError(msg)

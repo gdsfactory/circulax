@@ -12,20 +12,14 @@ from circulax.netlist import sax_to_kfnetlist
 
 
 def _optical(wl: float = 1.55) -> sax.SDict:
-    """Return a reciprocal two-port spectrum with zero reflection.
-
-    @tags circulax simulation
-    """
+    """Return a reciprocal two-port spectrum with zero reflection."""
     transmission = 0.6 * jnp.exp(1j * wl)
     return {("o1", "o1"): 0.0, ("o2", "o2"): 0.0, ("o1", "o2"): transmission, ("o2", "o1"): transmission}
 
 
 @component(ports=("o1", "o2", "bias", "gnd"))
 def _biased_optical(signals: Signals) -> PhysicsReturn:
-    """A linear optical two-port controlled by a retained electrical voltage.
-
-    @tags circulax simulation
-    """
+    """A linear optical two-port controlled by a retained electrical voltage."""
     transmission = 0.2 + 0.05 * jnp.real(signals.bias - signals.gnd)
     diagonal = (1 + transmission**2) / (1 - transmission**2)
     cross = -2 * transmission / (1 - transmission**2)
@@ -38,10 +32,7 @@ def _biased_optical(signals: Signals) -> PhysicsReturn:
 
 
 def _device(*, physical_load: bool = False, clamp: bool = False, controlled: bool = False, physical_drive: bool = False) -> Circuit:
-    """Keep an electrical bias circuit and optional real optical load in the DUT.
-
-    @tags circulax simulation
-    """
+    """Keep an electrical bias circuit and optional real optical load in the DUT."""
     instances = {
         "optical": {"component": "optical"},
         "bias": {"component": "voltage", "settings": {"V": 3.0}},
@@ -81,10 +72,7 @@ def _device(*, physical_load: bool = False, clamp: bool = False, controlled: boo
 
 @pytest.mark.parametrize("amplitude", [1e-4, 3e-4])
 def test_reciprocal_full_matrix_and_bias_are_preserved(amplitude: float) -> None:
-    """Independent matched excitations recover every S-matrix column.
-
-    @tags circulax simulation
-    """
+    """Independent matched excitations recover every S-matrix column."""
     circuit = _device()
     wavelengths = jnp.array([1.50, 1.55, 1.60])
     result = circuit.sp_wavelength(ports=["in", "out"], wavelengths=wavelengths, amplitude=amplitude, amplitude_unit="sqrt(W)")
@@ -101,10 +89,7 @@ def test_reciprocal_full_matrix_and_bias_are_preserved(amplitude: float) -> None
 
 
 def test_physical_load_changes_characterization_and_is_not_removed() -> None:
-    """An actual DUT load remains in addition to temporary matched boundaries.
-
-    @tags circulax simulation
-    """
+    """An actual DUT load remains in addition to temporary matched boundaries."""
     kwargs = {"ports": ["in", "out"], "wavelengths": jnp.array([1.55]), "amplitude_unit": "sqrt(W)"}
     bare = _device().sp_wavelength(**kwargs)
     loaded_circuit = _device(physical_load=True)
@@ -114,19 +99,13 @@ def test_physical_load_changes_characterization_and_is_not_removed() -> None:
 
 
 def test_internal_terminal_is_not_a_characterization_port() -> None:
-    """Only selected declared external ports define scattering boundaries.
-
-    @tags circulax simulation
-    """
+    """Only selected declared external ports define scattering boundaries."""
     with pytest.raises(ValueError, match="declared external"):
         _device().sp_wavelength(ports=["optical,o1"], wavelengths=jnp.array([1.55]), amplitude_unit="sqrt(W)")
 
 
 def test_ideal_source_clamp_is_rejected_without_removing_source() -> None:
-    """A clamped boundary cannot be silently converted into an analysis source.
-
-    @tags circulax simulation
-    """
+    """A clamped boundary cannot be silently converted into an analysis source."""
     circuit = _device(clamp=True)
     with pytest.raises(ValueError, match=r"ideal.*constraint"):
         circuit.sp_wavelength(ports=["in", "out"], wavelengths=jnp.array([1.55]), amplitude_unit="sqrt(W)")
@@ -134,10 +113,7 @@ def test_ideal_source_clamp_is_rejected_without_removing_source() -> None:
 
 
 def test_electrical_bias_controls_optical_characterization() -> None:
-    """Electrical source overrides stay fixed across all optical excitations.
-
-    @tags circulax simulation
-    """
+    """Electrical source overrides stay fixed across all optical excitations."""
     circuit = _device(controlled=True)
     kwargs = {"ports": ["in", "out"], "wavelengths": jnp.array([1.5, 1.6]), "amplitude_unit": "sqrt(W)"}
     default = circuit.sp_wavelength(**kwargs)
@@ -147,10 +123,7 @@ def test_electrical_bias_controls_optical_characterization() -> None:
 
 
 def test_physical_optical_source_baseline_is_subtracted() -> None:
-    """An internal physical optical source remains, without contaminating S.
-
-    @tags circulax simulation
-    """
+    """An internal physical optical source remains, without contaminating S."""
     circuit = _device(physical_drive=True)
     kwargs = {"ports": ["in", "out"], "wavelengths": jnp.array([1.55]), "amplitude_unit": "sqrt(W)"}
     first = circuit.sp_wavelength(**kwargs)
@@ -161,10 +134,7 @@ def test_physical_optical_source_baseline_is_subtracted() -> None:
 
 
 def test_wavelength_characterization_accepts_canonical_kfnetlist() -> None:
-    """Native kfnetlist inputs preserve their boundary through analysis fixtures.
-
-    @tags circulax simulation
-    """
+    """Native kfnetlist inputs preserve their boundary through analysis fixtures."""
     original = _device()
     native, overrides = sax_to_kfnetlist(original.source_netlist)
     assert overrides == {}

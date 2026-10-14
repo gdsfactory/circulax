@@ -346,8 +346,6 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
             can wire up a netlist using either name without duplicating the
             physics.
 
-    @tags circulax simulation
-
     Returns:
         A new :class:`CircuitComponent` subclass named after ``fn``.
 
@@ -720,8 +718,6 @@ def component(
         A decorator that accepts a physics function and returns a
         :class:`CircuitComponent` subclass.
 
-    @tags circulax simulation
-
     Example::
 
         @component(ports=("p1", "p2"))
@@ -780,8 +776,6 @@ def source(
     Returns:
         A decorator that accepts a physics function and returns a
         :class:`CircuitComponent` subclass.
-
-    @tags circulax simulation
 
     Example::
 

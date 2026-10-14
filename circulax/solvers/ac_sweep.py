@@ -175,8 +175,6 @@ def setup_ac_response(
     The caller supplies an independent-source RHS, leaving DC bias intact.
     Native AC charge registrations, delays and frequency-domain admittances
     use the same assembly as scattering analysis.
-
-    @tags circulax simulation
     """
     rows, cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
     rows = jnp.asarray(rows)
@@ -185,10 +183,7 @@ def setup_ac_response(
     assemble = assemble_gc_complex if is_complex else assemble_gc_real
 
     def run_response(y_dc: Array, freqs: Array, rhs: Array) -> Array:
-        """Solve one physical excitation at each frequency.
-
-        @tags circulax simulation
-        """
+        """Solve one physical excitation at each frequency."""
         g_values, c_values = assemble(y_dc, groups)
         if dc_groups is not None:
             g_values, _ = assemble(y_dc, dc_groups)
@@ -196,10 +191,7 @@ def setup_ac_response(
         capacitance = jnp.zeros_like(conductance).at[rows, cols].add(c_values)
 
         def solve_frequency(freq: Array) -> Array:
-            """Include dynamic component admittances before solving the RHS.
-
-            @tags circulax simulation
-            """
+            """Include dynamic component admittances before solving the RHS."""
             admittance = conductance + 2j * jnp.pi * freq * capacitance
             for group in groups.values():
                 if getattr(group, "is_fdomain", False):

@@ -196,8 +196,6 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
     Accepts either a ``kfnetlist.Netlist`` (preferred) or a SAX-format dict
     (auto-converted via :func:`sax_to_kfnetlist`).
 
-    @tags circulax simulation
-
     Returns:
         ``(compiled_groups, sys_size, port_to_node_map)``
 

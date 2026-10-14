@@ -148,10 +148,7 @@ class LibraryModel:
         return library
 
     def _refresh_cached_library(self, key: tuple[str | None, float]) -> Library:
-        """Refresh source-dependent parsed cards and their provisioning cache.
-
-        @tags circulax-simulation
-        """
+        """Refresh source-dependent parsed cards and their provisioning cache."""
         previous = self._libraries[key]
         library = previous.refreshed()
         if library is not previous:
@@ -165,8 +162,6 @@ class LibraryModel:
         Source/include contents and available native artifact bytes contribute
         to the fingerprint. Native artifacts are not loaded or ABI-validated;
         this identity does not establish backend readiness.
-
-        @tags circulax-simulation
         """
         resolved = self.resolve(settings)
         library = self._select_library({**self.defaults, **(settings or {})})
@@ -244,10 +239,7 @@ class LibraryModel:
         return resolved
 
     def instantiate(self, settings: Mapping[str, Any] | None = None) -> NetlistDefinition:
-        """Build the resolved topology and retain reusable native models.
-
-        @tags circulax-simulation
-        """
+        """Build the resolved topology and retain reusable native models."""
         resolved = self.resolve(settings)
         library = self._select_library({**self.defaults, **(settings or {})})
         netlist, models, modules = build_resolved(

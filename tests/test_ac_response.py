@@ -13,10 +13,7 @@ from circulax.components.photonic import OpticalSource
 
 
 def _rc() -> Circuit:
-    """Build a source-driven RC circuit without external characterization ports.
-
-    @tags circulax simulation
-    """
+    """Build a source-driven RC circuit without external characterization ports."""
     return compile_circuit(
         {
             "instances": {
@@ -38,10 +35,7 @@ def _rc() -> Circuit:
 
 
 def test_rc_response_retains_physical_voltage_and_current() -> None:
-    """A driven RC response follows its transfer function without matching loads.
-
-    @tags circulax simulation
-    """
+    """A driven RC response follows its transfer function without matching loads."""
     circuit = _rc()
     freqs = jnp.array([0.0, 100.0, 1000.0])
     amplitude = 2.0 + 1j
@@ -56,10 +50,7 @@ def test_rc_response_retains_physical_voltage_and_current() -> None:
 
 
 def test_dc_bias_and_ac_excitation_are_independent() -> None:
-    """DC and AC overrides do not replace or scale one another.
-
-    @tags circulax simulation
-    """
+    """DC and AC overrides do not replace or scale one another."""
     circuit = _rc()
     kwargs = {"freqs": jnp.array([100.0]), "sources": {"V": 1j}}
     zero = circuit.ac_response(**kwargs, params={"V.dc": 0.0})
@@ -71,10 +62,7 @@ def test_dc_bias_and_ac_excitation_are_independent() -> None:
 
 
 def test_multiple_sources_superpose_with_current_orientation() -> None:
-    """Independent current excitation retains the physical source sign.
-
-    @tags circulax simulation
-    """
+    """Independent current excitation retains the physical source sign."""
     circuit = _rc()
     freqs = jnp.array([10.0, 1000.0])
     voltage = circuit.ac_response(freqs=freqs, sources={"V": 1.0})
@@ -86,10 +74,7 @@ def test_multiple_sources_superpose_with_current_orientation() -> None:
 
 
 def test_batched_sources_keep_distinct_instance_excitations() -> None:
-    """Sources sharing a compiled group keep separate physical RHS stamps.
-
-    @tags circulax simulation
-    """
+    """Sources sharing a compiled group keep separate physical RHS stamps."""
     original = _rc()
     device = deepcopy(original.source_netlist)
     device["instances"]["I2"] = {"component": "current", "settings": {"dc": 0.0}}
@@ -103,28 +88,19 @@ def test_batched_sources_keep_distinct_instance_excitations() -> None:
 
 @pytest.mark.parametrize("target", ["missing", "R", "V,p1"])
 def test_invalid_source_targets_raise(target: str) -> None:
-    """Targets must identify source instances with explicit excitation stamps.
-
-    @tags circulax simulation
-    """
+    """Targets must identify source instances with explicit excitation stamps."""
     with pytest.raises(ValueError, match="source"):
         _rc().ac_response(freqs=jnp.array([10.0]), sources={target: 1.0})
 
 
 def test_response_supports_jit_and_source_amplitude_vmap() -> None:
-    """Source excitation remains differentiable and independently batchable.
-
-    @tags circulax simulation
-    """
+    """Source excitation remains differentiable and independently batchable."""
     circuit = _rc()
     freqs = jnp.array([10.0, 1000.0])
     y_dc = circuit.dc()
 
     def run(amplitude: jax.Array) -> jax.Array:
-        """Return the physical response for a traced excitation.
-
-        @tags circulax simulation
-        """
+        """Return the physical response for a traced excitation."""
         return circuit.ac_response(freqs=freqs, sources={"V": amplitude}, y_dc=y_dc)["solution"]
 
     amplitudes = jnp.array([1.0, 2.0j])
@@ -133,10 +109,7 @@ def test_response_supports_jit_and_source_amplitude_vmap() -> None:
 
 
 def test_holomorphic_optical_source_has_independent_field_excitation() -> None:
-    """Optical source AC amplitude is a field phasor, independent of DC power.
-
-    @tags circulax simulation
-    """
+    """Optical source AC amplitude is a field phasor, independent of DC power."""
     circuit = compile_circuit(
         {
             "instances": {
@@ -155,17 +128,11 @@ def test_holomorphic_optical_source_has_independent_field_excitation() -> None:
 
 
 def test_nonholomorphic_optical_response_reports_quadrature_limitation() -> None:
-    """Ambiguous complex optical quadratures are explicitly rejected.
-
-    @tags circulax simulation
-    """
+    """Ambiguous complex optical quadratures are explicitly rejected."""
 
     @component(ports=("p1", "p2"))
     def intensity_load(signals: Signals) -> PhysicsReturn:
-        """Non-holomorphic test load requires quadrature observables.
-
-        @tags circulax simulation
-        """
+        """Non-holomorphic test load requires quadrature observables."""
         current = jnp.abs(signals.p1 - signals.p2) ** 2
         return {"p1": current, "p2": -current}, {}
 

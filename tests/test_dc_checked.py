@@ -8,10 +8,7 @@ from circulax.components.electronic import Resistor, WaveformVoltageSource
 
 
 def _circuit() -> Circuit:
-    """Use one shared device batch under independent scalar or vector source bias.
-
-    @tags circulax simulation
-    """
+    """Use one shared device batch under independent scalar or vector source bias."""
     return compile_circuit(
         {
             "instances": {
@@ -28,10 +25,7 @@ def _circuit() -> Circuit:
 
 
 def test_checked_dc_reports_failed_finite_estimate_in_batch() -> None:
-    """A deliberately exhausted iteration budget is failure even with finite output.
-
-    @tags circulax simulation
-    """
+    """A deliberately exhausted iteration budget is failure even with finite output."""
     circuit = _circuit()
     solution, converged = circuit.dc_checked(params={"V.dc": jnp.array([0.0, 1.0])}, max_steps=1)
     assert converged.tolist() == [True, False]
@@ -40,10 +34,7 @@ def test_checked_dc_reports_failed_finite_estimate_in_batch() -> None:
 
 
 def test_checked_dc_is_jittable_and_matches_successful_dc() -> None:
-    """Checked execution retains normal values, batching, and compiled use.
-
-    @tags circulax simulation
-    """
+    """Checked execution retains normal values, batching, and compiled use."""
     circuit = _circuit()
     values = jnp.array([-2.0, 0.0, 3.0])
     solution, converged = jax.jit(lambda bias: circuit.dc_checked(params={"V.dc": bias}))(values)

@@ -15,10 +15,7 @@ from circulax.testbench import attach_testbench
 
 @component(ports=("p1", "p2"), holomorphic=True)
 def _matched_port(signals: Signals, incident: complex = 0j, z0: float = 1.0) -> PhysicsReturn:
-    """Apply a matched shunt and incident-wave excitation without clamping.
-
-    @tags circulax simulation
-    """
+    """Apply a matched shunt and incident-wave excitation without clamping."""
     current = (signals.p1 - signals.p2) / z0 - 2 * incident / jnp.sqrt(z0)
     return {"p1": current, "p2": -current}, {}
 
@@ -29,10 +26,7 @@ def _validate_coordinates(
     amplitude_unit: str,
     z0: float,
 ) -> jax.Array:
-    """Validate the caller's declared physical optical normalization and grid.
-
-    @tags circulax simulation
-    """
+    """Validate the caller's declared physical optical normalization and grid."""
     if amplitude_unit not in {"sqrt(W)", "sqrt(mW)"}:
         msg = "Optical incident amplitude_unit must explicitly declare sqrt(W) or sqrt(mW) normalization"
         raise ValueError(msg)
@@ -47,10 +41,7 @@ def _validate_coordinates(
 
 
 def _validate_boundary(circuit: Any, selected: tuple[str, ...]) -> None:
-    """Reject internal aliases, duplicate nodes and ideal source clamps.
-
-    @tags circulax simulation
-    """
+    """Reject internal aliases, duplicate nodes and ideal source clamps."""
     if not selected or len(set(selected)) != len(selected) or not set(selected) <= set(circuit.ports):
         msg = "Wavelength scattering requires unique selected declared external ports"
         raise ValueError(msg)
@@ -85,8 +76,6 @@ def wavelength_scattering(
     Optical discipline and wave normalization are declared by the caller; no
     classification is inferred from solver dtype. For SAX optical models the
     reference is z0=1 and amplitude_unit identifies sqrt(W) or sqrt(mW).
-
-    @tags circulax simulation
     """
     selected = tuple(ports)
     _validate_boundary(circuit, selected)
@@ -122,16 +111,10 @@ def wavelength_scattering(
     guesses = jnp.zeros((count + 1, 2 * bench.sys_size))
 
     def sweep_point(previous: jax.Array, wavelength: jax.Array) -> tuple[jax.Array, jax.Array]:
-        """Maintain separate continuation guesses for baseline and each column.
-
-        @tags circulax simulation
-        """
+        """Maintain separate continuation guesses for baseline and each column."""
 
         def solve(guess: jax.Array, incident: jax.Array) -> jax.Array:
-            """Solve the DUT with fixed bias and this incident-wave column.
-
-            @tags circulax simulation
-            """
+            """Solve the DUT with fixed bias and this incident-wave column."""
             updates = {**(params or {}), wl_param: wavelength}
             updates.update({f"{fixtures[port]['name']}.incident": incident[index] for index, port in enumerate(selected)})
             return bench.dc(guess, params=updates)
