@@ -111,6 +111,18 @@ def s_to_y(S: jax.Array, z0: complex = 1.0 + 1e-12j) -> jax.Array:
     eye = jnp.eye(n, dtype=jnp.complex128)
     Sc = S.astype(jnp.complex128)
     z0c = jnp.asarray(z0, dtype=jnp.complex128)
+    if n == 2:
+        # Two-port models can export to StableHLO/IREE without a host LAPACK
+        # custom call. Preserve the Kurokawa normalization, including complex z0.
+        a, b = z0c * Sc[..., 0, 0] + jnp.conj(z0c), z0c * Sc[..., 0, 1]
+        c, d = z0c * Sc[..., 1, 0], z0c * Sc[..., 1, 1] + jnp.conj(z0c)
+        det = a * d - b * c
+        n00, n01 = 1 - Sc[..., 0, 0], -Sc[..., 0, 1]
+        n10, n11 = -Sc[..., 1, 0], 1 - Sc[..., 1, 1]
+        return jnp.stack((
+            jnp.stack(((n00 * d - n01 * c) / det, (-n00 * b + n01 * a) / det), axis=-1),
+            jnp.stack(((n10 * d - n11 * c) / det, (-n10 * b + n11 * a) / det), axis=-1),
+        ), axis=-2)
     M = z0c * Sc + jnp.conj(z0c) * eye
     return jnp.linalg.solve(M.swapaxes(-1, -2), (eye - Sc).swapaxes(-1, -2)).swapaxes(-1, -2)
 
