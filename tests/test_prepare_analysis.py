@@ -173,3 +173,18 @@ def test_sp_wavelength_bench_does_not_leak_across_rebuilt_circuits(monkeypatch: 
     _optical_two_port().sp_wavelength(**kwargs)
     _optical_two_port().sp_wavelength(**kwargs)
     assert len(compiles) == 2
+
+
+def test_prepared_native_variant_reuses_the_bench_built_by_preparation(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The selected DC variant, not just the original circuit, runs on the prepared bench."""
+    parent = _optical_two_port()
+    parent._analysis_factory = lambda _mode: _optical_two_port()  # noqa: SLF001 -- stand in for native registrations
+    compiles, _ = _counting_compile(monkeypatch)
+    kwargs = {"ports": ["a", "b"], "wavelengths": jnp.array([1.55]), "amplitude_unit": "sqrt(W)"}
+    prepared = parent.prepare_analysis("sp_wavelength", ports=["a", "b"])
+    assert prepared is not parent
+    assert len(compiles) == 1
+    prepared.sp_wavelength(**kwargs)
+    prepared.sp_wavelength(**kwargs)
+    parent.sp_wavelength(**kwargs)
+    assert len(compiles) == 1

@@ -117,6 +117,8 @@ class Circuit:
                         if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
                             msg = "OSDI analysis changed the circuit scatter layout"
                             raise ValueError(msg)
+                # Variants run the same analyses; share the matched-boundary benches built for any of them.
+                variant._wavelength_benches = self._wavelength_benches  # noqa: SLF001 -- another Circuit analysis variant
                 self._analysis_variants[analysis] = variant
         return self._analysis_variants[analysis]
 
