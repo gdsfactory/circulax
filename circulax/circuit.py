@@ -143,20 +143,20 @@ class Circuit:
         if analysis not in modes:
             msg = f"Unsupported Circulax analysis {analysis!r}"
             raise ValueError(msg)
-        if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in self.groups.values()):
-            msg = "Native OSDI harmonic balance with ABI state slots is not supported"
-            raise NotImplementedError(msg)
-        if analysis == "ac_response" and self.solver.is_complex and not _infer_holomorphic(self.groups):
-            msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
-            raise ValueError(msg)
+
+        def reject_unsupported(circuit: Circuit) -> None:
+            if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in circuit.groups.values()):
+                msg = "Native OSDI harmonic balance with ABI state slots is not supported"
+                raise NotImplementedError(msg)
+            if analysis == "ac_response" and circuit.solver.is_complex and not _infer_holomorphic(circuit.groups):
+                msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
+                raise ValueError(msg)
+
+        # Fail fast before building variants, then recheck the selected native registrations.
+        reject_unsupported(self)
         self._for_analysis("dc")
         selected = self._for_analysis(modes[analysis])
-        if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in selected.groups.values()):
-            msg = "Native OSDI harmonic balance with ABI state slots is not supported"
-            raise NotImplementedError(msg)
-        if analysis == "ac_response" and selected.solver.is_complex and not _infer_holomorphic(selected.groups):
-            msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
-            raise ValueError(msg)
+        reject_unsupported(selected)
         return selected
 
     @property
