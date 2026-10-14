@@ -147,3 +147,54 @@ def test_nonholomorphic_optical_response_reports_quadrature_limitation() -> None
     )
     with pytest.raises(ValueError, match="quadrature/sideband"):
         circuit.ac_response(freqs=jnp.array([10.0]), sources={})
+
+
+def _optical_load(*, holomorphic: bool) -> Circuit:
+    """Build a complex-mode load whose declared holomorphic flag is selectable."""
+
+    @component(ports=("p1", "p2"), holomorphic=holomorphic)
+    def load(signals: Signals) -> PhysicsReturn:
+        current = signals.p1 - signals.p2
+        return {"p1": current, "p2": -current}, {}
+
+    return compile_circuit(
+        {
+            "instances": {"load": {"component": "load"}, "GND": {"component": "ground"}},
+            "connections": {"load,p2": "GND,p1"},
+            "ports": {"out": "load,p1"},
+        },
+        {"load": load},
+        is_complex=True,
+    )
+
+
+@pytest.mark.parametrize("holomorphic", ["auto", True])
+def test_holomorphic_circuit_accepts_auto_and_true(holomorphic: object) -> None:
+    """Asserting what the component flags already say changes nothing."""
+    result = _optical_load(holomorphic=True).ac_response(freqs=jnp.array([10.0]), sources={}, holomorphic=holomorphic)
+    assert result["solution"].shape == (1, 2)
+
+
+def test_holomorphic_false_refuses_even_a_holomorphic_complex_circuit() -> None:
+    """The caller may declare a response non-holomorphic, which this interface cannot represent."""
+    with pytest.raises(ValueError, match="quadrature/sideband"):
+        _optical_load(holomorphic=True).ac_response(freqs=jnp.array([10.0]), sources={}, holomorphic=False)
+
+
+@pytest.mark.parametrize("holomorphic", ["auto", True, False])
+def test_nonholomorphic_circuit_is_refused_for_every_value(holomorphic: object) -> None:
+    """The argument can only tighten the component-flag check; True cannot relax it."""
+    with pytest.raises(ValueError, match="quadrature/sideband"):
+        _optical_load(holomorphic=False).ac_response(freqs=jnp.array([10.0]), sources={}, holomorphic=holomorphic)
+
+
+def test_holomorphic_false_does_not_affect_real_circuits() -> None:
+    """Holomorphicity is an optical-field concept; real circuits ignore it."""
+    result = _rc().ac_response(freqs=jnp.array([100.0]), sources={"V": 1.0}, holomorphic=False)
+    assert result["solution"].shape[0] == 1
+
+
+def test_unknown_holomorphic_value_is_rejected() -> None:
+    """Typos must not silently behave like auto."""
+    with pytest.raises(ValueError, match="holomorphic"):
+        _optical_load(holomorphic=True).ac_response(freqs=jnp.array([10.0]), sources={}, holomorphic="yes")

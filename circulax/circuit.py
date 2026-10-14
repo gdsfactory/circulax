@@ -681,12 +681,25 @@ class Circuit:
 
         Non-holomorphic optical response requires a quadrature/sideband result
         contract and is explicitly unsupported by this interface.
+
+        ``holomorphic`` can only tighten, never relax, that check. ``"auto"`` and ``True`` both
+        rely on the component ``holomorphic`` flags: a complex-mode circuit with any
+        non-holomorphic component is refused, because the Wirtinger solve would otherwise
+        return silently wrong answers and there is no cheap runtime guard. ``False`` declares
+        the response non-holomorphic and refuses every complex-mode circuit. Real circuits
+        ignore the argument. Other values raise ``ValueError``.
         """
+        if holomorphic not in {"auto", True, False}:
+            msg = f"holomorphic must be 'auto', True or False, got {holomorphic!r}"
+            raise ValueError(msg)
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "ac_response")
         groups = self._for_analysis("ac")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
         if self.solver.is_complex and (not _infer_holomorphic(groups) or holomorphic is False):
-            msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
+            msg = (
+                "Non-holomorphic optical AC response requires explicit quadrature/sideband observables "
+                "(the holomorphic argument can only tighten the component-flag check, not relax it)"
+            )
             raise ValueError(msg)
         rhs = jnp.zeros(self.sys_size, dtype=jnp.complex128)
         for name, amplitude in sources.items():
