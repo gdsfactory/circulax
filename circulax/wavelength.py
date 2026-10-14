@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from typing import Any
+from typing import Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -20,6 +20,13 @@ def _matched_port(signals: Signals, incident: complex = 0j, z0: float = 1.0) -> 
     return {"p1": current, "p2": -current}, {}
 
 
+def _validate_reference(z0: float) -> None:
+    """Require a finite positive reference impedance."""
+    if not np.isfinite(z0) or z0 <= 0:
+        msg = "Optical incident amplitude and reference z0 must be finite and positive"
+        raise ValueError(msg)
+
+
 def _validate_coordinates(
     wavelengths: jax.Array,
     amplitude: float,
@@ -30,9 +37,10 @@ def _validate_coordinates(
     if amplitude_unit not in {"sqrt(W)", "sqrt(mW)"}:
         msg = "Optical incident amplitude_unit must explicitly declare sqrt(W) or sqrt(mW) normalization"
         raise ValueError(msg)
-    if not np.isfinite(amplitude) or amplitude <= 0 or not np.isfinite(z0) or z0 <= 0:
+    if not np.isfinite(amplitude) or amplitude <= 0:
         msg = "Optical incident amplitude and reference z0 must be finite and positive"
         raise ValueError(msg)
+    _validate_reference(z0)
     coordinates = jnp.asarray(wavelengths)
     # Value checks need concrete numbers; a traced grid is the caller's responsibility.
     concrete = None if isinstance(wavelengths, jax.core.Tracer) else np.asarray(wavelengths)
@@ -83,27 +91,21 @@ def _check_complex_linear(response: jax.Array, rotated: jax.Array) -> None:
         raise ValueError(msg)
 
 
-def wavelength_scattering(
-    circuit: Any,
-    compile_fn: Callable,
-    *,
-    ports: Sequence[str],
-    wavelengths: jax.Array,
-    amplitude: float,
-    amplitude_unit: str,
-    params: Mapping[str, Any] | None,
-    z0: float,
-    wl_param: str,
-) -> dict[str, Any]:
-    """Run independent port excitations with wavelength continuation.
+class WavelengthBench(NamedTuple):
+    """A compiled matched-boundary bench and the excitation instance for each selected port."""
 
-    Optical discipline and wave normalization are declared by the caller; no
-    classification is inferred from solver dtype. For SAX optical models the
-    reference is z0=1 and amplitude_unit identifies sqrt(W) or sqrt(mW).
+    circuit: Any
+    fixtures: dict[str, str]
+
+
+def build_wavelength_bench(circuit: Any, compile_fn: Callable, selected: tuple[str, ...], z0: float) -> WavelengthBench:
+    """Clone the source topology, attach matched-port fixtures and compile the bench.
+
+    The bench depends only on the circuit's source topology and models, the selected
+    ports and ``z0``; parameter values are runtime inputs of the solves.
     """
-    selected = tuple(ports)
     _validate_boundary(circuit, selected)
-    coordinates = _validate_coordinates(wavelengths, amplitude, amplitude_unit, z0)
+    _validate_reference(z0)
     device = (
         kfnl.Netlist.from_dict(circuit.source_netlist.to_dict())
         if isinstance(circuit.source_netlist, kfnl.Netlist)
@@ -132,6 +134,32 @@ def wavelength_scattering(
             atol=circuit.atol,
             max_steps=circuit.max_steps,
         )
+    return WavelengthBench(bench, {port: fixture["name"] for port, fixture in fixtures.items()})
+
+
+def wavelength_scattering(
+    circuit: Any,
+    bench_for: Callable[[tuple[str, ...], float], WavelengthBench],
+    *,
+    ports: Sequence[str],
+    wavelengths: jax.Array,
+    amplitude: float,
+    amplitude_unit: str,
+    params: Mapping[str, Any] | None,
+    z0: float,
+    wl_param: str,
+) -> dict[str, Any]:
+    """Run independent port excitations with wavelength continuation.
+
+    Optical discipline and wave normalization are declared by the caller; no
+    classification is inferred from solver dtype. For SAX optical models the
+    reference is z0=1 and amplitude_unit identifies sqrt(W) or sqrt(mW).
+    ``bench_for(selected, z0)`` supplies the (cached) compiled matched-boundary bench.
+    """
+    selected = tuple(ports)
+    _validate_boundary(circuit, selected)
+    coordinates = _validate_coordinates(wavelengths, amplitude, amplitude_unit, z0)
+    bench, fixtures = bench_for(selected, z0)
     count = len(selected)
     excitations = jnp.concatenate([jnp.zeros((1, count)), amplitude * jnp.eye(count)])
     guesses = jnp.zeros((count + 1, 2 * bench.sys_size))
@@ -139,7 +167,7 @@ def wavelength_scattering(
     def solve(guess: jax.Array, incident: jax.Array, wavelength: jax.Array) -> tuple[jax.Array, jax.Array]:
         """Solve the DUT with fixed bias and this incident-wave column."""
         updates = {**(params or {}), wl_param: wavelength}
-        updates.update({f"{fixtures[port]['name']}.incident": incident[index] for index, port in enumerate(selected)})
+        updates.update({f"{fixtures[port]}.incident": incident[index] for index, port in enumerate(selected)})
         return bench.dc_checked(guess, params=updates)
 
     def sweep_point(previous: jax.Array, wavelength: jax.Array) -> tuple[jax.Array, jax.Array]:

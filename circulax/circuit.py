@@ -16,7 +16,7 @@ from circulax.netlist import _is_recursive_netlist
 from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
-from circulax.wavelength import wavelength_scattering
+from circulax.wavelength import WavelengthBench, build_wavelength_bench, wavelength_scattering
 
 if TYPE_CHECKING:
     from circulax.solvers.linear import CircuitLinearSolver
@@ -99,6 +99,7 @@ class Circuit:
         self._simparams_factory = None
         self._analysis_factory = None
         self._analysis_variants = {}
+        self._wavelength_benches: dict[tuple, WavelengthBench] = {}
 
     def _for_analysis(self, analysis: str) -> Circuit:
         """Select immutable native registrations for this analysis."""
@@ -119,7 +120,25 @@ class Circuit:
                 self._analysis_variants[analysis] = variant
         return self._analysis_variants[analysis]
 
-    def prepare_analysis(self, analysis: str) -> Circuit:
+    def _wavelength_bench(self, ports: Sequence[str], z0: float) -> WavelengthBench:
+        """Return the matched-boundary bench for these ports and z0, building it once.
+
+        Parameter values are runtime inputs of the bench solves and are not part of the key;
+        the compile settings are, so a circuit whose tolerances were changed gets a fresh bench.
+        """
+        selected = tuple(ports)
+        key = (selected, float(z0), getattr(self.solver, "g_leak", 1e-9), self.rtol, self.atol, self.max_steps)
+        if key not in self._wavelength_benches:
+            self._wavelength_benches[key] = build_wavelength_bench(self, compile_circuit, selected, float(z0))
+        return self._wavelength_benches[key]
+
+    def prepare_analysis(
+        self,
+        analysis: str,
+        *,
+        ports: Sequence[str] | None = None,
+        z0: float = 1.0,
+    ) -> Circuit:
         """Prepare immutable native registrations without solving the circuit.
 
         Return the selected DC, AC or transient registration variant. Builtin
@@ -130,6 +149,11 @@ class Circuit:
         Supported names are op, dc, sp_wavelength, ac_response, sp_frequency,
         tran and hb. Native HB state-history and non-holomorphic optical
         driven-AC limitations are rejected before simulation execution.
+
+        ``sp_wavelength`` runs on a separately compiled matched-boundary bench.
+        Pass ``ports`` (and ``z0``, default 1.0) to build and cache that bench and its
+        DC registrations now; later :meth:`sp_wavelength` calls with the same ports and
+        ``z0`` reuse it. The returned circuit is still the selected DC variant of this one.
         """
         modes = {
             "op": "dc",
@@ -157,6 +181,8 @@ class Circuit:
         self._for_analysis("dc")
         selected = self._for_analysis(modes[analysis])
         reject_unsupported(selected)
+        if analysis == "sp_wavelength" and ports is not None:
+            self._wavelength_bench(ports, z0).circuit.prepare_analysis("dc")
         return selected
 
     @property
@@ -618,11 +644,12 @@ class Circuit:
         not finite, and if a quadrature probe at the first wavelength shows the
         response is not complex-linear (a non-holomorphic model, or an amplitude
         outside the linear regime). Under jit these checks are skipped; inspect
-        ``converged`` instead. The bench inherits this circuit's ``g_leak``.
+        ``converged`` instead. The bench inherits this circuit's ``g_leak``. It is compiled once
+        per (ports, z0) and cached on this circuit; :meth:`prepare_analysis` can build it ahead.
         """
         return wavelength_scattering(
             self,
-            compile_circuit,
+            self._wavelength_bench,
             ports=ports,
             wavelengths=wavelengths,
             amplitude=amplitude,

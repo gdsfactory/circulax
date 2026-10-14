@@ -86,3 +86,90 @@ def test_unsupported_analysis_rejects_before_setup() -> None:
     """Unknown backend analyses cannot silently select a registration mode."""
     with pytest.raises(ValueError, match="analysis"):
         _native_circuit().prepare_analysis("noise")
+
+
+def _counting_compile(monkeypatch: pytest.MonkeyPatch) -> tuple[list[str], list[str]]:
+    """Count wavelength-bench compilations and native registration-factory calls."""
+    import circulax.circuit as circuit_module
+
+    compiles: list[str] = []
+    factory_modes: list[str] = []
+    real = circuit_module.compile_circuit
+
+    def counting(*args: object, **kwargs: object) -> Circuit:
+        compiles.append("compile")
+        compiled = real(*args, **kwargs)
+
+        def factory(mode: str) -> Circuit:
+            factory_modes.append(mode)
+            return real(*args, **kwargs)
+
+        compiled._analysis_factory = factory  # noqa: SLF001 -- stand in for a native registration factory
+        return compiled
+
+    monkeypatch.setattr(circuit_module, "compile_circuit", counting)
+    return compiles, factory_modes
+
+
+def _optical_two_port() -> Circuit:
+    from circulax.components.base_component import PhysicsReturn, Signals, component
+
+    @component(ports=("p1", "p2"), holomorphic=True)
+    def conductance(signals: Signals, g: float = 1.0) -> PhysicsReturn:
+        current = g * (signals.p1 - signals.p2)
+        return {"p1": current, "p2": -current}, {}
+
+    return compile_circuit(
+        {
+            "instances": {"X": {"component": "m"}, "GND": {"component": "ground"}},
+            "connections": {},
+            "ports": {"a": "X,p1", "b": "X,p2"},
+        },
+        {"m": conductance},
+        is_complex=True,
+        g_leak=0,
+    )
+
+
+def test_sp_wavelength_preparation_builds_the_bench_once_without_solving(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prepared bench and its native registrations are reused by every later sp_wavelength call."""
+    circuit = _optical_two_port()
+    compiles, factory_modes = _counting_compile(monkeypatch)
+    kwargs = {"ports": ["a", "b"], "wavelengths": jnp.array([1.55]), "amplitude_unit": "sqrt(W)"}
+    with monkeypatch.context() as patch:
+        patch.setattr(Circuit, "dc", _forbid_solve)
+        patch.setattr(Circuit, "dc_checked", _forbid_solve)
+        circuit.prepare_analysis("sp_wavelength", ports=["a", "b"], z0=1.0)
+    assert len(compiles) == 1
+    assert factory_modes == ["dc"]
+    first = circuit.sp_wavelength(**kwargs)
+    second = circuit.sp_wavelength(**kwargs)
+    assert jnp.allclose(first["s"], second["s"])
+    assert len(compiles) == 1
+    assert factory_modes == ["dc"]
+
+
+def test_sp_wavelength_bench_is_keyed_by_ports_and_z0_not_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Parameters are runtime inputs; a different port selection or z0 builds a new bench."""
+    circuit = _optical_two_port()
+    compiles, _ = _counting_compile(monkeypatch)
+    kwargs = {"wavelengths": jnp.array([1.55]), "amplitude_unit": "sqrt(W)"}
+    both = circuit.sp_wavelength(ports=["a", "b"], **kwargs)
+    shifted = circuit.sp_wavelength(ports=["a", "b"], params={"X.g": 2.0}, **kwargs)
+    assert len(compiles) == 1
+    assert not jnp.allclose(both["s"], shifted["s"])
+    circuit.sp_wavelength(ports=["a"], **kwargs)
+    assert len(compiles) == 2
+    circuit.sp_wavelength(ports=["a", "b"], z0=2.0, **kwargs)
+    assert len(compiles) == 3
+    circuit.sp_wavelength(ports=["a", "b"], z0=2.0, **kwargs)
+    assert len(compiles) == 3
+
+
+def test_sp_wavelength_bench_does_not_leak_across_rebuilt_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A newly compiled circuit owns its own bench cache."""
+    compiles, _ = _counting_compile(monkeypatch)
+    kwargs = {"ports": ["a", "b"], "wavelengths": jnp.array([1.55]), "amplitude_unit": "sqrt(W)"}
+    _optical_two_port().sp_wavelength(**kwargs)
+    _optical_two_port().sp_wavelength(**kwargs)
+    assert len(compiles) == 2
