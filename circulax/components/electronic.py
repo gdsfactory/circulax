@@ -128,7 +128,14 @@ def TransmissionLine(
 # ===========================================================================
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0) -> PhysicsReturn:
     """Step voltage source."""
     v_val = jnp.where(t >= delay, V, 0.0)
@@ -136,7 +143,14 @@ def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def SmoothPulse(
     signals: Signals,
     t: float,
@@ -151,7 +165,14 @@ def SmoothPulse(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def VoltageSourceAC(
     signals: Signals,
     t: float,
@@ -168,7 +189,14 @@ def VoltageSourceAC(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="v2", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="v2",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def PulseVoltageSource(
     signals: Signals,
     t: float,
@@ -207,7 +235,7 @@ def PulseVoltageSource(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True)
+@component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True, ac_source_stamp={"p1": -1.0, "p2": 1.0})
 def CurrentSource(signals: Signals, I: float = 0.0) -> PhysicsReturn:
     """Constant current source."""
     return {"p1": I, "p2": -I}, {}
@@ -309,7 +337,15 @@ def _source_value(
     return jnp.where(source_mode > 0, jnp.where(kind == WAVE_DC, dc, wave), source_scale * dc_value)
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="source_scale", port_aliases=_PN_ALIASES, holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="source_scale",
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def WaveformVoltageSource(
     signals: Signals,
     t: float,
@@ -357,7 +393,13 @@ def WaveformVoltageSource(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), amplitude_param="source_scale", port_aliases=_PN_ALIASES, holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    amplitude_param="source_scale",
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+    ac_source_stamp={"p1": -1.0, "p2": 1.0},
+)
 def WaveformCurrentSource(
     signals: Signals,
     t: float,

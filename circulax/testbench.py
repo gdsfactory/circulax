@@ -28,7 +28,7 @@ def _attach_testbench_kfnetlist(
     loads: dict[str, dict[str, Any]],
     gnd_list: list[str],
 ) -> kfnl.Netlist:
-    """kfnetlist-native testbench attachment."""
+    """Attach fixtures without changing the declared device boundary."""
     device_port_names = {p.name for p in device.ports}
 
     used = [*sources, *loads, *gnd_list]
@@ -63,6 +63,8 @@ def _attach_testbench_kfnetlist(
         raise ValueError(msg)
 
     nl = kfnl.Netlist()
+    for port in device.ports:
+        nl.create_port(port.name)
 
     # Copy existing instances
     for name, inst in device.instances.items():
@@ -77,6 +79,7 @@ def _attach_testbench_kfnetlist(
     source_or_load_refs: dict[str, tuple[kfnl.PortRef, kfnl.PortRef]] = {}
 
     def _add_terminator_instance(device_port: str, default_prefix: str, spec: dict[str, Any]) -> None:
+        """Add a physical fixture instance at a declared port."""
         name = spec.get("name") or f"{default_prefix}_{device_port}"
         if nl.has_instance(name):
             msg = f"Instance name '{name}' already exists in device netlist"
@@ -95,12 +98,10 @@ def _attach_testbench_kfnetlist(
     for port, spec in loads.items():
         _add_terminator_instance(port, "load", spec)
 
-    # Copy existing nets, replacing top-level NetlistPort markers with the
-    # selected source/load/GND terminations. This avoids duplicating an
-    # internal PortRef across multiple kfnetlist.Net objects.
+    # Keep each boundary marker on its original net and append the selected
+    # fixture there, avoiding duplicate internal PortRefs across nets.
     for net in device.nets:
-        refs = [m for m in net if isinstance(m, kfnl.PortRef)]
-        net_refs = list(refs)
+        net_refs = list(net)
         for member in net:
             if not isinstance(member, kfnl.NetlistPort):
                 continue
@@ -110,7 +111,7 @@ def _attach_testbench_kfnetlist(
                 ground_refs.append(return_ref)
             elif member.name in gnd_list:
                 net_refs.append(gnd_ref)
-        if len(net_refs) >= 2:
+        if net_refs:
             nl.create_net(*net_refs)
 
     if len(ground_refs) >= 2:
@@ -130,19 +131,15 @@ def attach_testbench(
     """Wrap a device netlist with sources, loads, and GND terminations.
 
     Accepts either a SAX-format dict or a ``kfnetlist.Netlist``.
-    Returns the same type as the input.
-
+    Returns the same type as the input, retaining its external port declarations
+    independently of the added source, load and ground components.
     """
     sources = sources or {}
     loads = loads or {}
     gnd_list = list(gnd or [])
 
-    # A device's own ports are still declared here (attach_testbench is the
-    # last stage that knows them — it rewrites every device port into a
-    # concrete source/load/GND connection below). An inert, unmodeled
-    # structural instance (die frame, logo, ...) must be dropped now, not
-    # after: the wrapped netlist this function returns exposes no top-level
-    # ports at all, so compile_netlist's own prune guard is a no-op on it.
+    # Drop unreachable structural instances against the device boundary before
+    # adding fixture connections, which must not make decorations reachable.
     device = prune_unreachable_instances(device)
 
     if isinstance(device, kfnl.Netlist):
@@ -179,6 +176,7 @@ def attach_testbench(
     nets.extend(device.get("nets", []))
 
     def _add_terminator(device_port: str, default_prefix: str, spec: dict[str, Any]) -> None:
+        """Connect a physical fixture without consuming the device port."""
         name = spec.get("name") or f"{default_prefix}_{device_port}"
         if name in instances:
             msg = f"Instance name '{name}' already exists in device netlist"
@@ -194,4 +192,4 @@ def attach_testbench(
     for port in gnd_list:
         nets.append({"p1": device_ports[port], "p2": "GND,p1"})
 
-    return {"instances": instances, "nets": nets}
+    return {"instances": instances, "nets": nets, "ports": dict(device_ports)}

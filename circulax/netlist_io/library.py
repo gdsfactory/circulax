@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import itertools
 import math
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +13,44 @@ from typing import Any, ClassVar
 
 from circulax.netlist_io.expressions import Scope, evaluate
 from circulax.netlist_io.syntax import NetlistError, Statement, children, parameters, parse_file
+
+
+class FileDigests:
+    """sha256 of file bytes, re-read only when ``(mtime_ns, size)`` change.
+
+    A stamp is trusted only for files unmodified for a settling period before they were
+    read, so an edit that keeps the size within one timestamp tick is still hashed.
+    Hashing reads bytes only; nothing is loaded or validated.
+    """
+
+    _SETTLE_NS = 2_000_000_000
+
+    def __init__(self) -> None:
+        """Start with no remembered stamps."""
+        self._entries: dict[Path, tuple[tuple[int, int], str]] = {}
+
+    def digest(self, path: Path) -> str | None:
+        """Return the content digest, or ``None`` when the file is missing."""
+        try:
+            status = path.stat()
+        except OSError:
+            self._entries.pop(path, None)
+            return None
+        stamp = (status.st_mtime_ns, status.st_size)
+        entry = self._entries.get(path)
+        if entry is not None and entry[0] == stamp:
+            return entry[1]
+        read_at = time.time_ns()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if read_at - status.st_mtime_ns > self._SETTLE_NS:
+            self._entries[path] = (stamp, digest)
+        else:
+            self._entries.pop(path, None)
+        return digest
+
+
+# Never reused, unlike id(), so caches keyed by it cannot alias a collected Library.
+_REVISIONS = itertools.count()
 
 
 @dataclass(frozen=True)
@@ -144,6 +185,12 @@ class Library:
         self.scope.bindings["$temp"] = temperature_c
         self.frame = _Frame(self.scope)
         self._parsed: dict[Path, list[Statement]] = {}
+        self._parsed_fingerprints: dict[Path, str] = {}
+        self._digests = FileDigests()
+        # Include search results: candidate paths in order, and how many precede the one found.
+        self._lookups: dict[tuple[Path, ...], int] = {}
+        self._sources: list[tuple[Path, str | None]] = []
+        self.revision = next(_REVISIONS)
 
     @classmethod
     def from_file(
@@ -167,12 +214,48 @@ class Library:
 
     def include(self, path: str | Path, *, section: str | None = None) -> None:
         """Add a library to the same root scope, preserving declaration order."""
-        statements = self._read(Path(path).resolve(), section, (), set())
+        source = Path(path).resolve()
+        statements = self._read(source, section, (), set())
         self._populate(self.frame, statements)
+        self._sources.append((source, section))
+
+    def with_temperature(self, temperature_c: float) -> Library:
+        """Reparse source declarations at a new temperature without mutation."""
+        if not self._sources:
+            msg = "Temperature override requires reparsable library source declarations"
+            raise ValueError(msg)
+        library = type(self)(
+            temperature_c=temperature_c,
+            include_paths=self.include_paths,
+            dialect=self.dialect,
+            statistical_mode=self.scope.statistical_mode,
+        )
+        for path, section in self._sources:
+            library.include(path, section=section)
+        return library
+
+    def inspection_sources(self) -> list[dict[str, str]]:
+        """Fingerprint actual parsed source dependencies without native loading."""
+        records = []
+        for path in sorted(self._parsed, key=str):
+            digest = self._digests.digest(path)
+            if digest is None:
+                msg = f"{path}: library source not found"
+                raise NetlistError(msg)
+            records.append({"path": str(path), "sha256": digest})
+        return records
+
+    def refreshed(self) -> Library:
+        """Reuse unchanged parsed cards or reparse edited, removed or shadowed source dependencies."""
+        unchanged = all(self._digests.digest(path) == fingerprint for path, fingerprint in self._parsed_fingerprints.items())
+        if unchanged and not any(c.is_file() for candidates, found in self._lookups.items() for c in candidates[:found]):
+            return self
+        return self.with_temperature(self.temperature_c)
 
     def _read(
         self, path: Path, section: str | None, active: tuple[Path, ...], seen: set[tuple[Path, str | None]]
     ) -> list[Statement]:
+        """Read scoped dependencies and retain their parsed content revisions."""
         if path in active:
             msg = f"include cycle: {' -> '.join(map(str, (*active, path)))}"
             raise NetlistError(msg)
@@ -180,7 +263,12 @@ class Library:
             return []
         seen.add((path, section))
         if path not in self._parsed:
+            digest = self._digests.digest(path)
+            if digest is None:
+                msg = f"{path}: library source not found"
+                raise NetlistError(msg)
             self._parsed[path] = parse_file(path, self.dialect)
+            self._parsed_fingerprints[path] = digest
         statements = self._parsed[path]
         sections = [s for s in statements if s.kind == "LibStatement"]
         if section is not None and not any(children(s.node, "Identifier")[0].text == section for s in sections):
@@ -201,10 +289,12 @@ class Library:
             if statement.kind in {"IncludeStatement", "LibInclude"}:
                 reference = children(statement.node, "StringLiteral")[0].text.strip('"')
                 candidates = [statement.path.parent / reference, *(p / reference for p in self.include_paths)]
-                path = next((p.resolve() for p in candidates if p.is_file()), None)
-                if path is None:
+                found = next((i for i, p in enumerate(candidates) if p.is_file()), None)
+                if found is None:
                     msg = f"{statement.path}: include {reference!r} not found"
                     raise NetlistError(msg)
+                path = candidates[found].resolve()
+                self._lookups[tuple(candidates[: found + 1])] = found
                 section_nodes = children(statement.node, "IncludeSection")
                 section = (
                     children(section_nodes[0], "Identifier")[0].text

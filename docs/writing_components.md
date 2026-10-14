@@ -148,6 +148,22 @@ def VoltageSourceAC(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 ```
 
+### Declaring ideal source clamps
+
+`Circuit.sp_wavelength` attaches matched boundaries to the selected ports. A port that an ideal
+voltage/field source already clamps would be silently overridden, so the analysis rejects it. The
+check cannot be inferred from the physics function: declare the clamped terminals on the decorator
+with `ideal_voltage_constraint_ports`, naming the ports whose voltage the source prescribes.
+
+```python
+@source(ports=("p1", "p2"), states=("i_src",), ideal_voltage_constraint_ports=("p1", "p2"))
+def FieldSource(signals: Signals, t: float, V: float = 1.0):
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": (signals.p1 - signals.p2) - V}, {}
+```
+
+The built-in voltage and optical field sources declare it already. A custom source that omits it
+is not detected, so wavelength characterization would replace its clamp with the matched boundary.
+
 ---
 
 ## `@Component.setup` — Deferred Initialisation

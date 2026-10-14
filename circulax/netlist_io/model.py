@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,7 +12,7 @@ from typing import Any
 import kfnetlist as kfnl
 
 from circulax.netlist_io.expressions import evaluate_source
-from circulax.netlist_io.library import Library
+from circulax.netlist_io.library import FileDigests, Library, ResolvedCircuit
 from circulax.netlist_io.osdi import build_resolved
 from circulax.netlist_io.units import convert_unit
 
@@ -36,6 +38,10 @@ class LibraryModel:
     schematic settings. Defaults use the same source units. ``expressions``
     maps library parameter names to safe expressions over converted settings.
     Unspecified defaults remain owned by the original library cards.
+
+    A ``temperature_c`` setting (degrees Celsius) selects the card temperature. It stays
+    available to ``expressions`` and ``parameter_units``/``parameter_values``, but is
+    forwarded to the library as a parameter only when ``params_map`` names it.
     """
 
     _is_circulax_library_model = True
@@ -80,7 +86,10 @@ class LibraryModel:
             "state_policy": state_policy,
             "simparams": simparams,
         }
+        # Provisioned modules per Library.revision, with the artifact signature they were built from.
         self._modules = {}
+        self._module_signatures = {}
+        self._digests = FileDigests()
         self._source = None
         self._libraries = {}
 
@@ -106,7 +115,7 @@ class LibraryModel:
         return model
 
     def _select_library(self, values: dict[str, Any]) -> Library:
-        """Resolve and cache the explicitly selected corner library.
+        """Resolve and cache the explicitly selected corner and temperature.
 
         @tags circulax-simulation
         """
@@ -114,25 +123,114 @@ class LibraryModel:
         if self._source is not None:
             path, section, sections, dialect, temperature_c, include_paths = self._source
             selected = values.pop("corner", section)
+            temperature_c = float(values.get("temperature_c", temperature_c))
             if sections and selected not in sections:
                 msg = f"unsupported corner {selected!r}; expected one of {sections!r}"
                 raise ValueError(msg)
-            if selected not in self._libraries:
-                self._libraries[selected] = Library.from_file(
+            key = (selected, temperature_c)
+            if key not in self._libraries:
+                self._libraries[key] = Library.from_file(
                     path,
                     section=selected,
                     dialect=dialect,
                     temperature_c=temperature_c,
                     include_paths=include_paths,
                 )
-            library = self._libraries[selected]
+            library = self._refresh_cached_library(key)
+        elif library is not None:
+            previous = library
+            library = library.refreshed()
+            if library is not previous:
+                self._drop_modules(previous)
+                self.library = library
+            temperature_c = float(values.get("temperature_c", library.temperature_c))
+            if temperature_c != library.temperature_c:
+                key = (None, temperature_c)
+                if key not in self._libraries:
+                    self._libraries[key] = library.with_temperature(temperature_c)
+                library = self._refresh_cached_library(key)
         if library is None:
             msg = "LibraryModel requires a library or file registration"
             raise ValueError(msg)
         return library
 
-    def instantiate(self, settings: Mapping[str, Any] | None = None) -> NetlistDefinition:
-        """Evaluate this instance's cards and retain reusable native models.
+    def _drop_modules(self, library: Library) -> None:
+        self._modules.pop(library.revision, None)
+        self._module_signatures.pop(library.revision, None)
+
+    def _artifact_signature(self, resolved: ResolvedCircuit) -> tuple[tuple[Path, str | None], ...]:
+        """Digest every native artifact candidate the provisioning step may select.
+
+        Covers explicit modules and each load's search candidates (including their ``.va``
+        sources), so a rebuilt, removed or newly shadowing file changes the signature.
+        Bytes are hashed only; nothing is loaded or ABI-validated.
+        """
+        paths = [Path(path).resolve() for path in self.options["osdi_modules"]]
+        for reference, directory in resolved.loads:
+            candidates = [directory / reference, *(Path(p) / reference for p in self.options["module_paths"])]
+            paths += [p.resolve() for p in (*candidates, *(c.with_suffix(".va") for c in candidates if c.suffix == ".osdi"))]
+        return tuple((path, self._digests.digest(path)) for path in dict.fromkeys(paths))
+
+    def _refresh_cached_library(self, key: tuple[str | None, float]) -> Library:
+        """Refresh source-dependent parsed cards and their provisioning cache."""
+        previous = self._libraries[key]
+        library = previous.refreshed()
+        if library is not previous:
+            self._drop_modules(previous)
+            self._libraries[key] = library
+        return library
+
+    def inspection_identity(self, settings: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """Return deterministic read-only provenance and resolved topology.
+
+        Source/include contents and available native artifact bytes contribute
+        to the fingerprint. Native artifacts are not loaded or ABI-validated;
+        this identity does not establish backend readiness.
+        """
+        resolved = self.resolve(settings)
+        library = self._select_library({**self.defaults, **(settings or {})})
+        artifacts = {Path(path).resolve() for path in self.options["osdi_modules"]}
+        artifacts.update(Path(path).resolve() for _, path in resolved.loads)
+        artifacts.update(Path(path).resolve() for path, _ in self._modules.get(library.revision, {}).values())
+        native: list[dict[str, Any]] = []
+        for path in sorted(artifacts, key=str):
+            record: dict[str, Any] = {"path": str(path)}
+            if path.is_file():
+                record["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+            else:
+                record["missing"] = True
+            native.append(record)
+        identity = {
+            "sources": library.inspection_sources(),
+            "native_artifacts": native,
+            "resolved": {
+                "ports": dict(resolved.ports),
+                "temperature_c": resolved.temperature_c,
+                "corner": {**self.defaults, **(settings or {})}.get(
+                    "corner", self._source[1] if self._source is not None else None
+                ),
+                "instances": [
+                    {
+                        "name": instance.name,
+                        "module": instance.module,
+                        "nodes": list(instance.nodes),
+                        "parameters": dict(instance.parameters),
+                    }
+                    for instance in resolved.instances
+                ],
+                "loads": [{"name": name, "path": str(path)} for name, path in resolved.loads],
+            },
+        }
+        identity["fingerprint"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return identity
+
+    def resolve(self, settings: Mapping[str, Any] | None = None) -> ResolvedCircuit:
+        """Evaluate settings and cards without building or provisioning models.
+
+        Returns ordered electrical leaf topology and public terminal aliases
+        using the same corner, unit and expression bindings as execution.
+        Source files may be parsed and cached; no native model, compiler or
+        simulator is loaded or executed by this operation.
 
         @tags circulax-simulation
         """
@@ -150,7 +248,7 @@ class LibraryModel:
         mapped = {
             self.params_map.get(name, name): value
             for name, value in values.items()
-            if not self.expressions or name in self.params_map
+            if name in self.params_map or (not self.expressions and name != "temperature_c")
         }
         mapped.update({name: evaluate_source(expression, values) for name, expression in self.expressions.items()})
         resolved = library.instantiate(self.subcircuit, settings=mapped)
@@ -162,11 +260,15 @@ class LibraryModel:
             ports = {name: node for name, node in resolved.ports.items() if name not in self.port_map.values()}
             ports.update({alias: resolved.ports[terminal] for alias, terminal in self.port_map.items()})
             resolved.ports = ports
-        netlist, models, modules = build_resolved(
-            resolved,
-            **self.options,
-            modules=self._modules.get(id(library)),
-            expose_internal_nodes=False,
-        )
-        self._modules[id(library)] = modules
+        return resolved
+
+    def instantiate(self, settings: Mapping[str, Any] | None = None) -> NetlistDefinition:
+        """Build the resolved topology and retain reusable native models."""
+        resolved = self.resolve(settings)
+        library = self._select_library({**self.defaults, **(settings or {})})
+        signature = self._artifact_signature(resolved)
+        cached = self._modules.get(library.revision) if self._module_signatures.get(library.revision) == signature else None
+        netlist, models, modules = build_resolved(resolved, **self.options, modules=cached, expose_internal_nodes=False)
+        self._modules[library.revision] = modules
+        self._module_signatures[library.revision] = signature
         return NetlistDefinition(netlist, models)

@@ -13,8 +13,10 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.netlist import _is_recursive_netlist
+from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
+from circulax.wavelength import WavelengthBench, build_wavelength_bench, wavelength_scattering
 
 if TYPE_CHECKING:
     from circulax.solvers.linear import CircuitLinearSolver
@@ -97,6 +99,7 @@ class Circuit:
         self._simparams_factory = None
         self._analysis_factory = None
         self._analysis_variants = {}
+        self._wavelength_benches: dict[tuple, WavelengthBench] = {}
 
     def _for_analysis(self, analysis: str) -> Circuit:
         """Select immutable native registrations for this analysis."""
@@ -114,8 +117,75 @@ class Circuit:
                         if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
                             msg = "OSDI analysis changed the circuit scatter layout"
                             raise ValueError(msg)
+                # Variants run the same analyses; share the matched-boundary benches built for any of them.
+                variant._wavelength_benches = self._wavelength_benches  # noqa: SLF001 -- another Circuit analysis variant
                 self._analysis_variants[analysis] = variant
         return self._analysis_variants[analysis]
+
+    def _wavelength_bench(self, ports: Sequence[str], z0: float) -> WavelengthBench:
+        """Return the matched-boundary bench for these ports and z0, building it once.
+
+        Parameter values are runtime inputs of the bench solves and are not part of the key;
+        the compile settings are, so a circuit whose tolerances were changed gets a fresh bench.
+        """
+        selected = tuple(ports)
+        key = (selected, float(z0), getattr(self.solver, "g_leak", 1e-9), self.rtol, self.atol, self.max_steps)
+        if key not in self._wavelength_benches:
+            self._wavelength_benches[key] = build_wavelength_bench(self, compile_circuit, selected, float(z0))
+        return self._wavelength_benches[key]
+
+    def prepare_analysis(
+        self,
+        analysis: str,
+        *,
+        ports: Sequence[str] | None = None,
+        z0: float = 1.0,
+    ) -> Circuit:
+        """Prepare immutable native registrations without solving the circuit.
+
+        Return the selected DC, AC or transient registration variant. Builtin
+        circuits return themselves. The original circuit caches required
+        variants so callers may retain it for later execution. DC bias setup is
+        also prepared for AC, transient and HB, without calculating that bias.
+
+        Supported names are op, dc, sp_wavelength, ac_response, sp_frequency,
+        tran and hb. Native HB state-history and non-holomorphic optical
+        driven-AC limitations are rejected before simulation execution.
+
+        ``sp_wavelength`` runs on a separately compiled matched-boundary bench.
+        Pass ``ports`` (and ``z0``, default 1.0) to build and cache that bench and its
+        DC registrations now; later :meth:`sp_wavelength` calls with the same ports and
+        ``z0`` reuse it. The returned circuit is still the selected DC variant of this one.
+        """
+        modes = {
+            "op": "dc",
+            "dc": "dc",
+            "sp_wavelength": "dc",
+            "ac_response": "ac",
+            "sp_frequency": "ac",
+            "tran": "tran",
+            "hb": "tran",
+        }
+        if analysis not in modes:
+            msg = f"Unsupported Circulax analysis {analysis!r}"
+            raise ValueError(msg)
+
+        def reject_unsupported(circuit: Circuit) -> None:
+            if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in circuit.groups.values()):
+                msg = "Native OSDI harmonic balance with ABI state slots is not supported"
+                raise NotImplementedError(msg)
+            if analysis == "ac_response" and circuit.solver.is_complex and not _infer_holomorphic(circuit.groups):
+                msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
+                raise ValueError(msg)
+
+        # Fail fast before building variants, then recheck the selected native registrations.
+        reject_unsupported(self)
+        self._for_analysis("dc")
+        selected = self._for_analysis(modes[analysis])
+        reject_unsupported(selected)
+        if analysis == "sp_wavelength" and ports is not None:
+            self._wavelength_bench(ports, z0).circuit.prepare_analysis("dc")
+        return selected
 
     @property
     def ports(self) -> tuple[str, ...]:
@@ -330,6 +400,39 @@ class Circuit:
 
         return self._batched_solve(params, param_updates, solve_fn)
 
+    def dc_checked(
+        self,
+        y_guess: jax.Array | None = None,
+        *,
+        params: dict[str, Any] | None = None,
+        rtol: float | None = None,
+        atol: float | None = None,
+        max_steps: int | None = None,
+        **param_updates: Any,
+    ) -> tuple[jax.Array, jax.Array]:
+        """Return the DC solution and the solver's explicit convergence flag.
+
+        Scalar parameters return a scalar boolean; array parameters use the
+        same shared native registrations and vmap batching as dc, returning
+        one boolean per leading batch point. Failed estimates can be finite;
+        callers must use this flag rather than infer success from sample values.
+        Both results remain JAX arrays and can be consumed inside jit.
+        """
+        dc_circuit = self._for_analysis("dc")
+        if dc_circuit is not self:
+            return dc_circuit.dc_checked(y_guess=y_guess, params=params, rtol=rtol, atol=atol, max_steps=max_steps, **param_updates)
+        rtol = self.rtol if rtol is None else rtol
+        atol = self.atol if atol is None else atol
+        max_steps = self.max_steps if max_steps is None else max_steps
+        if y_guess is None:
+            y_guess = self._zero_guess()
+
+        def solve_fn(groups: dict) -> tuple[jax.Array, jax.Array]:
+            """Retain native convergence evidence for each batched solve."""
+            return self.solver.solve_dc_checked(groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
+
+        return self._batched_solve(params, param_updates, solve_fn)
+
     def check_sax_compatibility(self) -> bool:
         """Return True if this circuit can be represented as a pure SAX S-parameter network.
 
@@ -518,6 +621,115 @@ class Circuit:
             dc_groups=dc_groups,
         )
         return run_ac(y_dc, jnp.asarray(freqs))
+
+    def sp_wavelength(
+        self,
+        *,
+        ports: Sequence[str],
+        wavelengths: jax.Array,
+        amplitude_unit: str,
+        amplitude: float = 1e-4,
+        params: Mapping[str, Any] | None = None,
+        z0: float = 1.0,
+        wl_param: str = "wl",
+    ) -> dict[str, Any]:
+        """Characterize declared optical ports with normalized low-power DC waves.
+
+        The caller declares optical discipline and field power normalization;
+        z0=1 is the SAX optical reference. Temporary matching and excitation
+        preserve physical DUT sources, loads and electrical bias. Independent
+        input columns and their zero-incident baseline use scan continuation
+        over wavelength. ``s`` has shape (wavelength, output_port, input_port).
+
+        ``converged`` has shape (wavelength, 1 + len(ports)): the baseline and each
+        excitation. Concrete results raise if any solve failed to converge or is
+        not finite, and if a quadrature probe at the first wavelength shows the
+        response is not complex-linear (a non-holomorphic model, or an amplitude
+        outside the linear regime). Under jit these checks are skipped; inspect
+        ``converged`` instead. The bench inherits this circuit's ``g_leak``. It is compiled once
+        per (ports, z0) and cached on this circuit; :meth:`prepare_analysis` can build it ahead.
+        """
+        return wavelength_scattering(
+            self,
+            self._wavelength_bench,
+            ports=ports,
+            wavelengths=wavelengths,
+            amplitude=amplitude,
+            amplitude_unit=amplitude_unit,
+            params=params,
+            z0=z0,
+            wl_param=wl_param,
+        )
+
+    def ac_response(
+        self,
+        *,
+        freqs: jax.Array,
+        sources: Mapping[str, complex],
+        y_dc: jax.Array | None = None,
+        params: dict[str, Any] | None = None,
+        holomorphic: bool | str = "auto",
+        **param_updates: Any,
+    ) -> dict[str, Any]:
+        """Return physical small-signal response to independent source phasors.
+
+        ``sources`` maps source instance names to complex peak amplitudes in
+        their physical source units. Unspecified sources have zero AC drive;
+        DC bias and schematic waveforms remain unchanged. No matching loads
+        or scattering normalization are added, and no external ports are needed.
+        ``solution`` has shape ``(len(freqs), sys_size)`` with complex physical
+        unknowns; ``port_map`` retains node and state aliases. Parameter batching
+        is available through external JAX vmap, as for scattering analysis.
+
+        Non-holomorphic optical response requires a quadrature/sideband result
+        contract and is explicitly unsupported by this interface.
+
+        ``holomorphic`` can only tighten, never relax, that check. ``"auto"`` and ``True`` both
+        rely on the component ``holomorphic`` flags: a complex-mode circuit with any
+        non-holomorphic component is refused, because the Wirtinger solve would otherwise
+        return silently wrong answers and there is no cheap runtime guard. ``False`` declares
+        the response non-holomorphic and refuses every complex-mode circuit. Real circuits
+        ignore the argument. Other values raise ``ValueError``.
+        """
+        if holomorphic not in {"auto", True, False}:
+            msg = f"holomorphic must be 'auto', True or False, got {holomorphic!r}"
+            raise ValueError(msg)
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._require_scalar_params(updates, "ac_response")
+        groups = self._for_analysis("ac")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+        if self.solver.is_complex and (not _infer_holomorphic(groups) or holomorphic is False):
+            msg = (
+                "Non-holomorphic optical AC response requires explicit quadrature/sideband observables "
+                "(the holomorphic argument can only tighten the component-flag check, not relax it)"
+            )
+            raise ValueError(msg)
+        rhs = jnp.zeros(self.sys_size, dtype=jnp.complex128)
+        for name, amplitude in sources.items():
+            matches = [group for group in groups.values() if name in (getattr(group, "index_map", None) or {})]
+            if len(matches) != 1 or not getattr(matches[0], "ac_source_stamp", ()):
+                msg = f"AC source '{name}' must identify one instance with an independent-source excitation stamp"
+                raise ValueError(msg)
+            value = jnp.asarray(amplitude)
+            if value.ndim != 0:
+                msg = f"AC source '{name}' needs a scalar phasor; use jax.vmap for batches"
+                raise ValueError(msg)
+            group = matches[0]
+            instance = group.index_map[name]
+            for local_row, coefficient in group.ac_source_stamp:
+                rhs = rhs.at[group.eq_indices[instance, local_row]].add(coefficient * value)
+        if y_dc is None:
+            y_dc = self.dc(params=updates)
+        dc_groups = (
+            self._for_analysis("dc")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+            if self._analysis_factory is not None
+            else None
+        )
+        frequencies = jnp.asarray(freqs)
+        if frequencies.ndim != 1:
+            msg = "AC response frequencies must be a one-dimensional array"
+            raise ValueError(msg)
+        run = setup_ac_response(groups, self.sys_size, is_complex=self.solver.is_complex, dc_groups=dc_groups)
+        return {"freqs": frequencies, "y_dc": y_dc, "solution": run(y_dc, frequencies, rhs), "port_map": dict(self.port_map)}
 
     def ac(
         self,
