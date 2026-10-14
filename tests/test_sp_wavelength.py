@@ -6,10 +6,11 @@ import pytest
 import sax
 
 from circulax import Circuit, compile_circuit
-from circulax.components.base_component import PhysicsReturn, Signals, component
+from circulax.components.base_component import PhysicsReturn, Signals, component, source
 from circulax.components.electronic import Resistor, VoltageSource
 from circulax.components.photonic import OpticalSource
 from circulax.netlist import sax_to_kfnetlist
+from circulax.wavelength import _validate_boundary
 
 
 def _optical(wl: float = 1.55) -> sax.SDict:
@@ -111,6 +112,43 @@ def test_ideal_source_clamp_is_rejected_without_removing_source() -> None:
     with pytest.raises(ValueError, match=r"ideal.*constraint"):
         circuit.sp_wavelength(ports=["in", "out"], wavelengths=jnp.array([1.55]), amplitude_unit="sqrt(W)")
     assert "laser" in circuit.source_netlist["instances"]
+
+
+def _custom_clamp_circuit(*, declared: bool) -> Circuit:
+    """Clamp port ``a`` with a user-defined ideal source that may declare its constrained terminals."""
+
+    @source(
+        ports=("p1", "p2"),
+        states=("i_src",),
+        holomorphic=True,
+        ideal_voltage_constraint_ports=("p1", "p2") if declared else (),
+    )
+    def field_source(signals: Signals, t: float, V: float = 1e-6) -> PhysicsReturn:  # noqa: ARG001 -- source signature carries time
+        return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": (signals.p1 - signals.p2) - V}, {}
+
+    return compile_circuit(
+        {
+            "instances": {
+                "X": {"component": "m", "settings": {"g": 1.0}},
+                "E": {"component": "field_source"},
+                "GND": {"component": "ground"},
+            },
+            "connections": {"E,p1": "X,p1", "GND,p1": "E,p2"},
+            "ports": {"a": "X,p1", "b": "X,p2"},
+        },
+        {"m": _series_conductance, "field_source": field_source},
+        is_complex=True,
+        g_leak=1e-9,
+    )
+
+
+def test_custom_ideal_source_declares_its_clamp_through_the_decorator() -> None:
+    """A user-defined source is rejected only because it declares ideal_voltage_constraint_ports."""
+    declared = _custom_clamp_circuit(declared=True)
+    with pytest.raises(ValueError, match=r"ideal.*constraint"):
+        declared.sp_wavelength(ports=["a", "b"], wavelengths=jnp.array([1.55]), amplitude_unit="sqrt(W)")
+    # Clamps are never inferred from the physics: an undeclared source is not detected.
+    _validate_boundary(_custom_clamp_circuit(declared=False), ("a", "b"))
 
 
 def test_electrical_bias_controls_optical_characterization() -> None:
