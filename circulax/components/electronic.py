@@ -1,5 +1,10 @@
 """Electronic components."""
 
+from collections.abc import Sequence
+from functools import wraps
+from typing import Any
+
+import jax
 import jax.nn as jnn
 import jax.numpy as jnp
 
@@ -35,6 +40,52 @@ def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
     """V = L * di/dt formulated via flux: f['i_L'] = V, q['i_L'] = -L*i_L."""
     v_drop = signals.p1 - signals.p2
     return ({"p1": signals.i_L, "p2": -signals.i_L, "i_L": v_drop}, {"i_L": -L * signals.i_L})
+
+
+@component(
+    ports=("p1", "p2", "s1", "s2"),
+    states=("i1", "i2"),
+    port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
+    holomorphic=True,
+)
+def CoupledInductors(signals: Signals, L1: float = 1e-9, L2: float = 1e-9, k: float = 0.5) -> PhysicsReturn:
+    """Two magnetically coupled inductors with ``M = k * sqrt(L1 * L2)``.
+
+    Dots are on ``p1`` and ``s1``; currents are positive into the dotted
+    terminals. The parameters should satisfy ``L1, L2 > 0`` and ``|k| <= 1``.
+    At ``k = 0`` the windings are independent. For ``|k| = 1`` the inductance
+    matrix is singular.
+    """
+    m = k * jnp.sqrt(L1 * L2)
+    v1 = signals.p1 - signals.p2
+    v2 = signals.s1 - signals.s2
+    return (
+        {"p1": signals.i1, "p2": -signals.i1, "s1": signals.i2, "s2": -signals.i2, "i1": v1, "i2": v2},
+        {"i1": -(L1 * signals.i1 + m * signals.i2), "i2": -(m * signals.i1 + L2 * signals.i2)},
+    )
+
+
+@component(
+    ports=("p1", "p2", "s1", "s2"),
+    states=("i_p",),
+    port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
+    holomorphic=True,
+)
+def IdealTransformer(signals: Signals, n: float = 1.0) -> PhysicsReturn:
+    """Ideal transformer with turns ratio ``n = N1 / N2`` (``n > 0``).
+
+    Dots are on ``p1`` and ``s1``. It passes DC; add a magnetizing inductor
+    across the primary to model low-frequency roll-off.
+    """
+    v1 = signals.p1 - signals.p2
+    v2 = signals.s1 - signals.s2
+    return {
+        "p1": signals.i_p,
+        "p2": -signals.i_p,
+        "s1": -n * signals.i_p,
+        "s2": n * signals.i_p,
+        "i_p": v1 - n * v2,
+    }, {}
 
 
 @component(
@@ -77,7 +128,14 @@ def TransmissionLine(
 # ===========================================================================
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0) -> PhysicsReturn:
     """Step voltage source."""
     v_val = jnp.where(t >= delay, V, 0.0)
@@ -85,7 +143,14 @@ def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def SmoothPulse(
     signals: Signals,
     t: float,
@@ -100,7 +165,14 @@ def SmoothPulse(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="V", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="V",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def VoltageSourceAC(
     signals: Signals,
     t: float,
@@ -117,7 +189,14 @@ def VoltageSourceAC(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@source(ports=("p1", "p2"), states=("i_src",), amplitude_param="v2", holomorphic=True)
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="v2",
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
 def PulseVoltageSource(
     signals: Signals,
     t: float,
@@ -156,10 +235,228 @@ def PulseVoltageSource(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True)
+@component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True, ac_source_stamp={"p1": -1.0, "p2": 1.0})
 def CurrentSource(signals: Signals, I: float = 0.0) -> PhysicsReturn:
     """Constant current source."""
     return {"p1": I, "p2": -I}, {}
+
+
+# ---------------------------------------------------------------------------
+# Unified waveform sources: DC bias + SIN / PULSE / PWL
+# ---------------------------------------------------------------------------
+
+#: Numeric waveform codes for the ``kind`` field. A traced number rather than a
+#: static string, so instances of different kinds share one batched group.
+WAVE_DC = 0.0
+WAVE_SIN = 1.0
+WAVE_PULSE = 2.0
+WAVE_PWL = 3.0
+
+_TINY = 1e-30  # keep inactive branches finite during JAX differentiation
+
+
+def waveform_value(
+    t: float,
+    *,
+    kind: float,
+    delay: float,
+    offset: float,
+    amplitude: float,
+    freq: float,
+    damping: float,
+    phase: float,
+    v1: float,
+    v2: float,
+    tr: float,
+    tf: float,
+    pw: float,
+    per: float,
+    pwl_t: Sequence[float],
+    pwl_v: Sequence[float],
+    repeat: float,
+    tstep: float = 1e-9,
+    tstop: float = 1.0,
+) -> jax.Array:
+    """Evaluate a SPICE transient waveform, including its time-zero value.
+
+    Zero or omitted SIN frequency and PULSE edge times, width and period use
+    the supplied analysis settings. DC overrides are handled by the source's
+    analysis mode, independently of this time-domain evaluation.
+    """
+    # DC needs only the time-zero value and may have no transient settings yet.
+    # Finite placeholders avoid singular derivatives in inactive branches,
+    # including float32; transient/HB bind the actual settings before evaluation.
+    tstep = jnp.where(tstep > 0, tstep, 1.0)
+    tstop = jnp.where(tstop > 0, tstop, 1.0)
+    freq = jnp.where(freq > 0, freq, 1.0 / tstop)
+    tr = jnp.where(tr > 0, tr, tstep)
+    tf = jnp.where(tf > 0, tf, tstep)
+    pw = jnp.where(pw > 0, pw, tstop)
+    per = jnp.where(per > 0, per, tstop)
+    x = t - delay  # time since waveform start; <= 0 holds the initial value
+
+    # SIN: before ``delay`` hold offset + amplitude * sin(phase).
+    xs = jnp.where(x > 0, x, 0.0)
+    v_sin = offset + amplitude * jnp.exp(-xs * damping) * jnp.sin(2.0 * jnp.pi * freq * xs + phase)
+
+    # PULSE: v1 before delay, then periodic linear rise/hold/fall.
+    periodic = (per > 0) & (x > per)
+    xp = jnp.where(periodic, jnp.mod(x, jnp.where(per > 0, per, 1.0)), x)
+    rise = jnp.clip(xp / jnp.maximum(tr, _TINY), 0.0, 1.0)
+    fall = jnp.clip((xp - tr - pw) / jnp.maximum(tf, _TINY), 0.0, 1.0)
+    v_pulse = v1 + (v2 - v1) * (rise - fall)
+
+    # PWL: hold the first value before the first point and the last value after
+    # the last. ``repeat >= 0`` loops the segment [repeat, t_last) forever.
+    xp_t = jnp.asarray(pwl_t)
+    xp_v = jnp.asarray(pwl_v)
+    if xp_t.shape[0] == 1:
+        xp_t, xp_v = jnp.concatenate([xp_t, xp_t]), jnp.concatenate([xp_v, xp_v])
+    t_last = xp_t[-1]
+    looping = (repeat >= 0) & (repeat < t_last) & (x > t_last)
+    xw = jnp.where(looping, repeat + jnp.mod(x - repeat, jnp.where(looping, t_last - repeat, 1.0)), x)
+    v_pwl = jnp.interp(xw, xp_t, xp_v)
+
+    wave = jnp.select([kind == WAVE_SIN, kind == WAVE_PULSE, kind == WAVE_PWL], [v_sin, v_pulse, v_pwl], default=0.0)
+    return wave
+
+
+def _source_value(
+    t: float,
+    *,
+    kind: float,
+    dc: float,
+    dc_given: float,
+    source_mode: float,
+    source_scale: float,
+    **settings: float | Sequence[float],
+) -> jax.Array:
+    """Select DC or waveform physics without treating time zero as a mode."""
+    wave = waveform_value(jnp.where(source_mode > 0, t, 0.0), kind=kind, **settings)
+    dc_value = jnp.where((dc_given > 0) | (kind == WAVE_DC), dc, wave)
+    return jnp.where(source_mode > 0, jnp.where(kind == WAVE_DC, dc, wave), source_scale * dc_value)
+
+
+@source(
+    ports=("p1", "p2"),
+    states=("i_src",),
+    amplitude_param="source_scale",
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+    ac_source_stamp={"i_src": 1.0},
+    ideal_voltage_constraint_ports=("p1", "p2"),
+)
+def WaveformVoltageSource(
+    signals: Signals,
+    t: float,
+    kind: float = WAVE_DC,
+    dc: float = 0.0,
+    dc_given: float = 0.0,
+    source_mode: float = 0.0,
+    source_scale: float = 1.0,
+    tstep: float = 0.0,
+    tstop: float = 0.0,
+    delay: float = 0.0,
+    offset: float = 0.0,
+    amplitude: float = 0.0,
+    freq: float = 0.0,
+    damping: float = 0.0,
+    phase: float = 0.0,
+    v1: float = 0.0,
+    v2: float = 0.0,
+    tr: float = 0.0,
+    tf: float = 0.0,
+    pw: float = 0.0,
+    per: float = 0.0,
+    pwl_t: tuple = (0.0, 0.0),
+    pwl_v: tuple = (0.0, 0.0),
+    repeat: float = -1.0,
+) -> PhysicsReturn:
+    """SPICE voltage source with optional DC override and SIN/PULSE/PWL waveform.
+
+    An explicit ``dc`` overrides the operating point only. Otherwise the DC
+    value is the waveform's time-zero value. Transient and harmonic balance
+    always evaluate the waveform, including at zero. ``tstep`` and ``tstop``
+    supply SPICE defaults; the solvers set them from the analysis.
+
+    ``source_mode`` is 0 for DC and 1 for waveform evaluation. Source stepping
+    scales the complete DC value through ``source_scale``. ``dc_given`` records
+    whether ``dc`` was supplied, including an explicit zero; constructors and
+    ``parse_source`` set it automatically.
+    """
+    v_val = _source_value(
+        t, kind=kind, dc=dc, dc_given=dc_given, source_mode=source_mode, source_scale=source_scale,
+        tstep=tstep, tstop=tstop, delay=delay, offset=offset, amplitude=amplitude, freq=freq, damping=damping, phase=phase,
+        v1=v1, v2=v2, tr=tr, tf=tf, pw=pw, per=per, pwl_t=pwl_t, pwl_v=pwl_v, repeat=repeat,
+    )  # fmt: skip
+    constraint = (signals.p1 - signals.p2) - v_val
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
+
+
+@source(
+    ports=("p1", "p2"),
+    amplitude_param="source_scale",
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+    ac_source_stamp={"p1": -1.0, "p2": 1.0},
+)
+def WaveformCurrentSource(
+    signals: Signals,
+    t: float,
+    kind: float = WAVE_DC,
+    dc: float = 0.0,
+    dc_given: float = 0.0,
+    source_mode: float = 0.0,
+    source_scale: float = 1.0,
+    tstep: float = 0.0,
+    tstop: float = 0.0,
+    delay: float = 0.0,
+    offset: float = 0.0,
+    amplitude: float = 0.0,
+    freq: float = 0.0,
+    damping: float = 0.0,
+    phase: float = 0.0,
+    v1: float = 0.0,
+    v2: float = 0.0,
+    tr: float = 0.0,
+    tf: float = 0.0,
+    pw: float = 0.0,
+    per: float = 0.0,
+    pwl_t: tuple = (0.0, 0.0),
+    pwl_v: tuple = (0.0, 0.0),
+    repeat: float = -1.0,
+) -> PhysicsReturn:
+    """Independent current source with a DC bias and a SIN, PULSE or PWL transient waveform.
+
+    Same parameters and contract as :class:`WaveformVoltageSource`, with the
+    waveform value interpreted as a current (``v1``/``v2``/``offset``/``amplitude``
+    in amperes). Sign convention matches :func:`CurrentSource`: the value leaves
+    ``p1`` and enters ``p2`` through the source.
+    """
+    i_val = _source_value(
+        t, kind=kind, dc=dc, dc_given=dc_given, source_mode=source_mode, source_scale=source_scale,
+        tstep=tstep, tstop=tstop, delay=delay, offset=offset, amplitude=amplitude, freq=freq, damping=damping, phase=phase,
+        v1=v1, v2=v2, tr=tr, tf=tf, pw=pw, per=per, pwl_t=pwl_t, pwl_v=pwl_v, repeat=repeat,
+    )  # fmt: skip
+    return {"p1": i_val, "p2": -i_val}, {}
+
+
+def _remember_dc_override(cls: type) -> None:
+    """Keep a numeric DC-presence flag so explicit zero still batches normally."""
+    original_init = cls.__init__
+
+    @wraps(original_init)
+    def initialize(self: Any, *args: Any, **kwargs: Any) -> None:
+        if "dc_given" not in kwargs and ("dc" in kwargs or len(args) == 2):
+            kwargs["dc_given"] = 1.0
+        original_init(self, *args, **kwargs)
+
+    cls.__init__ = initialize
+    cls._is_spice_source = True
+
+
+_remember_dc_override(WaveformVoltageSource)
+_remember_dc_override(WaveformCurrentSource)
 
 
 # ===========================================================================

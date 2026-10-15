@@ -1,0 +1,83 @@
+{
+  "ihp": {
+    "url": "https://github.com/gdsfactory/IHP.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "fee0b94b051d822737d959f2b7ae049db533f217",
+      "requested_revision": "fix/vacask-common-declarations"
+    }
+  },
+  "vacask_bin": "0.3.3.dev2",
+  "compiler": {
+    "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/envs/ihp-parity/lib/python3.12/site-packages/vacask_bin/data/bin/openvaf-r",
+    "sha256": "ad69c299b0786263489af76c8e2a6079c10ecb8f393b1967d7d61f0e0a6fb0f3"
+  },
+  "simulator": {
+    "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/envs/ihp-parity/lib/python3.12/site-packages/vacask_bin/data/bin/vacask",
+    "sha256": "20f035c262e90a4fadb85c80d5232133683034544eda71667ad8af652b0fadce"
+  },
+  "ngspice": {
+    "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/ihp-parity/toolchain/ngspice/install/bin/ngspice",
+    "sha256": "f1d8d8b62008cb8a3757c47e1ea5df6b9dd1928f26437b3594c2a73b765fbb4a"
+  },
+  "ngspice_revision": "724dc77b9153dc75eaec474b1f7a44f1fcf5f362",
+  "modules": [
+    {
+      "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/ihp-parity/osdi-cache/psp103-96ac17e0d1c39f60201c4ad9fe92abcf289669aabde8a8a30b69cb127a4d753c.osdi",
+      "sha256": "dface8ff3c72173e53ad6ee249e1a37ac49efd0b9c74013de20bf88b1e5faf0a"
+    },
+    {
+      "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/ihp-parity/osdi-cache/psp103_nqs-40a1316d930c9ea85a92fde8a44442dd81ae385a2d74fc83f077060972e529db.osdi",
+      "sha256": "046bec9593dfd61fef6f3f171a71eddf67f424ca03c723da5c6b59df9176fd4a"
+    },
+    {
+      "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/ihp-parity/osdi-cache/r3_cmc-df3025c9296df0bbab5d3e870b4c490aabd60c40cb83a0f24b9cbef77d09dc37.osdi",
+      "sha256": "eefbb75e625ca6bea4dca00066ec4a48a6db236d5dc501739adfe6a9136cf892"
+    },
+    {
+      "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/envs/ihp-parity/lib/python3.12/site-packages/vacask_bin/data/lib/vacask/mod/spice/resistor.osdi",
+      "sha256": "98353b6ce66d904cc76a0b9eef77c45ea25857f7c39ee0d0b87f5e6330179f2f"
+    },
+    {
+      "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/envs/ihp-parity/lib/python3.12/site-packages/vacask_bin/data/lib/vacask/mod/spice/capacitor.osdi",
+      "sha256": "54f670e174d4b7eb84eb14bb71c501d3301c4a25003bafa552088b6760c41fd4"
+    },
+    {
+      "path": "/home/cdaunt/code/circulax/circulax/.claude/worktrees/issue69/.pixi/envs/ihp-parity/lib/python3.12/site-packages/vacask_bin/data/lib/vacask/mod/spice/inductor.osdi",
+      "sha256": "839f4f89cd4a66d491e25a1b903ec3d7ba92fd93edaf8c73378dc03ba2a9589f"
+    }
+  ],
+  "temporary_correction": "Copied IHP converted resistor cards: three sw_mman=0 -> sw_mman=1 settings",
+  "generic_cpu": true,
+  "date": "2026-10-05",
+  "command": "pixi run --locked -e ihp-parity ihp-parity-ci",
+  "osdi_abi": "0.4",
+  "parser_revision": "d83031dd9b75ab8688dea134033eaa14f9107bfb",
+  "results": {
+    "ngspice": "60/60 pass",
+    "vacask": "60/60 pass"
+  },
+  "regression_tests": "113 passed",
+  "acceptance": {
+    "dc_ac": {
+      "rtol": 1e-05,
+      "atol": 1e-09
+    },
+    "transient": {
+      "rtol": 0.003,
+      "atol": 0.0001
+    },
+    "transient_source": {
+      "rtol": 1e-09,
+      "atol": 1e-09
+    }
+  },
+  "circulax_dc_solver": {
+    "rtol": 1e-10,
+    "atol": 1e-12
+  },
+  "vacask_simparams": {
+    "gmin": 1e-12
+  },
+  "github_actions_status": "Workflow validated; exact CI task passed locally. Remote job not run."
+}

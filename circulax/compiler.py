@@ -69,6 +69,8 @@ class ComponentGroup(eqx.Module):
     index_map: dict[str, int] | None = eqx.field(static=True, default=None)
     is_fdomain: bool = eqx.field(static=True, default=False)
     amplitude_param: str = eqx.field(static=True, default="")
+    ac_source_stamp: tuple[tuple[int, float], ...] = eqx.field(static=True, default=())
+    ideal_voltage_constraint_ports: tuple[int, ...] = eqx.field(static=True, default=())
     combined_func: Any = eqx.field(static=True, default=None)
     holomorphic: bool = eqx.field(static=True, default=False)
     is_sax_wrapped: bool = eqx.field(static=True, default=False)
@@ -394,6 +396,8 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
             index_map=index_map,
             is_fdomain=getattr(comp_cls, "_is_fdomain", False),
             amplitude_param=getattr(comp_cls, "amplitude_param", ""),
+            ac_source_stamp=getattr(comp_cls, "_ac_source_stamp", ()),
+            ideal_voltage_constraint_ports=getattr(comp_cls, "_ideal_voltage_constraint_ports", ()),
             combined_func=_combined_func,
             holomorphic=getattr(comp_cls, "_holomorphic", True),
             is_sax_wrapped=getattr(comp_cls, "_is_sax_wrapped", False),

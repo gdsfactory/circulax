@@ -219,6 +219,9 @@ def setup_harmonic_balance(
     ground_indices = jnp.array(ground_idxs)
 
     K = 2 * num_harmonics + 1
+    from circulax.solvers.source_settings import waveform_groups
+
+    groups = waveform_groups(groups, tstep=1.0 / (K * freq), tstop=1.0 / freq)
     omega = 2.0 * jnp.pi * freq
     t_points = jnp.linspace(0.0, 1.0 / freq, K, endpoint=False)
 

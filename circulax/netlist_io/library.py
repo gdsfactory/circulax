@@ -1,0 +1,490 @@
+"""Scoped model-card loading and hierarchical circuit elaboration."""
+
+from __future__ import annotations
+
+import hashlib
+import itertools
+import math
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, ClassVar
+
+from circulax.netlist_io.expressions import Scope, evaluate
+from circulax.netlist_io.syntax import NetlistError, Statement, children, parameters, parse_file
+
+
+class FileDigests:
+    """sha256 of file bytes, re-read only when ``(mtime_ns, size)`` change.
+
+    A stamp is trusted only for files unmodified for a settling period before they were
+    read, so an edit that keeps the size within one timestamp tick is still hashed.
+    Hashing reads bytes only; nothing is loaded or validated.
+    """
+
+    _SETTLE_NS = 2_000_000_000
+
+    def __init__(self) -> None:
+        """Start with no remembered stamps."""
+        self._entries: dict[Path, tuple[tuple[int, int], str]] = {}
+
+    def digest(self, path: Path) -> str | None:
+        """Return the content digest, or ``None`` when the file is missing."""
+        try:
+            status = path.stat()
+        except OSError:
+            self._entries.pop(path, None)
+            return None
+        stamp = (status.st_mtime_ns, status.st_size)
+        entry = self._entries.get(path)
+        if entry is not None and entry[0] == stamp:
+            return entry[1]
+        read_at = time.time_ns()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if read_at - status.st_mtime_ns > self._SETTLE_NS:
+            self._entries[path] = (stamp, digest)
+        else:
+            self._entries.pop(path, None)
+        return digest
+
+
+# Never reused, unlike id(), so caches keyed by it cannot alias a collected Library.
+_REVISIONS = itertools.count()
+
+
+@dataclass(frozen=True)
+class ResolvedInstance:
+    """A leaf compact model with evaluated model and instance parameters."""
+
+    name: str
+    module: str
+    nodes: tuple[str, ...]
+    parameters: dict[str, float]
+
+
+@dataclass
+class ResolvedCircuit:
+    """Evaluated model cards awaiting conversion to kfnetlist and native models.
+
+    This intermediate retains ordered terminals and load declarations needed
+    for OSDI provisioning. Compilation builds the canonical kfnetlist.Netlist.
+    """
+
+    instances: list[ResolvedInstance]
+    loads: list[tuple[str, Path]]
+    ports: dict[str, str] = field(default_factory=dict)
+    temperature_c: float = 27.0
+
+    def compile(
+        self,
+        *,
+        module_paths: tuple[Path, ...] = (),
+        osdi_modules: tuple[Path, ...] = (),
+        compiler: str | None = None,
+        cache_dir: Path | None = None,
+        backend: str = "dense",
+        analysis: str = "dc",
+        state_policy: str = "reject",
+        simparams: Mapping[str, float] | None = None,
+    ) -> Any:
+        """Compile with immutable native analysis mode: dc (default), ac, or tran.
+
+        simparams supplies numeric $simparam settings to all native devices.
+        Separate registrations are required to change mode. For AC, retain
+        DC conductance and obtain capacitance from an AC registration.
+
+        osdi_modules registers compiled `.osdi`/`.va` files by their own
+        descriptor name directly, for libraries (e.g. plain ngspice model
+        cards) that reference a module by name without a `load` statement.
+        """
+        from circulax.netlist_io.osdi import compile_resolved
+
+        return compile_resolved(
+            self,
+            module_paths=module_paths,
+            osdi_modules=osdi_modules,
+            compiler=compiler,
+            cache_dir=cache_dir,
+            backend=backend,
+            analysis=analysis,
+            state_policy=state_policy,
+            simparams=simparams,
+        )
+
+
+class _Frame:
+    def __init__(self, scope: Scope, parent: _Frame | None = None) -> None:
+        self.scope = scope
+        self.parent = parent
+        self.models: dict[str, tuple[Any, Scope]] = {}
+        self.subcircuits: dict[str, tuple[Statement, _Frame]] = {}
+        self.calls: list[Statement] = []
+
+    def find(self, name: str, *tables: str) -> tuple[str, Any] | None:
+        """Search each lexical scope before its parent, in table precedence order."""
+        for table in tables:
+            values = getattr(self, table)
+            if name in values:
+                return table, values[name]
+        if self.parent is not None:
+            return self.parent.find(name, *tables)
+        return None
+
+
+def _body(statement: Statement) -> list[Statement]:
+    aliases = {"Parameters": "ParamStatement", "Instance": "SubcktCall", "Include": "IncludeStatement"}
+    return [
+        Statement(aliases.get(n.kind, n.kind), n, statement.path)
+        for n in children(statement.node)
+        if n.kind not in {"Keyword", "Notation", "Identifier", "SubcktNodes", "HierarchialNode", "Parameter", "Condition"}
+    ]
+
+
+def _nodes(node: Any) -> list[str]:
+    spice = children(node, "HierarchialNode")
+    if spice:
+        return [n.text.strip("'\"") for n in spice]
+    lists = children(node, "SubcktNodes") or children(node, "SNodeList")
+    return [n.text.strip("'\"") for container in lists for n in children(container, "SNode")] or [
+        n.text.strip("'\"") for n in children(node, "SNode")
+    ]
+
+
+class Library:
+    """Load existing model libraries and elaborate their public subcircuits.
+
+    Parameters and model cards are evaluated separately for each instance.
+    Libraries retain their lexical scopes, local nodes and conditional branches.
+    """
+
+    def __init__(
+        self,
+        *,
+        temperature_c: float = 27.0,
+        include_paths: tuple[Path, ...] = (),
+        dialect: str = "ngspice",
+        statistical_mode: str = "reject",
+    ) -> None:
+        """Create an empty model library at the requested card temperature."""
+        if not math.isfinite(temperature_c) or temperature_c <= -273.15:
+            msg = "temperature_c must be finite and above absolute zero"
+            raise NetlistError(msg)
+        if statistical_mode not in {"reject", "nominal"}:
+            msg = "statistical_mode must be 'reject' or 'nominal'"
+            raise NetlistError(msg)
+        self.temperature_c = temperature_c
+        self.include_paths = tuple(Path(p) for p in include_paths)
+        self.dialect = dialect
+        self.loads: list[tuple[str, Path]] = []
+        self.globals = {"0"}
+        self.grounds = {"0"}
+        self.scope = Scope()
+        self.scope.dialect = dialect
+        self.scope.statistical_mode = statistical_mode
+        self.scope.bindings["$temp"] = temperature_c
+        self.frame = _Frame(self.scope)
+        self._parsed: dict[Path, list[Statement]] = {}
+        self._parsed_fingerprints: dict[Path, str] = {}
+        self._digests = FileDigests()
+        # Include search results: candidate paths in order, and how many precede the one found.
+        self._lookups: dict[tuple[Path, ...], int] = {}
+        self._sources: list[tuple[Path, str | None]] = []
+        self.revision = next(_REVISIONS)
+
+    @classmethod
+    def from_file(
+        cls,
+        path: str | Path,
+        *,
+        section: str | None = None,
+        temperature_c: float = 27.0,
+        include_paths: tuple[Path, ...] = (),
+        dialect: str = "ngspice",
+        statistical_mode: str = "reject",
+    ) -> Library:
+        """Read a library and select a named corner section when requested.
+
+        statistical_mode="nominal" explicitly evaluates agauss at its nominal
+        value. The default rejects random functions; sampling is unsupported.
+        """
+        library = cls(temperature_c=temperature_c, include_paths=include_paths, dialect=dialect, statistical_mode=statistical_mode)
+        library.include(path, section=section)
+        return library
+
+    def include(self, path: str | Path, *, section: str | None = None) -> None:
+        """Add a library to the same root scope, preserving declaration order."""
+        source = Path(path).resolve()
+        statements = self._read(source, section, (), set())
+        self._populate(self.frame, statements)
+        self._sources.append((source, section))
+
+    def with_temperature(self, temperature_c: float) -> Library:
+        """Reparse source declarations at a new temperature without mutation."""
+        if not self._sources:
+            msg = "Temperature override requires reparsable library source declarations"
+            raise ValueError(msg)
+        library = type(self)(
+            temperature_c=temperature_c,
+            include_paths=self.include_paths,
+            dialect=self.dialect,
+            statistical_mode=self.scope.statistical_mode,
+        )
+        for path, section in self._sources:
+            library.include(path, section=section)
+        return library
+
+    def inspection_sources(self) -> list[dict[str, str]]:
+        """Fingerprint actual parsed source dependencies without native loading."""
+        records = []
+        for path in sorted(self._parsed, key=str):
+            digest = self._digests.digest(path)
+            if digest is None:
+                msg = f"{path}: library source not found"
+                raise NetlistError(msg)
+            records.append({"path": str(path), "sha256": digest})
+        return records
+
+    def refreshed(self) -> Library:
+        """Reuse unchanged parsed cards or reparse edited, removed or shadowed source dependencies."""
+        unchanged = all(self._digests.digest(path) == fingerprint for path, fingerprint in self._parsed_fingerprints.items())
+        if unchanged and not any(c.is_file() for candidates, found in self._lookups.items() for c in candidates[:found]):
+            return self
+        return self.with_temperature(self.temperature_c)
+
+    def _read(
+        self, path: Path, section: str | None, active: tuple[Path, ...], seen: set[tuple[Path, str | None]]
+    ) -> list[Statement]:
+        """Read scoped dependencies and retain their parsed content revisions."""
+        if path in active:
+            msg = f"include cycle: {' -> '.join(map(str, (*active, path)))}"
+            raise NetlistError(msg)
+        if (path, section) in seen:
+            return []
+        seen.add((path, section))
+        if path not in self._parsed:
+            digest = self._digests.digest(path)
+            if digest is None:
+                msg = f"{path}: library source not found"
+                raise NetlistError(msg)
+            self._parsed[path] = parse_file(path, self.dialect)
+            self._parsed_fingerprints[path] = digest
+        statements = self._parsed[path]
+        sections = [s for s in statements if s.kind == "LibStatement"]
+        if section is not None and not any(children(s.node, "Identifier")[0].text == section for s in sections):
+            msg = f"{path}: missing section {section!r}"
+            raise NetlistError(msg)
+        output = []
+        for statement in statements:
+            if statement.kind == "LibStatement":
+                if children(statement.node, "Identifier")[0].text == section:
+                    output.extend(self._expand(_body(statement), (*active, path), seen))
+            else:
+                output.extend(self._expand([statement], (*active, path), seen))
+        return output
+
+    def _expand(self, statements: list[Statement], active: tuple[Path, ...], seen: set[tuple[Path, str | None]]) -> list[Statement]:
+        output = []
+        for statement in statements:
+            if statement.kind in {"IncludeStatement", "LibInclude"}:
+                reference = children(statement.node, "StringLiteral")[0].text.strip('"')
+                candidates = [statement.path.parent / reference, *(p / reference for p in self.include_paths)]
+                found = next((i for i, p in enumerate(candidates) if p.is_file()), None)
+                if found is None:
+                    msg = f"{statement.path}: include {reference!r} not found"
+                    raise NetlistError(msg)
+                path = candidates[found].resolve()
+                self._lookups[tuple(candidates[: found + 1])] = found
+                section_nodes = children(statement.node, "IncludeSection")
+                section = (
+                    children(section_nodes[0], "Identifier")[0].text
+                    if section_nodes
+                    else children(statement.node, "Identifier")[0].text
+                    if statement.kind == "LibInclude"
+                    else None
+                )
+                output.extend(self._read(path, section, active, seen))
+            else:
+                output.append(statement)
+        return output
+
+    def _populate(self, frame: _Frame, statements: list[Statement], overrides: dict[str, float] | None = None) -> None:  # noqa: C901, PLR0912 -- statement dispatch
+        """Populate scoped declarations and native device statements.
+
+        @tags circulax-simulation
+        """
+        # Collect all local bindings before evaluation, allowing forward references.
+        for statement in statements:
+            if statement.kind == "ParamStatement":
+                frame.scope.bindings.update(parameters(statement.node))
+        if overrides:
+            unknown = overrides.keys() - frame.scope.bindings.keys()
+            if unknown:
+                msg = f"unknown subcircuit parameters: {sorted(unknown)}"
+                raise NetlistError(msg)
+            frame.scope.bindings.update(overrides)
+        for statement in statements:
+            node = statement.node
+            kind = statement.kind
+            if kind in {"ParamStatement", "EndlStatement"}:
+                continue
+            if kind == "Model":
+                name = (_nodes(node) or [n.text for n in children(node, "Identifier")])[0]
+                frame.models[name.lower()] = (node, frame.scope)
+            elif kind == "Subckt":
+                name = children(node, "Identifier")[0].text
+                frame.subcircuits[name.lower()] = (statement, frame)
+            elif kind in {"SubcktCall", "OSDIDevice", "Diode", "Resistor", "Capacitor", "Inductor", "Voltage", "Current"}:
+                frame.calls.append(statement)
+            elif kind == "HDLStatement":
+                reference = children(node, "StringLiteral")[0].text.strip('"')
+                load = (reference, statement.path.parent)
+                if load not in self.loads:
+                    self.loads.append(load)
+            elif kind == "Global":
+                if node.text.lstrip().startswith("ground "):
+                    self.grounds.update(_nodes(node))
+                else:
+                    self.globals.update(_nodes(node))
+            elif kind == "IfBlock":
+                for case in children(node, "IfElseCase"):
+                    condition = children(case, "Condition")
+                    if not condition or evaluate(condition[0], frame.scope):
+                        self._populate(frame, self._expand(_body(Statement(case.kind, case, statement.path)), (), set()))
+                        break
+            elif kind in {"IncludeStatement", "LibInclude"}:
+                self._populate(frame, self._expand([statement], (), set()))
+            else:
+                msg = f"{statement.path}: unsupported statement {kind}"
+                raise NetlistError(msg)
+
+    def instantiate(
+        self, subcircuit: str, nodes: tuple[str, ...] | None = None, settings: dict[str, float] | None = None, *, name: str = "X1"
+    ) -> ResolvedCircuit:
+        """Expand a library subcircuit without loading executable OSDI modules."""
+        found = self.frame.find(subcircuit.lower(), "subcircuits")
+        if found is None:
+            msg = f"unknown subcircuit {subcircuit!r}"
+            raise NetlistError(msg)
+        _, definition = found
+        ports = tuple(_nodes(definition[0].node))
+        actual_nodes = nodes if nodes is not None else ports
+        instances: list[ResolvedInstance] = []
+        self._instantiate(definition, actual_nodes, settings or {}, name, instances, ())
+        return ResolvedCircuit(instances, list(self.loads), dict(zip(ports, actual_nodes, strict=True)), self.temperature_c)
+
+    def resolve(self) -> ResolvedCircuit:
+        """Expand instances declared at the top level of a loaded circuit file."""
+        instances: list[ResolvedInstance] = []
+        self._calls(self.frame, {}, "", instances, ())
+        return ResolvedCircuit(instances, list(self.loads), temperature_c=self.temperature_c)
+
+    def _instantiate(
+        self,
+        definition: tuple[Statement, _Frame],
+        nodes: tuple[str, ...],
+        settings: dict[str, float],
+        name: str,
+        instances: list[ResolvedInstance],
+        active: tuple[int, ...],
+    ) -> None:
+        statement, parent = definition
+        token = id(statement.node)
+        if token in active:
+            msg = f"subcircuit recursion at {name}"
+            raise NetlistError(msg)
+        ports = _nodes(statement.node)
+        if len(ports) != len(nodes):
+            msg = f"{name}: expected {len(ports)} terminals, got {len(nodes)}"
+            raise NetlistError(msg)
+        frame = _Frame(Scope(parent.scope), parent)
+        frame.scope.bindings.update(parameters(statement.node))
+        self._populate(frame, _body(statement), settings)
+        self._calls(frame, dict(zip(ports, nodes, strict=True)), name, instances, (*active, token))
+
+    # Builtin SPICE primitives whose two-terminal instance line carries no
+    # model reference at all (e.g. `R1 1 2 R=1k`) when used without one.
+    _INLINE_BUILTINS: ClassVar[dict[str, str]] = {"Resistor": "r", "Capacitor": "c", "Inductor": "l"}
+
+    @staticmethod
+    def _source_settings(node: Any, scope: Scope) -> dict[str, Any]:
+        settings = {}
+        for source in children(node):
+            if source.kind not in {"DCSource", "ACSource", "TranSource"}:
+                continue
+            values = [evaluate(v, scope) for v in children(source) if v.kind not in {"Keyword", "Notation"}]
+            if source.kind == "DCSource":
+                settings["dc"] = values[0]
+            elif source.kind == "ACSource":
+                settings["mag"] = values[0] if values else 1.0
+                settings["phase"] = values[1] if len(values) > 1 else 0.0
+            else:
+                waveform = children(source, "Keyword")[0].text.lower()
+                if waveform != "pulse" or len(values) != 7:
+                    msg = "native transient sources require PULSE(v1 v2 td tr tf pw per)"
+                    raise NetlistError(msg)
+                settings["type"] = "pulse"
+                settings.update(zip(("val0", "val1", "delay", "rise", "fall", "width", "period"), values, strict=True))
+        return settings
+
+    def _calls(  # noqa: C901, PLR0912 -- native call and lexical model dispatch
+        self, frame: _Frame, terminals: dict[str, str], prefix: str, instances: list[ResolvedInstance], active: tuple[int, ...]
+    ) -> None:
+        for statement in frame.calls:
+            node = statement.node
+            symbols = _nodes(node)
+            is_source = statement.kind in {"Voltage", "Current"}
+            inline_builtin = {"Voltage": "vsource", "Current": "isource"}.get(
+                statement.kind, self._INLINE_BUILTINS.get(statement.kind)
+            )
+            is_inline = inline_builtin is not None and not children(node, "NameRef")
+            if is_inline:
+                call_name, *nodes = symbols
+                master, model, subcircuit = inline_builtin, None, None
+            else:
+                if inline_builtin is not None:
+                    call_name, *nodes = symbols
+                    master = children(node, "NameRef")[0].text
+                elif children(node, "SNodeList"):
+                    call_name, master = [n.text for n in children(node, "Identifier")]
+                    nodes = symbols
+                else:
+                    call_name, *nodes, master = symbols
+                master = master.lower()
+                definition = frame.find(master, "models", "subcircuits")
+                model = definition[1] if definition is not None and definition[0] == "models" else None
+                subcircuit = definition[1] if definition is not None and definition[0] == "subcircuits" else None
+            name = f"{prefix}/{call_name}" if prefix else call_name
+            mapped = tuple(
+                "0" if n in self.grounds else terminals.get(n, n if n in self.globals or not prefix else f"{prefix}/{n}")
+                for n in nodes
+            )
+            settings = (
+                self._source_settings(node, frame.scope)
+                if is_source
+                else {k: evaluate(v, frame.scope) for k, v in parameters(node).items()}
+            )
+            if is_inline and not is_source:
+                # Positional R/C/L values are expression children, rather than
+                # Parameter nodes (e.g. `R1 in out 1k`).
+                values = [v for v in children(node) if v.kind in {"LiteralExpr", "Brace", "Prime", "BinaryExpression"}]
+                if values:
+                    if len(values) != 1 or any(k.lower() == master for k in settings):
+                        msg = f"{name}: ambiguous inline {master} value"
+                        raise NetlistError(msg)
+                    settings[master] = evaluate(values[0], frame.scope)
+            if subcircuit is not None:
+                self._instantiate(subcircuit, mapped, settings, name, instances, active)
+                continue
+            if model is not None:
+                model_node, model_scope = model
+                module = children(model_node, "Identifier")[-1].text.lower()
+                card = {k: evaluate(v, model_scope) for k, v in parameters(model_node).items()}
+                card.update(settings)
+            elif is_inline or master in {"vsource", "isource"}:
+                module = master
+                card = settings
+            else:
+                msg = f"{statement.path}: unresolved model/subcircuit {master!r} for {name}"
+                raise NetlistError(msg)
+            instances.append(ResolvedInstance(name, module, mapped, card))

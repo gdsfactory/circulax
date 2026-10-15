@@ -163,6 +163,51 @@ def renormalize(
     return jax.vmap(_renorm_one)(S, z0_from, z0_to)
 
 
+def setup_ac_response(
+    groups: dict[str, Any],
+    num_vars: int,
+    *,
+    is_complex: bool = False,
+    dc_groups: dict[str, Any] | None = None,
+) -> Callable[[Array, Array, Array], Array]:
+    """Linearize physical response without scattering-port terminations.
+
+    The caller supplies an independent-source RHS, leaving DC bias intact.
+    Native AC charge registrations, delays and frequency-domain admittances
+    use the same assembly as scattering analysis.
+    """
+    rows, cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
+    rows = jnp.asarray(rows)
+    cols = jnp.asarray(cols)
+    ground = jnp.asarray(ground_idxs)
+    assemble = assemble_gc_complex if is_complex else assemble_gc_real
+
+    def run_response(y_dc: Array, freqs: Array, rhs: Array) -> Array:
+        """Solve one physical excitation at each frequency."""
+        g_values, c_values = assemble(y_dc, groups)
+        if dc_groups is not None:
+            g_values, _ = assemble(y_dc, dc_groups)
+        conductance = jnp.zeros((num_vars, num_vars), dtype=jnp.complex128).at[rows, cols].add(g_values)
+        capacitance = jnp.zeros_like(conductance).at[rows, cols].add(c_values)
+
+        def solve_frequency(freq: Array) -> Array:
+            """Include dynamic component admittances before solving the RHS."""
+            admittance = conductance + 2j * jnp.pi * freq * capacitance
+            for group in groups.values():
+                if getattr(group, "is_fdomain", False):
+                    values = jax.vmap(functools.partial(group.physics_func, freq))(group.params)
+                    admittance = admittance.at[group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)].add(values.reshape(-1))
+                if getattr(group, "has_delay", False):
+                    values = _delay_admittance(group, y_dc, freq, is_complex=is_complex)
+                    admittance = admittance.at[group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)].add(values.reshape(-1))
+            admittance = admittance.at[ground, ground].add(GROUND_STIFFNESS)
+            return jnp.linalg.solve(admittance, rhs)
+
+        return jax.vmap(solve_frequency)(freqs)
+
+    return run_response
+
+
 def setup_ac_sweep(
     groups: dict[str, Any],
     num_vars: int,
@@ -171,6 +216,7 @@ def setup_ac_sweep(
     z0: float | Array = 50.0,
     is_complex: bool = False,
     holomorphic: bool = False,
+    dc_groups: dict[str, Any] | None = None,
 ) -> Callable[[Array, Array], Array]:
     """Configure and return a callable for AC small-signal S-parameter sweep.
 
@@ -195,6 +241,8 @@ def setup_ac_sweep(
 
     Args:
         groups: Compiled component groups from :func:`~circulax.compile_netlist`.
+        dc_groups: Optional groups registered for DC, providing conductance while
+            ``groups`` provides AC charge derivatives. Both must share a scatter layout.
         num_vars: Total number of scalar unknowns (second return value of
             :func:`~circulax.compile_netlist`).
         port_nodes: Global node indices for each circuit port, in the desired
@@ -239,7 +287,7 @@ def setup_ac_sweep(
         raise ValueError(msg)
 
     if is_complex and not holomorphic:
-        return _setup_ac_sweep_2n(groups, num_vars, port_nodes, z0=z0)
+        return _setup_ac_sweep_2n(groups, num_vars, port_nodes, z0=z0, dc_groups=dc_groups)
 
     # --- Pre-compute static COO index arrays (captured in closure) -----------
     static_rows, static_cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
@@ -274,6 +322,8 @@ def setup_ac_sweep(
     # -------------------------------------------------------------------------
     def run_ac(y_dc: Array, freqs: Array) -> Array:
         G_vals, C_vals = gc_assemble(y_dc, groups)
+        if dc_groups is not None:
+            G_vals, _ = gc_assemble(y_dc, dc_groups)
 
         G_mat = jnp.zeros((num_vars, num_vars), dtype=jnp.complex128)
         G_mat = G_mat.at[static_rows_jax, static_cols_jax].add(G_vals)
@@ -315,6 +365,7 @@ def _setup_ac_sweep_2n(
     port_nodes: list[int],
     *,
     z0: float | Array = 50.0,
+    dc_groups: dict[str, Any] | None = None,
 ) -> Callable[[Array, Array], Array]:
     """Build an AC sweep using the full 2N×2N real-block system."""
     N = num_vars
@@ -348,6 +399,8 @@ def _setup_ac_sweep_2n(
 
     def run_ac_2n(y_dc: Array, freqs: Array) -> Array:
         G_blocks, C_blocks = assemble_gc_complex_2n(y_dc, groups)
+        if dc_groups is not None:
+            G_blocks, _ = assemble_gc_complex_2n(y_dc, dc_groups)
 
         RHS = jnp.zeros((2 * N, N_ports), dtype=jnp.complex128)
         RHS = RHS.at[port_nodes_arr, jnp.arange(N_ports)].set(2.0 / z0_arr)

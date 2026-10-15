@@ -1285,6 +1285,7 @@ def setup_transient(
         t1: float,
         dt0: float,
         y0: ArrayLike,
+        tstep: float | None = None,
         saveat: diffrax.SaveAt = None,
         max_steps: int = 100000,
         throw: bool = False,
@@ -1293,7 +1294,10 @@ def setup_transient(
         """Executes the transient simulation for the pre-configured circuit."""
         term = kwargs.pop("term", diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y)))
         solver = kwargs.pop("solver", tsolver)
-        args = kwargs.pop("args", (groups, sys_size))
+        from circulax.solvers.source_settings import waveform_groups
+
+        analysis_groups = waveform_groups(groups, tstep=dt0 if tstep is None else tstep, tstop=t1)
+        args = kwargs.pop("args", (analysis_groups, sys_size))
         stepsize_controller = kwargs.pop("stepsize_controller", ConstantStepSize())
         checkpoints = kwargs.pop("checkpoints", None)
 

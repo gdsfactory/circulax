@@ -3,29 +3,35 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
 import kfnetlist as kfnl
 
+from circulax.netlist import _is_recursive_netlist
+from circulax.solvers.ac_sweep import setup_ac_response
+from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
+from circulax.wavelength import WavelengthBench, build_wavelength_bench, wavelength_scattering
 
 if TYPE_CHECKING:
     from circulax.solvers.linear import CircuitLinearSolver
 
 
+def _osdi_param_columns(group: Any) -> dict[str, int]:
+    """Read canonical native parameter columns from bosdi's actual metadata API."""
+    import osdi_shim_nb
+
+    return {name.lower(): i for i, name in enumerate(osdi_shim_nb.get_param_names(group.model_id))}
+
+
 def _resolve_osdi_param_col(group: Any, param_key: str) -> int:
     """Resolve a parameter name to its column index in an OSDI group's params array."""
-    try:
-        from bosdi.osdi_registry import get_model  # type: ignore[import]
-
-        model = get_model(group.model_id)
-        name_to_col = {n.lower(): i for i, n in enumerate(model.param_names)}
-    except (ImportError, Exception) as exc:
-        msg = f"Cannot resolve OSDI parameter '{param_key}': bosdi registry lookup failed ({exc!r})."
-        raise ValueError(msg) from exc
+    name_to_col = _osdi_param_columns(group)
     col = name_to_col.get(param_key.lower())
     if col is None:
         msg = f"Parameter '{param_key}' not found in OSDI model (available: {sorted(name_to_col)})."
@@ -76,7 +82,7 @@ class Circuit:
         rtol: float = 1e-6,
         atol: float = 1e-6,
         max_steps: int = 100,
-        _source_netlist: dict | None = None,
+        _source_netlist: dict | kfnl.Netlist | None = None,
         _source_models: dict | None = None,
         _is_pure_sax: bool = False,  # noqa: FBT001, FBT002
     ) -> None:
@@ -90,16 +96,108 @@ class Circuit:
         self._source_netlist = _source_netlist
         self._source_models = _source_models
         self._is_pure_sax = _is_pure_sax
+        self._simparams_factory = None
+        self._analysis_factory = None
+        self._analysis_variants = {}
+        self._wavelength_benches: dict[tuple, WavelengthBench] = {}
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    for field in ("var_indices", "jac_rows", "jac_cols"):
+                        if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                            msg = "OSDI analysis changed the circuit scatter layout"
+                            raise ValueError(msg)
+                # Variants run the same analyses; share the matched-boundary benches built for any of them.
+                variant._wavelength_benches = self._wavelength_benches  # noqa: SLF001 -- another Circuit analysis variant
+                self._analysis_variants[analysis] = variant
+        return self._analysis_variants[analysis]
+
+    def _wavelength_bench(self, ports: Sequence[str], z0: float) -> WavelengthBench:
+        """Return the matched-boundary bench for these ports and z0, building it once.
+
+        Parameter values are runtime inputs of the bench solves and are not part of the key;
+        the compile settings are, so a circuit whose tolerances were changed gets a fresh bench.
+        """
+        selected = tuple(ports)
+        key = (selected, float(z0), getattr(self.solver, "g_leak", 1e-9), self.rtol, self.atol, self.max_steps)
+        if key not in self._wavelength_benches:
+            self._wavelength_benches[key] = build_wavelength_bench(self, compile_circuit, selected, float(z0))
+        return self._wavelength_benches[key]
+
+    def prepare_analysis(
+        self,
+        analysis: str,
+        *,
+        ports: Sequence[str] | None = None,
+        z0: float = 1.0,
+    ) -> Circuit:
+        """Prepare immutable native registrations without solving the circuit.
+
+        Return the selected DC, AC or transient registration variant. Builtin
+        circuits return themselves. The original circuit caches required
+        variants so callers may retain it for later execution. DC bias setup is
+        also prepared for AC, transient and HB, without calculating that bias.
+
+        Supported names are op, dc, sp_wavelength, ac_response, sp_frequency,
+        tran and hb. Native HB state-history and non-holomorphic optical
+        driven-AC limitations are rejected before simulation execution.
+
+        ``sp_wavelength`` runs on a separately compiled matched-boundary bench.
+        Pass ``ports`` (and ``z0``, default 1.0) to build and cache that bench and its
+        DC registrations now; later :meth:`sp_wavelength` calls with the same ports and
+        ``z0`` reuse it. The returned circuit is still the selected DC variant of this one.
+        """
+        modes = {
+            "op": "dc",
+            "dc": "dc",
+            "sp_wavelength": "dc",
+            "ac_response": "ac",
+            "sp_frequency": "ac",
+            "tran": "tran",
+            "hb": "tran",
+        }
+        if analysis not in modes:
+            msg = f"Unsupported Circulax analysis {analysis!r}"
+            raise ValueError(msg)
+
+        def reject_unsupported(circuit: Circuit) -> None:
+            if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in circuit.groups.values()):
+                msg = "Native OSDI harmonic balance with ABI state slots is not supported"
+                raise NotImplementedError(msg)
+            if analysis == "ac_response" and circuit.solver.is_complex and not _infer_holomorphic(circuit.groups):
+                msg = "Non-holomorphic optical AC response requires explicit quadrature/sideband observables"
+                raise ValueError(msg)
+
+        # Fail fast before building variants, then recheck the selected native registrations.
+        reject_unsupported(self)
+        self._for_analysis("dc")
+        selected = self._for_analysis(modes[analysis])
+        reject_unsupported(selected)
+        if analysis == "sp_wavelength" and ports is not None:
+            self._wavelength_bench(ports, z0).circuit.prepare_analysis("dc")
+        return selected
 
     @property
     def ports(self) -> tuple[str, ...]:
         """External port names declared in the source netlist."""
         if self._source_netlist is None:
             return ()
+        if isinstance(self._source_netlist, kfnl.Netlist):
+            return tuple(port.name for port in self._source_netlist.ports)
         return tuple(self._source_netlist.get("ports", {}).keys())
 
     @property
-    def source_netlist(self) -> dict | None:
+    def source_netlist(self) -> dict | kfnl.Netlist | None:
         """The original netlist used to compile this circuit, if available."""
         return self._source_netlist
 
@@ -107,6 +205,28 @@ class Circuit:
     def source_models(self) -> dict | None:
         """The leaf models used to compile this circuit, if available."""
         return self._source_models
+
+    def set_simparams(self, simparams: Mapping[str, float] | None = None, **settings: float) -> Circuit:
+        """Return an updated circuit with numeric Verilog-A simulator settings.
+
+        Accept a mapping, keyword arguments, or both (keywords take precedence).
+        Updates merge into the existing settings of every native descriptor.
+        Native setup and analysis variants are rebuilt; existing registrations
+        are reused for matching settings. The current circuit is unchanged so
+        JIT callables already compiled for it remain valid.
+
+        Call outside JIT, then rerun DC, AC or transient on the returned circuit.
+        This updates model $simparam queries, not the host solver's options.
+        """
+        if simparams is not None and not isinstance(simparams, Mapping):
+            msg = "simparams must be a mapping of names to finite numbers"
+            raise TypeError(msg)
+        if self._simparams_factory is None:
+            msg = "set_simparams requires a native OSDI circuit created by compile_circuit"
+            raise ValueError(msg)
+        updates = dict(simparams or {})
+        updates.update(settings)
+        return self._simparams_factory(updates)
 
     def _n(self) -> int:
         return self.sys_size * (2 if self.solver.is_complex else 1)
@@ -124,7 +244,12 @@ class Circuit:
         updated = self.groups
         for name, value in params.items():
             if "." not in name:
-                updated = apply_global_params(updated, {name: value})
+                updated = record_dc_override(apply_global_params(updated, {name: value}), name)
+                for group_name, group in updated.items():
+                    if hasattr(group, "model_id"):
+                        col = _osdi_param_columns(group).get(name.lower())
+                        if col is not None:
+                            updated = {**updated, group_name: group.with_params(group.params.at[:, col].set(value))}
                 continue
 
             instance_name, param_key = name.split(".", 1)
@@ -138,7 +263,9 @@ class Circuit:
                     if not hasattr(group.params, param_key):
                         msg = f"Instance '{instance_name}' has no parameter '{param_key}'."
                         raise ValueError(msg)
-                    updated = update_params_dict(updated, group_name, instance_name, param_key, value)
+                    updated = record_dc_override(
+                        update_params_dict(updated, group_name, instance_name, param_key, value), param_key, instance_name
+                    )
                 break
             else:
                 msg = f"Instance '{instance_name}' not found in compiled circuit."
@@ -259,6 +386,9 @@ class Circuit:
             ValueError: If multiple array params have different leading dims.
 
         """
+        dc_circuit = self._for_analysis("dc")
+        if dc_circuit is not self:
+            return dc_circuit.dc(y_guess=y_guess, rtol=rtol, atol=atol, max_steps=max_steps, params=params, **param_updates)
         rtol = self.rtol if rtol is None else rtol
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
@@ -267,6 +397,39 @@ class Circuit:
 
         def solve_fn(groups: dict) -> jax.Array:
             return self.solver.solve_dc(groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
+
+        return self._batched_solve(params, param_updates, solve_fn)
+
+    def dc_checked(
+        self,
+        y_guess: jax.Array | None = None,
+        *,
+        params: dict[str, Any] | None = None,
+        rtol: float | None = None,
+        atol: float | None = None,
+        max_steps: int | None = None,
+        **param_updates: Any,
+    ) -> tuple[jax.Array, jax.Array]:
+        """Return the DC solution and the solver's explicit convergence flag.
+
+        Scalar parameters return a scalar boolean; array parameters use the
+        same shared native registrations and vmap batching as dc, returning
+        one boolean per leading batch point. Failed estimates can be finite;
+        callers must use this flag rather than infer success from sample values.
+        Both results remain JAX arrays and can be consumed inside jit.
+        """
+        dc_circuit = self._for_analysis("dc")
+        if dc_circuit is not self:
+            return dc_circuit.dc_checked(y_guess=y_guess, params=params, rtol=rtol, atol=atol, max_steps=max_steps, **param_updates)
+        rtol = self.rtol if rtol is None else rtol
+        atol = self.atol if atol is None else atol
+        max_steps = self.max_steps if max_steps is None else max_steps
+        if y_guess is None:
+            y_guess = self._zero_guess()
+
+        def solve_fn(groups: dict) -> tuple[jax.Array, jax.Array]:
+            """Retain native convergence evidence for each batched solve."""
+            return self.solver.solve_dc_checked(groups, y_guess, rtol=rtol, atol=atol, max_steps=max_steps)
 
         return self._batched_solve(params, param_updates, solve_fn)
 
@@ -346,6 +509,7 @@ class Circuit:
         saveat: Any = None,
         params: dict[str, Any] | None = None,
         transient_solver: Any = None,
+        tstep: float | None = None,
         **kwargs: Any,
     ) -> Any:
         """Run transient (time-domain) analysis.
@@ -354,7 +518,9 @@ class Circuit:
             t0: Start time.
             t1: End time.
             dt0: Initial time step.
-            y0: Initial state vector. If ``None``, a DC solve is run first.
+            y0: Initial state vector. If ``None``, solve the time-zero operating
+                point using transient source values.
+            tstep: SPICE source-default time step; defaults to ``dt0``.
             saveat: Times at which to save the solution. Accepts an array of
                 timestamps or a ``diffrax.SaveAt`` object.
             params: Parameter updates (same format as :meth:`dc`).
@@ -374,18 +540,23 @@ class Circuit:
         param_updates = kwargs.pop("param_updates", {})
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "transient")
-        groups = self._with_param_values(arrays)
+        transient_circuit = self._for_analysis("tran")
+        groups = transient_circuit._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
         if y0 is None:
-            y0 = self.solver.solve_dc(
-                groups,
-                self._zero_guess(),
-                rtol=self.rtol,
-                atol=self.atol,
-                max_steps=self.max_steps,
+            from circulax.solvers.source_settings import waveform_groups
+
+            dc_circuit = self._for_analysis("dc")
+            initial_groups = waveform_groups(
+                dc_circuit._with_param_values(arrays),  # noqa: SLF001 -- another Circuit analysis variant
+                tstep=dt0 if tstep is None else tstep,
+                tstop=t1,
+            )
+            y0 = dc_circuit.solver.solve_dc(
+                initial_groups, self._zero_guess(), rtol=self.rtol, atol=self.atol, max_steps=self.max_steps
             )
         saveat_obj = SaveAt(ts=saveat) if saveat is not None and not isinstance(saveat, SaveAt) else saveat
-        run_transient = setup_transient(groups=groups, linear_strategy=self.solver, transient_solver=transient_solver)
-        return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, **kwargs)
+        run_transient = setup_transient(groups=groups, linear_strategy=transient_circuit.solver, transient_solver=transient_solver)
+        return run_transient(t0=t0, t1=t1, dt0=dt0, y0=y0, saveat=saveat_obj, tstep=tstep, **kwargs)
 
     def sp(
         self,
@@ -428,23 +599,137 @@ class Circuit:
 
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "sp")
-        groups = self._with_param_values(arrays)
+        groups = self._for_analysis("ac")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+        dc_groups = (
+            self._for_analysis("dc")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+            if self._analysis_factory is not None
+            else None
+        )
         if holomorphic == "auto":
             holomorphic = _infer_holomorphic(groups)
         if y_dc is None:
-            y_dc = self.solver.solve_dc(
-                groups,
-                self._zero_guess(),
-                rtol=self.rtol,
-                atol=self.atol,
-                max_steps=self.max_steps,
-            )
+            y_dc = self.dc(params=updates)
         port_list = [ports] if isinstance(ports, str) else list(ports)
         port_nodes = [self._resolve_port_node(port) for port in port_list]
         run_ac = setup_ac_sweep(
-            groups, self.sys_size, port_nodes, z0=z0, is_complex=self.solver.is_complex, holomorphic=holomorphic
+            groups,
+            self.sys_size,
+            port_nodes,
+            z0=z0,
+            is_complex=self.solver.is_complex,
+            holomorphic=holomorphic,
+            dc_groups=dc_groups,
         )
         return run_ac(y_dc, jnp.asarray(freqs))
+
+    def sp_wavelength(
+        self,
+        *,
+        ports: Sequence[str],
+        wavelengths: jax.Array,
+        amplitude_unit: str,
+        amplitude: float = 1e-4,
+        params: Mapping[str, Any] | None = None,
+        z0: float = 1.0,
+        wl_param: str = "wl",
+    ) -> dict[str, Any]:
+        """Characterize declared optical ports with normalized low-power DC waves.
+
+        The caller declares optical discipline and field power normalization;
+        z0=1 is the SAX optical reference. Temporary matching and excitation
+        preserve physical DUT sources, loads and electrical bias. Independent
+        input columns and their zero-incident baseline use scan continuation
+        over wavelength. ``s`` has shape (wavelength, output_port, input_port).
+
+        ``converged`` has shape (wavelength, 1 + len(ports)): the baseline and each
+        excitation. Concrete results raise if any solve failed to converge or is
+        not finite, and if a quadrature probe at the first wavelength shows the
+        response is not complex-linear (a non-holomorphic model, or an amplitude
+        outside the linear regime). Under jit these checks are skipped; inspect
+        ``converged`` instead. The bench inherits this circuit's ``g_leak``. It is compiled once
+        per (ports, z0) and cached on this circuit; :meth:`prepare_analysis` can build it ahead.
+        """
+        return wavelength_scattering(
+            self,
+            self._wavelength_bench,
+            ports=ports,
+            wavelengths=wavelengths,
+            amplitude=amplitude,
+            amplitude_unit=amplitude_unit,
+            params=params,
+            z0=z0,
+            wl_param=wl_param,
+        )
+
+    def ac_response(
+        self,
+        *,
+        freqs: jax.Array,
+        sources: Mapping[str, complex],
+        y_dc: jax.Array | None = None,
+        params: dict[str, Any] | None = None,
+        holomorphic: bool | str = "auto",
+        **param_updates: Any,
+    ) -> dict[str, Any]:
+        """Return physical small-signal response to independent source phasors.
+
+        ``sources`` maps source instance names to complex peak amplitudes in
+        their physical source units. Unspecified sources have zero AC drive;
+        DC bias and schematic waveforms remain unchanged. No matching loads
+        or scattering normalization are added, and no external ports are needed.
+        ``solution`` has shape ``(len(freqs), sys_size)`` with complex physical
+        unknowns; ``port_map`` retains node and state aliases. Parameter batching
+        is available through external JAX vmap, as for scattering analysis.
+
+        Non-holomorphic optical response requires a quadrature/sideband result
+        contract and is explicitly unsupported by this interface.
+
+        ``holomorphic`` can only tighten, never relax, that check. ``"auto"`` and ``True`` both
+        rely on the component ``holomorphic`` flags: a complex-mode circuit with any
+        non-holomorphic component is refused, because the Wirtinger solve would otherwise
+        return silently wrong answers and there is no cheap runtime guard. ``False`` declares
+        the response non-holomorphic and refuses every complex-mode circuit. Real circuits
+        ignore the argument. Other values raise ``ValueError``.
+        """
+        if holomorphic not in {"auto", True, False}:
+            msg = f"holomorphic must be 'auto', True or False, got {holomorphic!r}"
+            raise ValueError(msg)
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._require_scalar_params(updates, "ac_response")
+        groups = self._for_analysis("ac")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+        if self.solver.is_complex and (not _infer_holomorphic(groups) or holomorphic is False):
+            msg = (
+                "Non-holomorphic optical AC response requires explicit quadrature/sideband observables "
+                "(the holomorphic argument can only tighten the component-flag check, not relax it)"
+            )
+            raise ValueError(msg)
+        rhs = jnp.zeros(self.sys_size, dtype=jnp.complex128)
+        for name, amplitude in sources.items():
+            matches = [group for group in groups.values() if name in (getattr(group, "index_map", None) or {})]
+            if len(matches) != 1 or not getattr(matches[0], "ac_source_stamp", ()):
+                msg = f"AC source '{name}' must identify one instance with an independent-source excitation stamp"
+                raise ValueError(msg)
+            value = jnp.asarray(amplitude)
+            if value.ndim != 0:
+                msg = f"AC source '{name}' needs a scalar phasor; use jax.vmap for batches"
+                raise ValueError(msg)
+            group = matches[0]
+            instance = group.index_map[name]
+            for local_row, coefficient in group.ac_source_stamp:
+                rhs = rhs.at[group.eq_indices[instance, local_row]].add(coefficient * value)
+        if y_dc is None:
+            y_dc = self.dc(params=updates)
+        dc_groups = (
+            self._for_analysis("dc")._with_param_values(arrays)  # noqa: SLF001 -- another Circuit analysis variant
+            if self._analysis_factory is not None
+            else None
+        )
+        frequencies = jnp.asarray(freqs)
+        if frequencies.ndim != 1:
+            msg = "AC response frequencies must be a one-dimensional array"
+            raise ValueError(msg)
+        run = setup_ac_response(groups, self.sys_size, is_complex=self.solver.is_complex, dc_groups=dc_groups)
+        return {"freqs": frequencies, "y_dc": y_dc, "solution": run(y_dc, frequencies, rhs), "port_map": dict(self.port_map)}
 
     def ac(
         self,
@@ -484,6 +769,10 @@ class Circuit:
     ) -> tuple[jax.Array, jax.Array]:
         """Run harmonic balance to find the periodic steady state.
 
+        Native OSDI devices without ABI state slots use transient-mode F/Q
+        evaluation. Differentiating through the converged native solve is
+        not yet supported.
+
         Args:
             freq: Fundamental frequency in Hz.
             harmonics: Number of harmonics (K = 2*harmonics + 1 time samples).
@@ -507,17 +796,17 @@ class Circuit:
         """
         from circulax.solvers import setup_harmonic_balance
 
+        if any(getattr(group, "num_states", 0) > 0 for group in self.groups.values()):
+            msg = "Native OSDI harmonic balance with ABI state slots is not supported"
+            raise NotImplementedError(msg)
+
         updates = self._coerce_param_updates(params, param_updates)
         arrays = self._require_scalar_params(updates, "hb")
-        groups = self._with_param_values(arrays)
+        # HB evaluates large-signal F/Q over one period, so use transient
+        # registrations rather than the small-signal AC evaluation mode.
+        groups = self._for_analysis("tran")._with_param_values(arrays)
         if y0 is None:
-            y0 = self.solver.solve_dc(
-                groups,
-                self._zero_guess(),
-                rtol=self.rtol,
-                atol=self.atol,
-                max_steps=self.max_steps,
-            )
+            y0 = self.dc(params=updates)
         osc_idx = self._resolve_port_node(osc_node) if isinstance(osc_node, str) else osc_node
         run_hb = setup_harmonic_balance(
             groups,
@@ -585,17 +874,15 @@ def _embed_circuit_subcircuits(
     net_dict: dict | kfnl.Netlist,
     models_map: dict,
     circuit_models: dict[str, Circuit],
-) -> dict:
+) -> dict[str, dict | kfnl.Netlist]:
     """Build a RecursiveNetlist from Circuit objects in *models_map* (mutates *models_map*)."""
     from circulax.netlist import _is_recursive_netlist
 
-    if isinstance(net_dict, kfnl.Netlist):
-        net_dict = net_dict.to_dict()
-    recnet: dict[str, dict] = {}
+    recnet: dict[str, dict | kfnl.Netlist] = {}
     if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict):
         recnet.update(net_dict)
     else:
-        recnet["top"] = net_dict  # type: ignore[assignment]
+        recnet["top"] = net_dict
     for name, circ in circuit_models.items():
         if circ.source_netlist is None:
             msg = f"Circuit '{name}' has no stored source netlist and cannot be used as a subcircuit."
@@ -611,6 +898,73 @@ def _embed_circuit_subcircuits(
     return recnet
 
 
+def _apply_native_simparams(models: dict, simparams: Mapping[str, float] | None) -> dict:
+    """Apply circuit-wide native settings without changing caller-owned descriptors."""
+    if simparams is None:
+        return models
+    if not isinstance(simparams, Mapping):
+        msg = "simparams must be a mapping of names to finite numbers"
+        raise TypeError(msg)
+    return {
+        name: model.with_simparams(simparams) if getattr(model, "_is_osdi_descriptor", False) else model
+        for name, model in models.items()
+    }
+
+
+def _embed_library_subcircuits(net_dict: dict | kfnl.Netlist, models_map: dict) -> dict:
+    """Bind wrapper settings to leaf rows, then retain kfnetlist hierarchy.
+
+    @tags circulax-simulation
+    """
+    registrations = {name: model for name, model in models_map.items() if getattr(model, "_is_circulax_library_model", False)}
+    recnet = dict(net_dict) if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict) else {"top": net_dict}
+    for cell, source in list(recnet.items()):
+        native = isinstance(source, kfnl.Netlist)
+        data = source.to_dict() if native else deepcopy(source)
+        for instance in data.get("instances", {}).values():
+            model = registrations.get(instance.get("component"))
+            if model is None:
+                continue
+            definition = model.instantiate(instance.get("settings"))
+            key = f"__circulax_library_{len(recnet)}"
+            while key in recnet or key in models_map:
+                key += "_"
+            recnet[key] = definition.source_netlist
+            instance["component"] = key
+            instance["settings"] = {}
+            for name, leaf in definition.source_models.items():
+                existing = models_map.get(name)
+                if existing is not None and existing is not leaf:
+                    msg = f"Model name conflict: '{name}' maps to different objects in library '{model.subcircuit}'."
+                    raise ValueError(msg)
+                models_map[name] = leaf
+        recnet[cell] = kfnl.Netlist.from_dict(data) if native else data
+    for name in registrations:
+        del models_map[name]
+    return recnet
+
+
+def _configure_native_variants(circuit: Circuit, models_map: dict, recompile: Callable[[dict], Circuit]) -> None:
+    """Keep mode and simulator-setting updates tied to the compilation options."""
+    native_models = {name: model for name, model in models_map.items() if getattr(model, "_is_osdi_descriptor", False)}
+    if native_models:
+
+        def analysis_factory(analysis: str) -> Circuit:
+            variants = {
+                name: model.with_analysis(analysis) if name in native_models else model for name, model in models_map.items()
+            }
+            return recompile(variants)
+
+        def simparams_factory(settings: Mapping[str, float]) -> Circuit:
+            return recompile(_apply_native_simparams(models_map, settings))
+
+        circuit._simparams_factory = simparams_factory  # noqa: SLF001 -- compilation initializes the Circuit
+        circuit._analysis_factory = analysis_factory  # noqa: SLF001 -- compilation initializes the Circuit
+        modes = {model.model.analysis for model in native_models.values()}
+        if len(modes) == 1:
+            circuit._analysis_variants[next(iter(modes))] = circuit  # noqa: SLF001 -- compilation initializes the Circuit
+
+
 def compile_circuit(
     net_dict: dict | kfnl.Netlist,
     models_map: dict,
@@ -622,8 +976,11 @@ def compile_circuit(
     atol: float = 1e-6,
     max_steps: int = 100,
     params_map: dict[str, dict[str, str]] | None = None,
+    simparams: Mapping[str, float] | None = None,
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
+
+    @tags circulax-simulation
 
     Accepts a ``kfnetlist.Netlist``, a SAX-format dict, or a
     ``RecursiveNetlist`` (``dict[str, Netlist]``).  When a recursive netlist
@@ -631,6 +988,8 @@ def compile_circuit(
 
     A compiled :class:`Circuit` may also appear as a value in *models_map*;
     its stored source netlist is inlined as a subcircuit automatically.
+    A ``netlist_io.LibraryModel`` binds instance settings to card parameters
+    and leaf topology before the same kfnetlist flattening step.
 
     Args:
         net_dict: Netlist (kfnetlist.Netlist, SAX-format dict, or
@@ -645,6 +1004,11 @@ def compile_circuit(
         rtol: Relative tolerance for the Newton solver.
         atol: Absolute tolerance for the Newton solver.
         max_steps: Max Newton iterations.
+        simparams: Numeric settings queried by native Verilog-A $simparam calls.
+            Applied to every OSDI descriptor, overriding its simulator defaults;
+            retained across DC/AC/transient and device parameter updates. These
+            are static model settings, separate from solver tolerances and
+            device parameters. Use Circuit.set_simparams to update them.
         params_map: Optional mapping from component type names to dicts that
             rename netlist setting keys to model field names, e.g.
             ``{"thermal_heater": {"length": "length_um"}}``.
@@ -654,23 +1018,28 @@ def compile_circuit(
 
     """
     from circulax.compiler import compile_netlist
-    from circulax.netlist import _is_recursive_netlist, flatten_recursive_netlist
+    from circulax.netlist import _flatten_circuit_netlists, _is_recursive_netlist
     from circulax.solvers.linear import analyze_circuit
 
     models_map = dict(models_map)
-    source_netlist: dict | None = None
+    source_netlist: dict | kfnl.Netlist | None = None
     source_models: dict | None = None
 
     circuit_models = {k: v for k, v in models_map.items() if isinstance(v, Circuit)}
     if circuit_models:
         net_dict = _embed_circuit_subcircuits(net_dict, models_map, circuit_models)
 
+    if any(getattr(model, "_is_circulax_library_model", False) for model in models_map.values()):
+        net_dict = _embed_library_subcircuits(net_dict, models_map)
+
+    models_map = _apply_native_simparams(models_map, simparams)
+
     if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict):
         source_netlist = net_dict.get(next(iter(net_dict)))
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
-        net_dict = flatten_recursive_netlist(net_dict)
+        net_dict = _flatten_circuit_netlists(net_dict)
         source_netlist = net_dict
-    elif isinstance(net_dict, dict):
+    elif isinstance(net_dict, (dict, kfnl.Netlist)):
         source_netlist = net_dict
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
 
@@ -684,7 +1053,7 @@ def compile_circuit(
         _validate_holomorphic_flags(groups)
     solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak)
     is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) for g in groups.values())
-    return Circuit(
+    circuit = Circuit(
         solver=solver,
         groups=groups,
         sys_size=sys_size,
@@ -696,6 +1065,19 @@ def compile_circuit(
         _source_models=source_models,
         _is_pure_sax=is_pure_sax,
     )
+    recompile = partial(
+        compile_circuit,
+        net_dict,
+        backend=backend,
+        is_complex=is_complex,
+        g_leak=g_leak,
+        rtol=rtol,
+        atol=atol,
+        max_steps=max_steps,
+        params_map=params_map,
+    )
+    _configure_native_variants(circuit, models_map, recompile)
+    return circuit
 
 
 def _infer_holomorphic(groups: dict) -> bool:
@@ -747,7 +1129,7 @@ def _infer_is_complex(groups: dict) -> bool:
 
 
 def _group_outputs_complex(group: Any) -> bool:
-    if getattr(group, "is_fdomain", False):
+    if getattr(group, "is_fdomain", False) or hasattr(group, "model_id"):
         return False
     if not hasattr(group, "physics_func"):
         # Group types that bypass the physics_func interface entirely (e.g.

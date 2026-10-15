@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-01",
+  "python": "3.13.14",
+  "platform": "Linux-7.1.5-76070105-generic-x86_64-with-glibc2.39",
+  "jax": "0.7.2",
+  "backend": "cpu",
+  "bosdi_source_commit": "66740a8f68c753d8702c68035ee9b0c6786f1357",
+  "gf180_commit": "afa491a31c6fc963801bde7fe856d5cedbfb03e0",
+  "photonflux_commit": "c9ded5ebf81226291ed3ff7fcc07204eb6aebc24",
+  "photonflux_bsim4_sha256": "abece317aecadc6dfe00c216a1fd0ca9510aff607447587b4a7c708795b6e868",
+  "openvaf_version": "openvaf 23.5.0",
+  "openvaf_sha256": "ef6a33e7d85f62012ede93375d517eff6839a97565c6c09601508bae50de169a",
+  "native_extension_sha256": "45d86dfcc7fe6ca49d1a4369f25a7596b86af4ccef43711ca98c94378b4dcb2e",
+  "vacask_version": "0.3.2-103-g6434ed0-dirty",
+  "vacask_sha256": "dc95fd7d1a5e0a63263d940d6b6999e87ebd99cc27a671af82d5a23f9ebe1f57",
+  "temperature_c": 26.85,
+  "frequency_hz": [
+    1000.0,
+    10000.0,
+    100000.0,
+    1000000.0,
+    10000000.0,
+    100000000.0,
+    1000000000.0
+  ],
+  "geometry_and_bias": "See run.py; one DC bias per card, nf=1; parasitic variants explicitly override rgatemod/rbodymod/rdsmod."
+}

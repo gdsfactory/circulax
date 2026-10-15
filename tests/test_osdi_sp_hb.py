@@ -13,14 +13,20 @@ capacitor is an OSDI device loaded from ``tests/data/va/capacitor.osdi``.
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+if TYPE_CHECKING:
+    from circulax import Circuit
+
+jax.config.update("jax_enable_x64", True)  # noqa: FBT003 -- JAX configuration API
 
 _DATA_DIR = Path(__file__).parent / "data" / "va"
 CAPACITOR_OSDI = str(_DATA_DIR / "capacitor.osdi")
@@ -38,15 +44,16 @@ def _bosdi_available() -> bool:
         from osdi_loader import load_osdi_model
 
         load_osdi_model(CAPACITOR_OSDI)
-        return True
     except (ImportError, RuntimeError, OSError):
         return False
+    else:
+        return True
 
 
 pytestmark = pytest.mark.skipif(not _bosdi_available(), reason="bosdi/osdi_jax not available")
 
 
-def _rc_divider_circuit(cap_model, cap_ports, *, backend):
+def _rc_divider_circuit(cap_model: object, cap_ports: tuple[str, str], *, backend: str) -> Circuit:
     from circulax import compile_circuit
     from circulax.components.electronic import Resistor, VoltageSourceAC
 
@@ -74,24 +81,25 @@ def _rc_divider_circuit(cap_model, cap_ports, *, backend):
     return compile_circuit(net, models, backend=backend)
 
 
-def _osdi_capacitor():
+def _osdi_capacitor(*, analysis: str = "ac", osdi_path: str = CAPACITOR_OSDI) -> tuple[object, tuple[str, str]]:
     from circulax import osdi_component
 
     return osdi_component(
-        osdi_path=CAPACITOR_OSDI,
+        osdi_path=osdi_path,
         ports=("p", "n"),
         default_params={"$mfactor": 1.0, "c": 1e-12},
+        analysis=analysis,
     ), ("p", "n")
 
 
-def _builtin_capacitor():
+def _builtin_capacitor() -> tuple[object, tuple[str, str]]:
     from circulax.components.electronic import Capacitor
 
     return Capacitor, ("p1", "p2")
 
 
 @pytest.mark.parametrize("backend", ["dense", "klu_split"])
-def test_sp_osdi_matches_builtin_capacitor(backend):
+def test_sp_osdi_matches_builtin_capacitor(backend: str) -> None:
     osdi_cap, osdi_ports = _osdi_capacitor()
     builtin_cap, builtin_ports = _builtin_capacitor()
 
@@ -102,15 +110,13 @@ def test_sp_osdi_matches_builtin_capacitor(backend):
     y_dc_builtin = c_builtin.dc()
 
     sp_osdi = np.asarray(c_osdi.sp(ports=["out"], freqs=np.array([F0]), z0=50.0, y_dc=y_dc_osdi))
-    sp_builtin = np.asarray(
-        c_builtin.sp(ports=["out"], freqs=np.array([F0]), z0=50.0, y_dc=y_dc_builtin)
-    )
+    sp_builtin = np.asarray(c_builtin.sp(ports=["out"], freqs=np.array([F0]), z0=50.0, y_dc=y_dc_builtin))
 
     np.testing.assert_allclose(sp_osdi, sp_builtin, rtol=1e-6)
 
 
 @pytest.mark.parametrize("backend", ["dense", "klu_split"])
-def test_hb_osdi_matches_builtin_capacitor(backend):
+def test_hb_osdi_matches_builtin_capacitor(backend: str) -> None:
     osdi_cap, osdi_ports = _osdi_capacitor()
     builtin_cap, builtin_ports = _builtin_capacitor()
 
@@ -121,19 +127,47 @@ def test_hb_osdi_matches_builtin_capacitor(backend):
     y_dc_builtin = c_builtin.dc()
 
     K = 2 * HARMONICS + 1
-    _, freq_osdi = c_osdi.hb(
-        freq=F0, harmonics=HARMONICS, y0=y_dc_osdi, y_flat_init=jnp.tile(y_dc_osdi, K)
-    )
-    _, freq_builtin = c_builtin.hb(
-        freq=F0, harmonics=HARMONICS, y0=y_dc_builtin, y_flat_init=jnp.tile(y_dc_builtin, K)
-    )
+    _, freq_osdi = c_osdi.hb(freq=F0, harmonics=HARMONICS, y0=y_dc_osdi, y_flat_init=jnp.tile(y_dc_osdi, K))
+    _, freq_builtin = c_builtin.hb(freq=F0, harmonics=HARMONICS, y0=y_dc_builtin, y_flat_init=jnp.tile(y_dc_builtin, K))
 
-    port_osdi = c_osdi._resolve_port_node("out")
-    port_builtin = c_builtin._resolve_port_node("out")
-
-    amp_osdi = abs(freq_osdi[1, port_osdi])
-    amp_builtin = abs(freq_builtin[1, port_builtin])
+    amp_osdi = abs(c_osdi.port(freq_osdi[1], "out"))
+    amp_builtin = abs(c_builtin.port(freq_builtin[1], "out"))
 
     np.testing.assert_allclose(amp_osdi, amp_builtin, rtol=1e-6)
     # Analytic value for this R-C divider (see issue #65).
     np.testing.assert_allclose(2.0 * amp_osdi, 0.954028, atol=5e-6)
+
+
+@pytest.fixture(scope="module")
+def mode_capacitor(tmp_path_factory: pytest.TempPathFactory) -> str:
+    compiler = shutil.which("openvaf-r")
+    if compiler is None:
+        pytest.skip("openvaf-r is not installed")
+    root = tmp_path_factory.mktemp("hb-mode-capacitor")
+    source = root / "capacitor.va"
+    source.write_text("""`include "disciplines.vams"
+module mode_capacitor(p, n);
+  inout p, n;
+  electrical p, n;
+  parameter real c = 1e-12;
+  analog begin
+    if (analysis("ac")) I(p,n) <+ ddt(9*c*V(p,n));
+    else if (analysis("tran")) I(p,n) <+ ddt(c*V(p,n));
+  end
+endmodule
+""")
+    target = root / "capacitor.osdi"
+    subprocess.run([compiler, str(source), "-o", str(target)], check=True, capture_output=True)  # noqa: S603 -- explicit compiler; no shell
+    return str(target)
+
+
+@pytest.mark.parametrize("backend", ["dense", "klu_split"])
+@pytest.mark.parametrize("initial_mode", ["dc", "ac", "tran"])
+def test_hb_selects_transient_native_physics(mode_capacitor: str, backend: str, initial_mode: str) -> None:
+    capacitor, ports = _osdi_capacitor(analysis=initial_mode, osdi_path=mode_capacitor)
+    circuit = _rc_divider_circuit(capacitor, ports, backend=backend)
+    # Exercise automatic DC initialization and native registration under JIT.
+    _, spectrum = jax.jit(lambda: circuit.hb(freq=F0, harmonics=HARMONICS))()
+    amplitude = 2 * abs(circuit.port(spectrum[1], "out"))
+    expected = 1 / np.sqrt(1 + (2 * np.pi * F0 * 50 * 1e-12) ** 2)
+    np.testing.assert_allclose(amplitude, expected, rtol=1e-6)

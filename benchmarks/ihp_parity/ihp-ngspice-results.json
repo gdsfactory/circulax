@@ -1,0 +1,484 @@
+{
+  "lv_nmos_dc_mos_tt_nf1": {
+    "passed": true,
+    "max_absolute_error": 1.8973538018496328e-19,
+    "reference_max": 0.00021555391649396053,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_tt_nf2": {
+    "passed": true,
+    "max_absolute_error": 3.7947076036992655e-19,
+    "reference_max": 0.00019285219987705054,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_tt_nf3": {
+    "passed": true,
+    "max_absolute_error": 3.5236570605778894e-19,
+    "reference_max": 0.00018170395323965406,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_ss_nf1": {
+    "passed": true,
+    "max_absolute_error": 6.2341624917916505e-19,
+    "reference_max": 0.00013821976717412086,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_ss_nf2": {
+    "passed": true,
+    "max_absolute_error": 4.0657581468206416e-20,
+    "reference_max": 0.00011989356334584549,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_ss_nf3": {
+    "passed": true,
+    "max_absolute_error": 1.3552527156068805e-19,
+    "reference_max": 0.00011002073551434795,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_ff_nf1": {
+    "passed": true,
+    "max_absolute_error": 0.0,
+    "reference_max": 0.0003226480854752799,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_ff_nf2": {
+    "passed": true,
+    "max_absolute_error": 2.710505431213761e-19,
+    "reference_max": 0.0002956848405743912,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_ff_nf3": {
+    "passed": true,
+    "max_absolute_error": 1.0842021724855044e-19,
+    "reference_max": 0.00028406259097450877,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_sf_nf1": {
+    "passed": true,
+    "max_absolute_error": 2.710505431213761e-19,
+    "reference_max": 0.00017394354655108463,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_sf_nf2": {
+    "passed": true,
+    "max_absolute_error": 4.0657581468206416e-19,
+    "reference_max": 0.00015342514218557842,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_sf_nf3": {
+    "passed": true,
+    "max_absolute_error": 5.149960319306146e-19,
+    "reference_max": 0.00014282258433042977,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_fs_nf1": {
+    "passed": true,
+    "max_absolute_error": 5.421010862427522e-20,
+    "reference_max": 0.00026544520890263836,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_fs_nf2": {
+    "passed": true,
+    "max_absolute_error": 5.421010862427522e-20,
+    "reference_max": 0.0002405203606857376,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "lv_nmos_dc_mos_fs_nf3": {
+    "passed": true,
+    "max_absolute_error": 1.0842021724855044e-19,
+    "reference_max": 0.00022897244271146116,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rf_nmos_mos_tt": {
+    "passed": true,
+    "max_absolute_error": 2.981555974335137e-19,
+    "reference_max": 9.642609993310843e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "hv_nmos_mos_tt": {
+    "passed": true,
+    "max_absolute_error": 5.421010862427522e-20,
+    "reference_max": 0.0004348066502325776,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rf_nmos_mos_ss": {
+    "passed": true,
+    "max_absolute_error": 2.0328790734103208e-20,
+    "reference_max": 5.9946781680994305e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "hv_nmos_mos_ss": {
+    "passed": true,
+    "max_absolute_error": 4.87890977618477e-19,
+    "reference_max": 0.000369735495884918,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rf_nmos_mos_ff": {
+    "passed": true,
+    "max_absolute_error": 2.710505431213761e-19,
+    "reference_max": 0.00014784242016807018,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "hv_nmos_mos_ff": {
+    "passed": true,
+    "max_absolute_error": 0.0,
+    "reference_max": 0.0005044840589044947,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rf_nmos_mos_sf": {
+    "passed": true,
+    "max_absolute_error": 2.710505431213761e-19,
+    "reference_max": 7.671257109845997e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "hv_nmos_mos_sf": {
+    "passed": true,
+    "max_absolute_error": 5.421010862427522e-20,
+    "reference_max": 0.00040099474041241877,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rf_nmos_mos_fs": {
+    "passed": true,
+    "max_absolute_error": 6.776263578034403e-19,
+    "reference_max": 0.00012026018030489506,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "hv_nmos_mos_fs": {
+    "passed": true,
+    "max_absolute_error": 8.131516293641283e-19,
+    "reference_max": 0.00046845280818858757,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rsil_res_typ": {
+    "passed": true,
+    "max_absolute_error": 0.0,
+    "reference_max": 0.004608817890741405,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rhigh_res_typ": {
+    "passed": true,
+    "max_absolute_error": 1.4568966692773966e-19,
+    "reference_max": 2.596262720147742e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rppd_res_typ": {
+    "passed": true,
+    "max_absolute_error": 5.692061405548898e-19,
+    "reference_max": 0.00014705203593134292,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rsil_res_bcs": {
+    "passed": true,
+    "max_absolute_error": 1.734723475976807e-18,
+    "reference_max": 0.005184143820579849,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rhigh_res_bcs": {
+    "passed": true,
+    "max_absolute_error": 8.809142651444724e-20,
+    "reference_max": 3.437873838735197e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rppd_res_bcs": {
+    "passed": true,
+    "max_absolute_error": 6.505213034913027e-19,
+    "reference_max": 0.00016246195217305484,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rsil_res_wcs": {
+    "passed": true,
+    "max_absolute_error": 0.0,
+    "reference_max": 0.004148433052946057,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rhigh_res_wcs": {
+    "passed": true,
+    "max_absolute_error": 1.3213713977167085e-19,
+    "reference_max": 2.0856770781534605e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "rppd_res_wcs": {
+    "passed": true,
+    "max_absolute_error": 4.0657581468206416e-19,
+    "reference_max": 0.0001343121935775413,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "temperature_nmos_-40.0": {
+    "passed": true,
+    "max_absolute_error": 1.3552527156068805e-20,
+    "reference_max": 7.53617763484955e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "temperature_resistor_-40.0": {
+    "passed": true,
+    "max_absolute_error": 8.131516293641283e-20,
+    "reference_max": 0.00014791109926155094,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "temperature_nmos_27.0": {
+    "passed": true,
+    "max_absolute_error": 8.131516293641283e-20,
+    "reference_max": 9.647105060143558e-05,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "temperature_resistor_27.0": {
+    "passed": true,
+    "max_absolute_error": 8.131516293641283e-20,
+    "reference_max": 0.0001470495588429717,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "temperature_nmos_125.0": {
+    "passed": true,
+    "max_absolute_error": 2.710505431213761e-19,
+    "reference_max": 0.0001228106905466547,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "temperature_resistor_125.0": {
+    "passed": true,
+    "max_absolute_error": 7.860465750519907e-19,
+    "reference_max": 0.0001449256949350242,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nmos_rfmode0_ac": {
+    "passed": true,
+    "max_absolute_error": 1.6653346251703312e-16,
+    "reference_max": 0.20939349234088916,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nmos_rfmode1_ac": {
+    "passed": true,
+    "max_absolute_error": 1.506433881203328e-12,
+    "reference_max": 0.20945796499706232,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nand_0_0": {
+    "passed": true,
+    "max_absolute_error": 2.220446049250313e-16,
+    "reference_max": 1.1999999806874657,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nand_0_1.2": {
+    "passed": true,
+    "max_absolute_error": 4.440892098500626e-16,
+    "reference_max": 1.1999999579767469,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nand_1.2_0": {
+    "passed": true,
+    "max_absolute_error": 0.0,
+    "reference_max": 1.1999999610498335,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nand_1.2_1.2": {
+    "passed": true,
+    "max_absolute_error": 6.989948814802981e-17,
+    "reference_max": 2.6866439098840165e-07,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nor_0_0": {
+    "passed": true,
+    "max_absolute_error": 8.881784197001252e-16,
+    "reference_max": 1.1999998319067728,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nor_0_1.2": {
+    "passed": true,
+    "max_absolute_error": 2.0067573714103862e-17,
+    "reference_max": 5.746942106256663e-08,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nor_1.2_0": {
+    "passed": true,
+    "max_absolute_error": 2.1143973919051767e-16,
+    "reference_max": 6.716593252406357e-08,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "nor_1.2_1.2": {
+    "passed": true,
+    "max_absolute_error": 8.520646207460114e-17,
+    "reference_max": 1.8105877251824557e-08,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "inverter_vg0.0": {
+    "passed": true,
+    "max_absolute_error": 4.440892098500626e-16,
+    "reference_max": 1.1999999579766902,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "inverter_vg0.4": {
+    "passed": true,
+    "max_absolute_error": 2.220446049250313e-16,
+    "reference_max": 1.1974816665074122,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "inverter_vg0.6": {
+    "passed": true,
+    "max_absolute_error": 2.886579864025407e-15,
+    "reference_max": 0.9007646601065054,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "inverter_vg0.8": {
+    "passed": true,
+    "max_absolute_error": 1.5612511283791264e-17,
+    "reference_max": 0.00413530510509798,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "inverter_vg1.2": {
+    "passed": true,
+    "max_absolute_error": 1.1597817312289236e-16,
+    "reference_max": 6.716610713870968e-08,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "inverter_dc_sweep": {
+    "passed": true,
+    "max_absolute_error": 7.223777132026044e-11,
+    "reference_max": 1.1999999579766902,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "inverter_tran": {
+    "passed": true,
+    "max_absolute_error": 6.382610839392178e-06,
+    "reference_max": 1.2067558870392745,
+    "rtol": 0.003,
+    "atol": 0.0001,
+    "input_max_absolute_error": 5.329070518200751e-15,
+    "simulator": "ngspice"
+  },
+  "cap_cmim_ac": {
+    "passed": true,
+    "max_absolute_error": 2.2887833992611187e-16,
+    "reference_max": 0.9999995462910429,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "cap_rfcmim_ac": {
+    "passed": true,
+    "max_absolute_error": 3.0264734594495153e-13,
+    "reference_max": 0.9999995458270078,
+    "rtol": 1e-05,
+    "atol": 1e-09,
+    "simulator": "ngspice"
+  },
+  "cmim_tran": {
+    "passed": true,
+    "max_absolute_error": 7.804107909410894e-06,
+    "reference_max": 0.9999999999940588,
+    "rtol": 0.003,
+    "atol": 0.0001,
+    "input_max_absolute_error": 1.5543122344752192e-15,
+    "simulator": "ngspice"
+  }
+}

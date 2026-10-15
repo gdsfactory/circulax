@@ -1,0 +1,944 @@
+{
+  "scope": "card-level DC/AC, explicit bin; no full SPICE wrapper or transient claim",
+  "source_sha256": "38a5a817da62ea8d2849efbc50e1f5d127a8e6a4c2539ba456e0cc67ab8bc1fc",
+  "osdi_sha256": "0daffe2a37ffa3abac863cb394869ea298c3b2dd8e968e905b289184450dbdff",
+  "raw_nodes": 16,
+  "state_slots": 0,
+  "results": {
+    "nmos_3p3_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.1172239246855326e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 4.427359979355562e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.1172239246855326e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 4.427359979355562e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_typical_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_typical_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000175988\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_3p3_typical_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00014992729039417402,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0006498841873031193,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00014992729039417402,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0006498841873031193,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_typical_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_typical_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000302013\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.1250442870233627e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 1.2043903261071487e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.1250442870233627e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 1.2043903261071487e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_typical_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_typical_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000285361\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_typical_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.7376962904728957e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.00017962082466966306,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 2.7376962904728957e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.00017962082466966306,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_typical_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_typical_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.00015043\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_6p0_typical_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_typical_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "pmos_6p0_typical_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 8.0419450455734e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 7.827205621859114e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 8.0419450455734e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 3.3881317890172014e-20,
+        "reference_max": 7.827205621859114e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_6p0_typical_bin0_parasitics1": {
+      "error": "Internal/equality equations did not converge"
+    },
+    "nmos_6p0_nat_typical_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_nat_typical_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_3p3_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.8467278542812782e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 5.673926537471736e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.8467278542812782e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 5.673926537471736e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_ff_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_ff_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000281485\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_3p3_ff_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.0002488410940376343,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0008226366137011797,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.0002488410940376343,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0008226366137011797,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_ff_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_ff_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000299609\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 4.383506159267949e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 1.7724952859976694e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 4.383506159267949e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 1.7724952859976694e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_ff_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_ff_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000288678\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_ff_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 5.99165090269493e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.00026854140451224745,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 5.99165090269493e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.00026854140451224745,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_ff_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_ff_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.00015026\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_6p0_ff_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_ff_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "pmos_6p0_ff_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.875575261251115e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.0657581468206416e-20,
+        "reference_max": 0.0001061105378470986,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.875575261251115e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 4.0657581468206416e-20,
+        "reference_max": 0.0001061105378470986,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_6p0_ff_bin0_parasitics1": {
+      "error": "Internal/equality equations did not converge"
+    },
+    "nmos_6p0_nat_ff_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_nat_ff_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_3p3_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 6.0029065015462155e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 3.218350834177534e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 6.0029065015462155e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 3.218350834177534e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_ss_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_ss_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000292976\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_3p3_ss_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.877175270251542e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.3552527156068805e-20,
+        "reference_max": 0.000470918608555222,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.877175270251542e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.3552527156068805e-20,
+        "reference_max": 0.000470918608555222,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_ss_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_ss_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000281876\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.899134179154134e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 6.946329791327789e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.899134179154134e-07,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 6.946329791327789e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_ss_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_ss_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000299318\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_ss_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 8.858311649712443e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 9.470815219992218e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 8.858311649712443e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 9.470815219992218e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_ss_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_ss_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000301171\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_6p0_ss_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_ss_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "pmos_6p0_ss_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.879653116056951e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 2.7881347622482296e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.879653116056951e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 2.7881347622482296e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_6p0_ss_bin0_parasitics1": {
+      "error": "Internal/equality equations did not converge"
+    },
+    "nmos_6p0_nat_ss_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_nat_ss_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_3p3_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.5995178775161177e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 5.228275994433314e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.5995178775161177e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 5.228275994433314e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_fs_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_fs_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.00016071\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_3p3_fs_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00021750419282984227,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0007678202744505877,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 0.00021750419282984227,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0007678202744505877,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_fs_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_fs_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000282967\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.080452292426471e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 8.384268519617834e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.080452292426471e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 8.384268519617834e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_fs_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_fs_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000156191\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_fs_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.2582530379423019e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.00011740086626536312,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.2582530379423019e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.00011740086626536312,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_fs_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_fs_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000142796\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_6p0_fs_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_fs_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "pmos_6p0_fs_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 3.299733574145263e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 4.0290891553135086e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 3.299733574145263e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 4.235164736271502e-21,
+        "reference_max": 4.0290891553135086e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_6p0_fs_bin0_parasitics1": {
+      "error": "Internal/equality equations did not converge"
+    },
+    "nmos_6p0_nat_fs_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_nat_fs_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_3p3_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.309990282274223e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 3.607357412898313e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 7.309990282274223e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 6.352747104407253e-22,
+        "reference_max": 3.607357412898313e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_sf_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_sf_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000292816\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_3p3_sf_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 9.57744769653107e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0005245542244003274,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 9.57744769653107e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.1858461261560205e-20,
+        "reference_max": 0.0005245542244003274,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "nmos_3p3_sf_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 nmos_3p3_sf_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000297234\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 3.6220741266172295e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 1.5868780992306875e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 3.6220741266172295e-06,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 7.411538288475128e-22,
+        "reference_max": 1.5868780992306875e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_sf_bin0_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_sf_bin0_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.00030038\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "pmos_3p3_sf_bin8_parasitics0": {
+      "pdk_version_selector": 4.5,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 4.9401416521955764e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0002423034694339981,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 4.9401416521955764e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 1.0164395367051604e-20,
+        "reference_max": 0.0002423034694339981,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_3p3_sf_bin8_parasitics1": {
+      "error": "VACASK failed (1); expected op1.raw:\nThis is vacask 0.3.2-103-g6434ed0-dirty.\n(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen\nhttps://codeberg.org/arpadbuermen/VACASK\n\nSimulating: GF180 pmos_3p3_sf_bin8_parasitics1\nOSDI m: Warning: (instance X*) Source diffusion conductance reset to 1.0e3 mho.\n\nOSDI m: Warning: (instance X*) Drain diffusion conductance reset to 1.0e3 mho.\n\nRunning analysis 'op1'.\n  Elapsed time: 0.000298536\nFactorization failed, size=15, rank=5, zero pivot @ node 'm:flow(b,bi)'.\nLeaving core NR loop in iteration 1.\nHomotopy failed.\nAnalysis 'op1' aborted.\n\n"
+    },
+    "nmos_6p0_sf_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_sf_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "pmos_6p0_sf_bin0_parasitics0": {
+      "pdk_version_selector": 4.6,
+      "implementation": "bsim4va",
+      "dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.4781854545843451e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "ac": {
+        "passed": true,
+        "max_absolute_error": 4.0657581468206416e-20,
+        "reference_max": 0.00010055834994948078,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_dc": {
+        "passed": true,
+        "max_absolute_error": 0.0,
+        "reference_max": 1.4781854545843451e-05,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      },
+      "circulax_ac": {
+        "passed": true,
+        "max_absolute_error": 4.0657581468206416e-20,
+        "reference_max": 0.00010055834994948078,
+        "rtol": 1e-05,
+        "atol": 1e-12
+      }
+    },
+    "pmos_6p0_sf_bin0_parasitics1": {
+      "error": "Internal/equality equations did not converge"
+    },
+    "nmos_6p0_nat_sf_bin0_parasitics0": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    },
+    "nmos_6p0_nat_sf_bin0_parasitics1": {
+      "error": "OSDI parameters missing: ['lintnoi']"
+    }
+  }
+}

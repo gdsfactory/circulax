@@ -19,3 +19,5 @@ circulax/_version.py
 debug_scripts/
 cmz_optimisation.gif
 .claude/
+
+/parity-results/

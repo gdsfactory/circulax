@@ -8,6 +8,66 @@ from circulax.compiler import compile_netlist
 from circulax.netlist import build_net_map_kfnetlist, sax_to_kfnetlist
 
 
+def test_public_netlist_type_is_kfnetlist() -> None:
+    from circulax import Netlist, SaxNetlist
+    from circulax.netlist import Netlist as ModuleNetlist
+    from circulax.netlist import circulaxNetlist
+
+    assert Netlist is ModuleNetlist is kfnl.Netlist
+    assert SaxNetlist is circulaxNetlist
+
+
+def test_kfnetlist_hierarchy_adapter_preserves_single_terminal_nets() -> None:
+    from circulax.netlist import kfnetlist_to_sax
+
+    original = kfnl.Netlist()
+    original.create_inst(name="R", kcl="", component="resistor")
+    original.create_port("a")
+    original.create_net(kfnl.NetlistPort("a"), kfnl.PortRef(instance="R", port="p1"))
+    original.create_net(kfnl.PortRef(instance="R", port="p2"))
+    adapted, _ = sax_to_kfnetlist(kfnetlist_to_sax(original))
+    assert build_net_map_kfnetlist(adapted) == build_net_map_kfnetlist(original)
+
+
+def test_kfnetlist_circuit_retains_source_and_can_be_embedded(monkeypatch: pytest.MonkeyPatch) -> None:
+    from importlib import import_module
+
+    from circulax import compile_circuit
+    from circulax.components.electronic import Resistor, VoltageSource
+
+    child = kfnl.Netlist()
+    child.create_inst(name="R", kcl="", component="resistor", settings={"R": 100.0})
+    for external, internal in [("a", "p1"), ("b", "p2")]:
+        child.create_port(external)
+        child.create_net(kfnl.NetlistPort(external), kfnl.PortRef(instance="R", port=internal))
+    models = {"resistor": Resistor, "vdc": VoltageSource}
+    circuit = compile_circuit(child, models)
+    assert circuit.source_netlist is child
+    assert circuit.ports == ("a", "b")
+    assert circuit.source_models["resistor"] is Resistor
+
+    parent, _ = sax_to_kfnetlist(
+        {
+            "instances": {
+                "SC": {"component": "child"},
+                "V": {"component": "vdc", "settings": {"V": 1.0}},
+                "GND": {"component": "ground"},
+            },
+            "connections": {"V,p1": "SC,a", "V,p2": ("SC,b", "GND,p1")},
+            "ports": {"out": "SC,a"},
+        }
+    )
+
+    def reject_sax_roundtrip(_netlist: kfnl.Netlist) -> dict:
+        pytest.fail("Native hierarchy must compile without converting back to SAX")
+
+    monkeypatch.setattr(import_module("circulax.netlist"), "kfnetlist_to_sax", reject_sax_roundtrip)
+    combined = compile_circuit(parent, {**models, "child": circuit})
+    assert isinstance(combined.source_netlist, kfnl.Netlist)
+    assert float(combined.port(combined.dc(), "out")) == pytest.approx(1.0)
+    assert "SC~R,p1" in combined.port_map
+
+
 def test_build_net_map_kfnetlist_basic():
     nl = kfnl.Netlist()
     nl.create_inst(name="GND", kcl="", component="ground")

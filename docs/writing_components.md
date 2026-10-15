@@ -106,6 +106,23 @@ def Inductor(signals: Signals, L: float = 1e-9):
     )
 ```
 
+#### Example: Coupled Inductors and an Ideal Transformer
+
+`CoupledInductors` and `IdealTransformer` (in `circulax.components.electronic`) are two-winding primitives with the same terminal contract: primary `p1`/`p2`, secondary `s1`/`s2`, **dots on `p1` and `s1`**, winding currents positive into the dotted terminal. Swap `s1`/`s2` (or negate `k`) to reverse polarity.
+
+| Component | Parameters | Valid range | Equations |
+|-----------|------------|-------------|-----------|
+| `CoupledInductors` | `L1`, `L2`, `k` | `L1, L2 > 0`, `-1 <= k <= 1` | `v1 = L1 di1/dt + M di2/dt`, `v2 = M di1/dt + L2 di2/dt`, `M = k sqrt(L1 L2)` |
+| `IdealTransformer` | `n = N1/N2` | `n > 0` | `v1 = n v2`, `i2 = -n i1` |
+
+Instances with different `L1`/`L2`/`k`/`n` share one batched component group.
+
+DC and singular limits:
+
+- At DC each winding of `CoupledInductors` is a short circuit. A winding with no DC path to a reference leaves its nodes floating and the DC Jacobian singular, so ground `p2` and `s2` (or set `g_leak`).
+- `|k| = 1` makes the inductance matrix singular: inconsistent winding voltages have no solution and transient/AC solves are ill-posed. For perfect coupling use an `IdealTransformer` plus a magnetizing `Inductor` on the primary.
+- `IdealTransformer` has no frequency dependence and **passes DC** (`v1 = n v2` at `ω = 0`), unlike a physical transformer. Add a magnetizing inductor for low-frequency roll-off.
+
 ---
 
 ## `@source` — Time-Dependent Sources
@@ -130,6 +147,22 @@ def VoltageSourceAC(
     constraint = (signals.p1 - signals.p2) - v_target
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 ```
+
+### Declaring ideal source clamps
+
+`Circuit.sp_wavelength` attaches matched boundaries to the selected ports. A port that an ideal
+voltage/field source already clamps would be silently overridden, so the analysis rejects it. The
+check cannot be inferred from the physics function: declare the clamped terminals on the decorator
+with `ideal_voltage_constraint_ports`, naming the ports whose voltage the source prescribes.
+
+```python
+@source(ports=("p1", "p2"), states=("i_src",), ideal_voltage_constraint_ports=("p1", "p2"))
+def FieldSource(signals: Signals, t: float, V: float = 1.0):
+    return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": (signals.p1 - signals.p2) - V}, {}
+```
+
+The built-in voltage and optical field sources declare it already. A custom source that omits it
+is not detected, so wavelength characterization would replace its clamp with the matched boundary.
 
 ---
 
@@ -364,6 +397,42 @@ PSP103 = osdi_component(
     default_params={"LEVEL": 103, "TNOM": 27.0, ...},
 )
 ```
+
+Simulator settings queried through Verilog-A `$simparam` are separate from device
+parameters. Supply finite numeric values when compiling the circuit:
+
+```python
+circuit = compile_circuit(
+    netlist,
+    models_map,
+    simparams={"scale": 2.0, "tnom": 27.0},
+)
+```
+
+These settings apply to all native OSDI devices and carry through DC, AC and
+transient analyses, including device parameter updates. `osdi_component(...,
+simparams={...})` can supply descriptor defaults; circuit-wide entries override
+matching defaults. `resolved.compile(simparams={...})` supports the same mapping
+for parsed netlists. Names are case-sensitive and omitted settings use the
+model's own defaults. Units follow the model's query (the SPICE `tnom` query
+uses degrees Celsius, while `temperature=` uses kelvin).
+
+The mapping is copied at registration. For a sweep, use `set_simparams` outside
+JIT and rerun the analysis on the returned circuit:
+
+```python
+for scale in [1.0, 2.0, 3.0]:
+    updated = circuit.set_simparams(scale=scale)
+    result = updated.dc()
+```
+
+`set_simparams({"scale": 2.0}, tnom=30.0)` also accepts a mapping and keyword
+arguments; keywords take precedence. Updates merge into the existing settings.
+The method returns a new circuit and leaves the original and its JIT callables
+valid. It rebuilds native setup and analysis variants, reusing registrations for
+matching settings; Verilog-A binaries are not recompiled. These are static
+configuration rather than differentiable device parameters, and they do not
+change the host solver's `rtol`, `atol` or `g_leak`.
 
 OSDI models bypass the standard `@component` decorator — they are evaluated via FFI and use finite-difference sensitivities rather than AD. See the [OSDI Ring Oscillator](examples/ring_oscillator_osdi.md) and [PSP103 Parameter Fitting](examples/05_psp103_ring_param_fitting.md) examples.
 
