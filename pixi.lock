@@ -9621,7 +9621,6 @@ packages:
   - mkdocstrings==0.28.3 ; extra == 'dev'
   - mypy ; extra == 'dev'
   - nbconvert ; extra == 'dev'
-  - netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py ; extra == 'dev'
   - papermill ; extra == 'dev'
   - pre-commit ; extra == 'dev'
   - pymdown-extensions ; extra == 'dev'
@@ -9648,7 +9647,6 @@ packages:
   - nbconvert ; extra == 'docs'
   - papermill ; extra == 'docs'
   - pymdown-extensions ; extra == 'docs'
-  - netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py ; extra == 'netlists'
   - bosdi~=0.1.8 ; extra == 'verilog-a'
   requires_python: '>=3.12'
 - pypi: git+https://github.com/cdaunt/NetlistParse.rs.git?subdirectory=crates%2Fnetlist-py&rev=d83031dd9b75ab8688dea134033eaa14f9107bfb#d83031dd9b75ab8688dea134033eaa14f9107bfb

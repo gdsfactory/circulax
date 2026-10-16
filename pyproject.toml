@@ -39,11 +39,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Temporary immutable PR pin until the Python dialect-dispatch API is upstream.
-# https://github.com/NyanCAD/NetlistParse.rs/pull/6
-netlists = [
-    "netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py",
-]
+# Compatibility extra: scalar expressions and waveforms need no extension.
+# Full file parsing uses a development-only NetlistParse pin below until a
+# compatible distribution is available on PyPI.
+netlists = []
 # bosdi caps jax<0.8, so the verilog-a extra constrains the core down from
 # jax<0.10.0 to jax<0.8 (i.e. jax 0.7.2). The dev/default env pulls verilog-a,
 # so it stays on jax 0.7.2 until bosdi widens its compatibility.
@@ -118,6 +117,9 @@ preview = ["pixi-build"]
 # Shared editable install for all environments
 [tool.pixi.pypi-dependencies]
 circulax = { path = ".", editable = true }
+# Development/CI source only; never emitted in wheel Requires-Dist metadata.
+# https://github.com/NyanCAD/NetlistParse.rs/pull/6
+netlist-parser = { git = "https://github.com/cdaunt/NetlistParse.rs.git", rev = "d83031dd9b75ab8688dea134033eaa14f9107bfb", subdirectory = "crates/netlist-py" }
 
 # Released bosdi macOS wheels load the Conda C++ runtime via @rpath.
 [tool.pixi.target.osx-arm64.dependencies]
@@ -392,6 +394,3 @@ select = ["ALL"]
     "N802",
     "ARG001",
 ]
-
-[tool.hatch.metadata]
-allow-direct-references = true
