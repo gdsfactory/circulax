@@ -125,6 +125,14 @@ Optical components in `photonic.py` are defined via S-parameters (scattering mat
 | `circulax/s_transforms.py` | S-parameter ↔ Y-matrix conversion |
 | `tests/conftest.py` | Shared test fixtures (LRC and optical netlists) |
 
+## Scope: circulax is a library
+
+Circulax is a scripting/library interface. Applications such as gdsfactoryplus depend on circulax, never the reverse.
+
+- Do not import, name, or reference a consuming application (issue numbers, doc-tool `@tags` markers, UI/payload shapes). `tests/test_no_downstream_coupling.py` enforces this.
+- Before adding a feature motivated by an app, ask: would a plain script user want this? If yes, add it as ordinary public API documented on its own merits. If it only makes sense for a long-running host, or its output shape is dictated by an app's UI/cache, it belongs in that app. Circulax should expose the primitive instead (e.g. `LibraryModel.source_digests()`, not an app-shaped inspection payload).
+- Do not add plugin/Protocol layers speculatively. A host calling public circulax functions needs no interface.
+
 ## Code Style
 
 - Ruff is used for linting/formatting with line-length 132

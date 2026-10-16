@@ -41,10 +41,7 @@ def parameters(node: Any) -> dict[str, Any]:
 
 
 def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
-    """Parse original UTF-8 or legacy Latin-1 model cards and includes.
-
-    @tags circulax-simulation
-    """
+    """Parse original UTF-8 or legacy Latin-1 model cards and includes."""
     data = path.read_bytes()
     try:
         text = data.decode("utf-8")

@@ -156,8 +156,6 @@ def evaluate_source(expression: str, settings: dict[str, float], dialect: str = 
 
     ``dialect="spice"`` reads an uppercase ``M`` suffix as milli, as SPICE source
     cards do; other dialects read it as mega.
-
-    @tags circulax-simulation
     """
     root = netlist_parser.parse_netlist("parameters value=" + expression + "\n", "spectre")
     if netlist_parser.errors(root) or not children(root, "Parameters"):
@@ -176,8 +174,6 @@ def parse_sine_waveform(waveform: str, dialect: str = "spice") -> dict[str, floa
     the same safe expression/unit interpreter as model cards, read with SPICE
     suffix semantics by default (``M`` is milli). Other waveform kinds are
     rejected so callers cannot silently substitute a DC source.
-
-    @tags circulax-simulation
     """
     # Keep the original import path without mixing waveform parsing into the
     # expression evaluator. Import lazily because sources uses evaluate_source.
