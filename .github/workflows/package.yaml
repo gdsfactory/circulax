@@ -1,0 +1,42 @@
+name: Package
+
+on:
+  workflow_call:
+  pull_request:
+    branches: ["main", "development"]
+  push:
+    branches: ["main", "development"]
+
+jobs:
+  build:
+    name: "build / metadata + installed wheel"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Check distribution metadata
+        run: |
+          uvx twine check --strict dist/*
+          uv run --no-project --with packaging python scripts/check_distribution.py dist/*
+
+      - name: Install wheel with core dependencies only
+        run: |
+          uv venv --python 3.12 .wheel-venv
+          uv pip install --python .wheel-venv/bin/python dist/*.whl
+
+      - name: Verify waveform and expression APIs without NetlistParse
+        run: .wheel-venv/bin/python -I tests/test_netlist_io_install.py
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7

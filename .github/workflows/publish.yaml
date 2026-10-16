@@ -40,25 +40,7 @@ jobs:
           fi
 
   build:
-    name: "build / sdist + wheel"
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # hatch-vcs needs full history to read the tag
-
-      - uses: astral-sh/setup-uv@v5
-
-      - name: Build sdist and wheel
-        run: uv build
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-          retention-days: 7
+    uses: ./.github/workflows/package.yaml
 
   publish-testpypi:
     name: "publish / TestPyPI"
