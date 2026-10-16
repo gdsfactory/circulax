@@ -234,8 +234,8 @@ class Library:
             library.include(path, section=section)
         return library
 
-    def inspection_sources(self) -> list[dict[str, str]]:
-        """Fingerprint actual parsed source dependencies without native loading."""
+    def source_digests(self) -> list[dict[str, str]]:
+        """Return ``path``/``sha256`` records for every parsed source dependency."""
         records = []
         for path in sorted(self._parsed, key=str):
             digest = self._digests.digest(path)
@@ -309,10 +309,7 @@ class Library:
         return output
 
     def _populate(self, frame: _Frame, statements: list[Statement], overrides: dict[str, float] | None = None) -> None:  # noqa: C901, PLR0912 -- statement dispatch
-        """Populate scoped declarations and native device statements.
-
-        @tags circulax-simulation
-        """
+        """Populate scoped declarations and native device statements."""
         # Collect all local bindings before evaluation, allowing forward references.
         for statement in statements:
             if statement.kind == "ParamStatement":

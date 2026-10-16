@@ -912,10 +912,7 @@ def _apply_native_simparams(models: dict, simparams: Mapping[str, float] | None)
 
 
 def _embed_library_subcircuits(net_dict: dict | kfnl.Netlist, models_map: dict) -> dict:
-    """Bind wrapper settings to leaf rows, then retain kfnetlist hierarchy.
-
-    @tags circulax-simulation
-    """
+    """Bind wrapper settings to leaf rows, then retain kfnetlist hierarchy."""
     registrations = {name: model for name, model in models_map.items() if getattr(model, "_is_circulax_library_model", False)}
     recnet = dict(net_dict) if isinstance(net_dict, dict) and _is_recursive_netlist(net_dict) else {"top": net_dict}
     for cell, source in list(recnet.items()):
@@ -979,8 +976,6 @@ def compile_circuit(
     simparams: Mapping[str, float] | None = None,
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
-
-    @tags circulax-simulation
 
     Accepts a ``kfnetlist.Netlist``, a SAX-format dict, or a
     ``RecursiveNetlist`` (``dict[str, Netlist]``).  When a recursive netlist

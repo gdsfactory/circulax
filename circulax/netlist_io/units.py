@@ -9,10 +9,7 @@ _BASES = {"m": "length", "s": "time", "V": "voltage", "A": "current", "F": "capa
 
 
 def _unit(unit: str) -> tuple[str, int, float]:
-    """Resolve a supported engineering unit without inferring parameter names.
-
-    @tags circulax-simulation
-    """
+    """Resolve a supported engineering unit without inferring parameter names."""
     if unit in {"", "1"}:
         return "dimensionless", 1, 1.0
     base, _, power = unit.partition("^")
@@ -28,10 +25,7 @@ def _unit(unit: str) -> tuple[str, int, float]:
 
 
 def convert_unit(value: float, source: str, target: str) -> float:
-    """Convert explicitly declared units; reject incompatible dimensions.
-
-    @tags circulax-simulation
-    """
+    """Convert explicitly declared units; reject incompatible dimensions."""
     source_dimension, source_power, source_scale = _unit(source)
     target_dimension, target_power, target_scale = _unit(target)
     if (source_dimension, source_power) != (target_dimension, target_power):

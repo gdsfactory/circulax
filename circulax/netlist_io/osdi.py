@@ -172,17 +172,11 @@ def _provision_modules(
     compiler: str | None,
     cache_dir: Path | None,
 ) -> dict[str, tuple[Path, dict[str, str]]]:
-    """Resolve and provision library modules.
-
-    @tags circulax-simulation
-    """
+    """Resolve and provision library modules."""
     modules = {}
 
     def register(path: Path) -> None:
-        """Provision and validate a module declaration.
-
-        @tags circulax-simulation
-        """
+        """Provision and validate a module declaration."""
         if path.suffix == ".va":
             path = compile_va(path, compiler=compiler, cache_dir=cache_dir)
         name, aliases = module_metadata(path)
@@ -227,10 +221,7 @@ def _shared_descriptor(
     state_policy: str,
     simparams: tuple[tuple[str, float], ...] | None,
 ) -> Any:
-    """Share one native model definition across parameterized registrations.
-
-    @tags circulax-simulation
-    """
+    """Share one native model definition across parameterized registrations."""
     if osdi_component is None:
         msg = "OSDI registrations require circulax[verilog-a]"
         raise ImportError(msg)
@@ -258,10 +249,7 @@ def build_resolved(  # noqa: C901, PLR0912 -- topology and terminal validation
     modules: dict[str, tuple[Path, dict[str, str]]] | None = None,
     expose_internal_nodes: bool = True,
 ) -> tuple[kfnl.Netlist, dict[str, Any], dict[str, tuple[Path, dict[str, str]]]]:
-    """Build canonical topology and shared descriptors without creating a solver.
-
-    @tags circulax-simulation
-    """
+    """Build canonical topology and shared descriptors without creating a solver."""
     if modules is None:
         modules = _provision_modules(resolved, module_paths, osdi_modules, compiler, cache_dir)
 
@@ -341,10 +329,7 @@ def compile_resolved(
     state_policy: str = "reject",
     simparams: Mapping[str, float] | None = None,
 ) -> Circuit:
-    """Compile original cards using the same topology builder as registrations.
-
-    @tags circulax-simulation
-    """
+    """Compile original cards using the same topology builder as registrations."""
     netlist, models, _ = build_resolved(
         resolved,
         module_paths=module_paths,
