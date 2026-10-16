@@ -14,7 +14,7 @@ def test_package_does_not_reference_downstream_apps() -> None:
     offenders = [
         f"{path.relative_to(_PACKAGE)}:{number}: {line.strip()}"
         for path in sorted(_PACKAGE.rglob("*.py"))
-        for number, line in enumerate(path.read_text().splitlines(), 1)
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         if _FORBIDDEN.search(line)
     ]
     assert not offenders, "downstream-app coupling in circulax:\n" + "\n".join(offenders)
