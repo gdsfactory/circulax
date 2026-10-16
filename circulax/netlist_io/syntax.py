@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import netlist_parser
-
 
 class NetlistError(ValueError):
     """A netlist could not be parsed or resolved without changing its meaning."""
@@ -45,6 +43,18 @@ def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
 
     @tags circulax-simulation
     """
+    try:
+        import netlist_parser
+    except ModuleNotFoundError as exc:
+        if exc.name != "netlist_parser":
+            raise
+        msg = (
+            "SPICE/Spectre file parsing requires NetlistParse; see "
+            "https://gdsfactory.github.io/circulax/waveform_sources/#optional-spicespectre-library-files "
+            "for installation instructions."
+        )
+        raise ImportError(msg) from exc
+
     data = path.read_bytes()
     try:
         text = data.decode("utf-8")
@@ -56,7 +66,8 @@ def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
         if not hasattr(netlist_parser, "parse_netlist"):
             msg = (
                 "This library requires NetlistParse with the Python parse_netlist binding. "
-                "Install circulax[netlists] to obtain the supported parser binding."
+                "See https://gdsfactory.github.io/circulax/waveform_sources/#optional-spicespectre-library-files "
+                "for installation instructions."
             )
             raise ImportError(msg)
         root = netlist_parser.parse_netlist(text, "spectre")
