@@ -181,3 +181,53 @@ repairs, or enforces a model.
 coefficient correction. It rechecks the requested fitting accuracy after the
 correction. Sampled enforcement is not a global passivity certificate; see
 [Rational-model passivity](rational_model_enforcement.md).
+
+## Transmission lines from frequency-dependent RLGC
+
+`rlgc_transmission_line` fits RLGC per metre once, then generates passive,
+causal RLC ladders at different lengths. Series impedance and shunt admittance
+are fitted independently, allowing frequency-dependent characteristic impedance.
+
+```python
+from circulax.components import rlgc_transmission_line
+
+line = rlgc_transmission_line(
+    frequencies,  # Hz, strictly increasing; DC may be included
+    R=r_per_m,    # ohm/m
+    L=l_per_m,    # H/m
+    G=g_per_m,    # S/m
+    C=c_per_m,    # F/m
+    n_poles=12,
+    tolerance=0.01,
+)
+section = line(length=200e-6, n_sections=2)
+# Register the Circuit in a parent circuit's models_map:
+models = {"line": section}
+```
+
+Each RLGC input can be a real nonnegative scalar or an array matching the
+frequency grid. `section` has single-ended `p1`/`p2` ports and midpoint ports
+`tap_0`, `tap_1`, etc. for junction loading, all relative to common ground.
+It includes no source or termination. `line.netlist(...)` returns the primitive
+RLC netlist instead of compiling it.
+
+The fits approximate each per-metre response with
+`constant + s*linear + sum(w*s/(s+p))`, with nonnegative coefficients and positive
+rates `p`. Positive resistors, inductors and capacitors realize this response;
+no S-parameter-to-state-space conversion is involved. The baseline propagation
+is represented by the linear L/C terms, rather than a rational fit to a long
+phase rotation. Optional `poles=` supplies positive rates in rad/s.
+
+`line.series` and `line.shunt` expose `constant`, `linear`, `weights`, `poles`,
+`evaluate(frequencies)`, `normalized_rmse`, and `maximum_relative_error`.
+The fit uses relative error with a floor of 1% of the response's maximum
+magnitude. It raises `ValueError` if either weighted relative RMS error exceeds
+`tolerance`. These errors describe the impedance/admittance fits, not the final
+line's S-parameter error.
+
+This Foster branch family supports useful loss and dispersion models, including
+finite-band skin-effect approximations, but cannot represent every passive
+response. The generated circuit is passive and causal by construction; this
+is not a causality certificate for the supplied data. Validate the line response
+over the required band and increase `n_sections` until the spatial approximation
+converges. Accuracy outside the fitted band is not guaranteed.
