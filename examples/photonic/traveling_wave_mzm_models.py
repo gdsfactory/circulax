@@ -167,79 +167,40 @@ def voltage_integration_reference(
 
 
 def rlc_netlist(
-    foster_coeffs: np.ndarray,
-    foster_poles: np.ndarray,
-    foster_scale: float,
     *,
     n_sections: int,
     dz: float,
-    z_line: float,
     z_ref: float,
     rj_product: float,
     cj_per_m: float,
     v_bias: float,
-    m: int = 1,
 ) -> dict:
-    """Build an RLC T ladder with a series-R/shunt-C junction per section."""
-    coef, scale = (foster_coeffs, foster_scale)
-    active = coef[2:] > 1e-08
-    weights, poles = (coef[2:][active], foster_poles[active])
-    ins = {
+    """Load factory-generated half-lines (model ``line``) with R-C junctions."""
+    instances = {
         "GND": {"component": "ground"},
         "VS": {"component": "drive", "settings": {"dc": 2 * v_bias}},
         "RS": {"component": "R", "settings": {"R": z_ref}},
         "RL": {"component": "R", "settings": {"R": z_ref}},
     }
-    con = {"VS,p1": "RS,p1", "VS,p2": "GND,p1", "RL,p2": "GND,p1"}
+    connections = {"VS,p1": "RS,p1", "VS,p2": "GND,p1", "RL,p2": "GND,p1"}
     ports = {}
-    serial = 0
-
-    def put(kind: str, value: float, start: str, end: str | None = None) -> str:
-        nonlocal serial
-        serial += 1
-        name = f"{kind}{serial}"
-        ins[name] = {"component": kind, "settings": {kind: value}}
-        p1 = name + ",p1"
-        p2 = name + ",p2"
-        con[p1] = start
-        if end is not None:
-            con[p2] = end
-        return p2
-
-    def series(start: str, d: float) -> str:
-        z = z_line * d
-        tip = put("R", coef[0] * z, start)
-        tip = put("L", coef[1] / scale * z, tip)
-        for w, p in zip(weights, poles, strict=True):
-            node = tip
-            end = put("R", w * z, node)
-            put("L", w / p * z, node, end)
-            tip = end
-        return tip
-
-    def shunt(node: str, d: float) -> None:
-        y = d / z_line
-        put("R", 1 / (coef[0] * y), node, "GND,p1")
-        put("C", coef[1] / scale * y, node, "GND,p1")
-        for w, p in zip(weights, poles, strict=True):
-            end = put("R", 1 / (w * y), node)
-            put("C", w * y / p, end, "GND,p1")
-
-    def half(start: str) -> str:
-        d = dz / (2 * m)
-        for _ in range(m):
-            start = series(start, d / 2)
-            shunt(start, d)
-            start = series(start, d / 2)
-        return start
-
     last = "RS,p2"
     for k in range(n_sections):
-        last = half(last)
-        tip = put("R", rj_product / dz, last)
-        put("C", cj_per_m * dz, tip, "GND,p1")
-        ports[f"junction_{k}"] = tip
-        last = half(last)
-    con["RL,p1"] = last
+        before, after, resistor, capacitor = f"A{k}", f"B{k}", f"RJ{k}", f"CJ{k}"
+        instances[before] = instances[after] = {"component": "line"}
+        instances[resistor] = {"component": "R", "settings": {"R": rj_product / dz}}
+        instances[capacitor] = {"component": "C", "settings": {"C": cj_per_m * dz}}
+        connections.update(
+            {
+                f"{before},p1": last,
+                f"{resistor},p1": f"{before},p2",
+                f"{capacitor},p1": f"{resistor},p2",
+                f"{capacitor},p2": "GND,p1",
+                f"{after},p1": f"{before},p2",
+            }
+        )
+        ports[f"junction_{k}"] = f"{resistor},p2"
+        last = f"{after},p2"
+    connections["RL,p1"] = last
     ports.update(rf_input="RS,p2", rf_output="RL,p1")
-    return {"instances": ins, "connections": con, "ports": ports}
+    return {"instances": instances, "connections": connections, "ports": ports}
