@@ -42,6 +42,25 @@ def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
     return ({"p1": signals.i_L, "p2": -signals.i_L, "i_L": v_drop}, {"i_L": -L * signals.i_L})
 
 
+@component(ports=("d", "c", "a", "b"), states=("ia", "ib"), holomorphic=True)
+def DifferentialAdapter(signals: Signals) -> PhysicsReturn:
+    """Lossless bidirectional differential/common to conductor adapter.
+
+    ``Va=Vc+Vd/2``, ``Vb=Vc-Vd/2``. Currents are positive into this
+    component at all four ports, so ``Id=-(Ia-Ib)/2`` and ``Ic=-(Ia+Ib)``.
+    The resulting instantaneous sum of port powers is zero. Modal impedances
+    use the full differential/common convention (2*Zodd and Zeven/2).
+    """
+    return {
+        "d": -(signals.ia - signals.ib) / 2,
+        "c": -(signals.ia + signals.ib),
+        "a": signals.ia,
+        "b": signals.ib,
+        "ia": signals.a - signals.c - signals.d / 2,
+        "ib": signals.b - signals.c + signals.d / 2,
+    }, {}
+
+
 @component(
     ports=("p1", "p2", "s1", "s2"),
     states=("i1", "i2"),
