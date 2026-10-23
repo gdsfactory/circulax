@@ -182,6 +182,43 @@ coefficient correction. It rechecks the requested fitting accuracy after the
 correction. Sampled enforcement is not a global passivity certificate; see
 [Rational-model passivity](rational_model_enforcement.md).
 
+## Transmission lines from RF mode data
+
+For a uniform line, use frequency-dependent mode-solver attenuation, phase
+index and characteristic impedance directly:
+
+```python
+from circulax.components import mode_transmission_line
+
+line = mode_transmission_line(
+    frequencies,                    # Hz
+    attenuation_db_per_m=loss,       # scalar, array, or loss(f_hz) callable
+    n_eff=rf_phase_index,            # scalar, array, or n_eff(f_hz) callable
+    impedance=characteristic_z,      # ohms; may be complex and vary with frequency
+)
+section = line(length=200e-6, n_sections=2)
+```
+
+The conversion uses `gamma = ln(10)/20 * loss + 1j*2*pi*f*n_eff/c`, followed by
+`Zprime=gamma*Z` and `Yprime=gamma/Z`. The same passive RLC fitting, fit error
+reporting and section-count controls described below apply. Inputs must be
+mutually consistent physical mode data; separate arbitrary loss and phase
+curves do not automatically admit this passive, causal realization. The
+factory rejects invalid inputs and fits exceeding the requested tolerance.
+
+`n_eff` is the real RF **phase index**. Group index is
+`n_group = n_eff + f*dn_eff/df`; velocity matching compares the **loaded RF group
+index** with the optical group index. If mode-solver data already includes the
+PN junction's distributed R/C, do not add those elements again in the circuit.
+If the mode data excludes the junctions, add them and verify the resulting
+loaded propagation, as in the traveling-wave MZM tutorial.
+
+DC is optional. When included, impedance must be real there. Attenuation must
+be nonnegative and the real part of impedance positive. The restricted Foster
+family also requires the converted per-metre RLGC values to be nonnegative.
+Frequency interpolation and extrapolation of external data are the caller's
+responsibility; a callable is evaluated once on the provided fitting grid.
+
 ## Transmission lines from frequency-dependent RLGC
 
 `rlgc_transmission_line` fits RLGC per metre once, then generates passive,

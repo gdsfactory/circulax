@@ -455,3 +455,55 @@ The decorator:
 2. **Generates** an `eqx.Module` class named `MyResistor`.
 3. **Registers** the parameters as module fields, making them JAX-differentiable.
 4. **Creates** a `_fast_physics` method that unrolls dict lookups into raw array ops for use inside `jax.jit` / `jax.vmap`.
+
+## Differential/common-mode adapter
+
+`DifferentialAdapter` connects full differential/common-mode electrical ports
+`d`, `c` to physical conductor ports `a`, `b`. It is bidirectional and preserves
+power, including unequal or nonlinear loads on the physical ports:
+
+```python
+from circulax.components import DifferentialAdapter
+# Va = Vc + Vd/2; Vb = Vc - Vd/2
+models = {"adapter": DifferentialAdapter}
+```
+
+Currents are positive **into the adapter** at every port. Its constraints are
+`Id = -(Ia-Ib)/2` and `Ic = -(Ia+Ib)`, so the sum of instantaneous port powers
+is zero. The modal impedances use `Zd=2*Zodd` and `Zc=Zeven/2`. Connect adapters
+at each distributed load location when two modal lines drive individual devices.
+
+## Buffered analog filters
+
+`LowPass1`, `Biquad`, and `Bessel3` are continuous-time voltage components with
+`inp` and `out` ports, unity DC gain, infinite input impedance and ideal zero
+output impedance. They are useful for driver and behavioral models. They are
+active buffered blocks; put a resistor after the output when a finite driver
+impedance is needed.
+
+```python
+from circulax.components import Bessel3, Biquad, LowPass1
+
+models = {"driver_filter": Bessel3}
+instances = {
+    "FILTER": {"component": "driver_filter", "settings": {"f3db": 35e9}},
+}
+```
+
+All three use a positive `f3db` in Hz at which the voltage magnitude is
+`1/sqrt(2)` of its DC value. `Biquad` additionally takes positive `Q`; its
+natural frequency is adjusted to maintain that cutoff as Q changes. Large Q
+can produce peaking. `Bessel3` matches the third-order analog Bessel prototype
+with magnitude normalization, as in
+[`scipy.signal.bessel(..., analog=True, norm="mag")`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.bessel.html).
+The complex response, including phase, is part of each model. At 35 GHz,
+`Bessel3` has about 7.98 ps DC group delay; maximally flat delay does not mean
+zero delay. The same equations apply to DC, AC and transient analyses.
+
+### Filters and traveling-wave models
+
+These buffered blocks can model driver bandwidth and its associated phase lag.
+For distributed electrodes, use `mode_transmission_line` with attenuation, RF
+phase effective index and characteristic impedance versus frequency. The MZM
+tutorial uses that workflow and checks the loaded RF group index against the
+optical group index. It has no Bessel shaping in its propagation or drivers.
