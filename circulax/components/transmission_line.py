@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from numbers import Integral
 from typing import TYPE_CHECKING
@@ -246,4 +247,81 @@ def rlgc_transmission_line(  # noqa: C901 -- validate physical arrays before fit
         series=_fit_response(r + s * l, f, rates, tolerance, "Series impedance"),
         shunt=_fit_response(g + s * cap, f, rates, tolerance, "Shunt admittance"),
         frequency_range=(float(f[0]), float(f[-1])),
+    )
+
+
+def mode_transmission_line(
+    frequencies: ArrayLike,
+    *,
+    attenuation_db_per_m: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    n_eff: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    impedance: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    n_poles: int = 12,
+    poles: ArrayLike | None = None,
+    tolerance: float = 0.01,
+) -> RLGCTransmissionLine:
+    """Generate a passive RLC line factory from uniform-mode propagation data.
+
+    Each input may be a scalar, a sampled array, or a function of frequency
+    in Hz returning either. ``attenuation_db_per_m`` is nonnegative loss in
+    dB/metre. ``n_eff`` is the positive real RF *phase* effective index, not
+    group index. ``impedance`` is the modal characteristic impedance in ohms
+    and may be complex/frequency dependent, with positive real part.
+
+    Converts ``gamma = log(10)/20 * attenuation + 1j*2*pi*f*n_eff/c`` and
+    ``Z'=gamma*impedance``, ``Y'=gamma/impedance`` to per-metre RLGC. The
+    generated model and all fit settings follow :func:`rlgc_transmission_line`.
+    Loss, phase and impedance data must describe a mutually consistent mode;
+    an independent choice of arbitrary curves need not admit this passive,
+    causal Foster realization. Errors exceeding ``tolerance`` raise ValueError.
+
+    Group velocity is ``c/(n_eff + f*dn_eff/df)``. Compare the group index of
+    the *loaded* electrode to the optical group index when designing a MZM.
+    Avoid adding a junction R/C twice if it is already included in mode data.
+    No additional loads are included by this factory.
+    """
+    f = np.asarray(frequencies)
+    if np.iscomplexobj(f) or f.ndim != 1 or len(f) < 2:
+        msg = "frequencies must be a real 1-D array with at least two samples"
+        raise ValueError(msg)
+    f = f.astype(float)
+    if not np.all(np.isfinite(f)) or f[0] < 0 or np.any(np.diff(f) <= 0):
+        msg = "frequencies must be finite, nonnegative and strictly increasing"
+        raise ValueError(msg)
+
+    def sample(value: ArrayLike | Callable[[np.ndarray], ArrayLike], label: str, *, complex_ok: bool = False) -> np.ndarray:
+        raw = np.asarray(value(f.copy()) if callable(value) else value)
+        if raw.shape not in ((), f.shape) or (np.iscomplexobj(raw) and not complex_ok):
+            msg = f"{label} must be a scalar or frequency-matched array" + ("" if complex_ok else " of real values")
+            raise ValueError(msg)
+        array = np.broadcast_to(raw.astype(complex if complex_ok else float), f.shape)
+        if not np.all(np.isfinite(array)):
+            msg = f"{label} must be finite"
+            raise ValueError(msg)
+        return array
+
+    attenuation = sample(attenuation_db_per_m, "attenuation_db_per_m")
+    index = sample(n_eff, "n_eff")
+    z0 = sample(impedance, "impedance", complex_ok=True)
+    if np.any(attenuation < 0) or np.any(index <= 0) or np.any(z0.real <= 0):
+        msg = "attenuation must be nonnegative; n_eff and the real part of impedance must be positive"
+        raise ValueError(msg)
+    if f[0] == 0 and abs(z0[0].imag) > 1e-12 * abs(z0[0]):
+        msg = "impedance must be real at DC for a real-valued transient model"
+        raise ValueError(msg)
+    omega = 2 * np.pi * f
+    gamma = np.log(10) / 20 * attenuation + 1j * omega * index / 299_792_458.0
+    z_per_m, y_per_m = gamma * z0, gamma / z0
+    # At DC only Re(Z') and Re(Y') enter; the L/C placeholders do not affect fitting.
+    inductance = np.divide(z_per_m.imag, omega, out=np.zeros_like(f), where=omega > 0)
+    capacitance = np.divide(y_per_m.imag, omega, out=np.zeros_like(f), where=omega > 0)
+    return rlgc_transmission_line(
+        f,
+        R=z_per_m.real,
+        L=inductance,
+        G=y_per_m.real,
+        C=capacitance,
+        n_poles=n_poles,
+        poles=poles,
+        tolerance=tolerance,
     )
