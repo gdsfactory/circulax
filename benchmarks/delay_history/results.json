@@ -1,0 +1,296 @@
+{
+  "issue": "https://github.com/gdsfactory/circulax/issues/94",
+  "reference": "f73ecab893ac6a4b102f548ddb72236c7c324365",
+  "environment": {
+    "python": "3.12.14",
+    "jax": "0.7.2",
+    "jaxlib": "0.7.2",
+    "dtype": "float64",
+    "backend": "cpu",
+    "mzm_cpu_affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "blas_threads": 1,
+    "host": "Shared Linux host; absolute timings can vary."
+  },
+  "mzm": [
+    {
+      "case": "32 UI cold",
+      "original": {
+        "call": 0,
+        "seconds": 48.18745195199881,
+        "steps": 2048,
+        "history_capacity": 9237,
+        "history_bytes": 73822104
+      },
+      "current": {
+        "call": 0,
+        "seconds": 8.456654296001943,
+        "steps": 2048,
+        "history_capacity": 12,
+        "history_bytes": 95904
+      },
+      "speedup": 5.69816978030903,
+      "trace_shape": [
+        1025,
+        998
+      ],
+      "trace_max_abs_error": 0.0,
+      "trace_rms_error": 0.0
+    },
+    {
+      "case": "32 UI warm",
+      "original": {
+        "call": 1,
+        "seconds": 41.20376018499519,
+        "steps": 2048,
+        "history_capacity": 9237,
+        "history_bytes": 73822104
+      },
+      "current": {
+        "call": 1,
+        "seconds": 0.8124991609947756,
+        "steps": 2048,
+        "history_capacity": 12,
+        "history_bytes": 95904
+      },
+      "speedup": 50.712372594388604,
+      "trace_shape": [
+        1025,
+        998
+      ],
+      "trace_max_abs_error": 0.0,
+      "trace_rms_error": 0.0
+    },
+    {
+      "case": "NRZ",
+      "original": {
+        "call": 2,
+        "seconds": 190.72715428299853,
+        "steps": 9152,
+        "history_capacity": 9173,
+        "history_bytes": 73310616
+      },
+      "current": {
+        "call": 2,
+        "seconds": 11.303901247003523,
+        "steps": 9152,
+        "history_capacity": 12,
+        "history_bytes": 95904
+      },
+      "speedup": 16.87268405087643,
+      "trace_shape": [
+        4577,
+        998
+      ],
+      "trace_max_abs_error": 0.0,
+      "trace_rms_error": 0.0
+    },
+    {
+      "case": "PAM4 clean",
+      "original": {
+        "call": 3,
+        "seconds": 172.0834084119997,
+        "steps": 9216,
+        "history_capacity": 9237,
+        "history_bytes": 73822104
+      },
+      "current": {
+        "call": 3,
+        "seconds": 11.895792933995835,
+        "steps": 9216,
+        "history_capacity": 12,
+        "history_bytes": 95904
+      },
+      "speedup": 14.465904825916999,
+      "trace_shape": [
+        4609,
+        998
+      ],
+      "trace_max_abs_error": 4.631850458736153e-13,
+      "trace_rms_error": 1.6118716502221829e-15
+    },
+    {
+      "case": "PAM4 jittered",
+      "original": {
+        "call": 4,
+        "seconds": 156.79133228599676,
+        "steps": 9216,
+        "history_capacity": 9237,
+        "history_bytes": 73822104
+      },
+      "current": {
+        "call": 4,
+        "seconds": 11.796278316003736,
+        "steps": 9216,
+        "history_capacity": 12,
+        "history_bytes": 95904
+      },
+      "speedup": 13.291593169116874,
+      "trace_shape": [
+        4609,
+        998
+      ],
+      "trace_max_abs_error": 3.3151259515307174e-13,
+      "trace_rms_error": 1.2811342092285228e-15
+    }
+  ],
+  "xla_compile_seconds_in_call_order": {
+    "original": [
+      4.979495287,
+      5.020581484,
+      5.937303543,
+      4.188166618
+    ],
+    "current": [
+      4.470926523,
+      4.527862787,
+      4.693260431,
+      4.73210001
+    ]
+  },
+  "lookup": {
+    "original": {
+      "variant": "original",
+      "jax": "0.7.2",
+      "backend": "cpu",
+      "affinity": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "threads": "1",
+      "reference": "f73ecab893ac6a4b102f548ddb72236c7c324365",
+      "lookup": [
+        {
+          "slots": 12,
+          "compile_s": 0.2883483229961712,
+          "warm_ms": 0.015088529980857857
+        },
+        {
+          "slots": 257,
+          "compile_s": 0.286236405998352,
+          "warm_ms": 0.1315539699862711
+        },
+        {
+          "slots": 9217,
+          "compile_s": 0.25933358700422104,
+          "warm_ms": 1.285471459996188
+        }
+      ]
+    },
+    "current": {
+      "variant": "current",
+      "jax": "0.7.2",
+      "backend": "cpu",
+      "affinity": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "threads": "1",
+      "reference": "f73ecab893ac6a4b102f548ddb72236c7c324365",
+      "lookup": [
+        {
+          "slots": 12,
+          "compile_s": 0.25381224299781024,
+          "warm_ms": 0.014612349987146445
+        },
+        {
+          "slots": 257,
+          "compile_s": 0.21639641400543042,
+          "warm_ms": 0.01806558000680525
+        },
+        {
+          "slots": 9217,
+          "compile_s": 0.24126138300198363,
+          "warm_ms": 0.022546939944732003
+        }
+      ]
+    }
+  },
+  "gradient_oracle": {
+    "variant": "original",
+    "jax": "0.7.2",
+    "backend": "cpu",
+    "affinity": [
+      8,
+      9,
+      10,
+      11
+    ],
+    "threads": "1",
+    "reference": "f73ecab893ac6a4b102f548ddb72236c7c324365",
+    "oracle": [
+      {
+        "adaptive": false,
+        "trace_max_abs": 0.0,
+        "original_buffer_jacobian_difference": 0.15999070504653523,
+        "ordinary_history_jacobian_difference": 2.220446049250313e-16,
+        "current_vs_finite_difference": 9.963905256427097e-10,
+        "original_vs_finite_difference": 0.15999070504941026
+      },
+      {
+        "adaptive": true,
+        "trace_max_abs": 0.0,
+        "original_buffer_jacobian_difference": 1.0521847496282686,
+        "ordinary_history_jacobian_difference": 2.220446049250313e-16,
+        "current_vs_finite_difference": 1.1373054720209552e-09,
+        "original_vs_finite_difference": 1.052184749627735
+      }
+    ]
+  },
+  "default_term_cache": {
+    "identical_calls": 2,
+    "compilations_before": 2,
+    "compilations_after": 1
+  },
+  "notebook_sha256": "2a5ffe2ff0c5d93fcfd4e903d3819f8b55bafe8ca52bf528043ec5304cc6a9a8",
+  "tutorial_helper_sha256": "47f742638ff6dae73a094cb3bc9a11cffda88d5bcde467d98c4a2d4c2a153002",
+  "notes": [
+    "All timed solvers were synchronized with block_until_ready; original/current MZM runs used the same model, sources, tolerances, timestep, record lengths, saved unknowns and CPU affinity. The two variants ran sequentially. Other work and test processes used other cores on this shared host.",
+    "32-UI calls use a stable ODETerm and retain max_steps=9236 in both variants. Each variant compiled once across cold/warm calls. Cold call totals include tracing, lowering, compilation and execution; XLA-only compilation is listed separately.",
+    "NRZ and PAM4 solver times include tracing/compilation for each new circuit. Notebook wall times also include setup/DC work and were NRZ 193.7 vs 13.6 seconds, PAM4 clean 175.5 vs 14.9 seconds, PAM4 jittered 158.7 vs 14.0 seconds (original vs current).",
+    "history_bytes counts allocated timestamp and state arrays, not process RSS, saved output, executables or reverse-mode checkpoints. Bounded history retains full state rows; delayed-column compaction is not implemented.",
+    "Concrete constant-step calls infer ceil(max_delay/dt0)+3 slots. Adaptive or externally traced calls default to 1024; callers may supply a static history_capacity. An unconditional runtime error precedes eviction of a required bracket, including when throw=False. There is no assumed lower adaptive step size.",
+    "The history ring is ordinary checkpointed state. Equinox write-once output-buffer optimisation is invalid for overwritten samples. Reverse-mode checkpoints retain/recompute ring snapshots; their memory is separate from the raw ring and depends on checkpoint settings.",
+    "The untouched original full-history forward solver is the numerical oracle. Its checkpointed history-buffer adjoint is itself incorrect for the feedback regression; original_vs_finite_difference records that error. Removing only history from its output-buffer selector yields the ordinary-history gradient reference. Both fixed and adaptive trace Jacobians agree with that reference and with finite differences on the same accepted mesh.",
+    "Adaptive gradient comparisons freeze accepted timestamps, matching Diffrax discrete-adjoint semantics. Differentiating PID mesh-selection decisions is outside this change. Newton solves retain Optimistix ImplicitAdjoint; Newton iterations are not unrolled for AD.",
+    "A save-time comparison tolerance handles floating-point endpoint ties during checkpoint recomputation. A direct ODE regression covers the previously dropped on-grid output gradients.",
+    "Module-level default term reuse fixes confirmed lambda identity recompilation. Reconstructing whole circuits can still compile new solver variants; no circuit-construction API was redesigned.",
+    "The motivating notebook and companion helper were executed in memory without editing their source. Centered 2-UI eyes and separate differential/common-mode data are preserved.",
+    "The PR is based on development commit 54620a09e4873387d567f74ec7b75870b9dd577a. Its solver sources exactly match the recorded f73ecab baseline. The standalone benchmark modes default to that published commit. MZM reproduction additionally needs the uncommitted tutorial/helper revisions identified by the recorded SHA256 hashes; these are deliberately excluded from this solver PR."
+  ],
+  "validation": {
+    "pytest": "121 passed, 7 skipped, 13 warnings in 326.79 seconds",
+    "test_files": [
+      "tests/test_delay_history.py",
+      "tests/test_delay.py",
+      "tests/test_delay_contract.py",
+      "tests/test_transient.py",
+      "tests/test_adjoint.py",
+      "tests/test_mode_transmission_line.py",
+      "tests/test_differential_adapter.py",
+      "tests/test_rlgc_transmission_line.py",
+      "tests/test_fdomain.py",
+      "tests/test_fdomain_model.py"
+    ],
+    "checks": [
+      "ruff format --check (all changed Python files)",
+      "ruff check --no-fix --select F,I (all changed Python files)",
+      "git diff --check"
+    ],
+    "note": "The repository-wide Ruff ALL rules have existing violations; only formatting and F/I checks are reported as passing."
+  },
+  "reproduction": [
+    "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_LOG_COMPILES=1 taskset -c 0-3 .venv/bin/python benchmarks/delay_history/run.py --variant original --mode mzm --output /tmp/delay-original",
+    "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_LOG_COMPILES=1 taskset -c 0-3 .venv/bin/python benchmarks/delay_history/run.py --variant current --mode mzm --compare /tmp/delay-original --output /tmp/delay-current",
+    "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 taskset -c 0-3 .venv/bin/python benchmarks/delay_history/run.py --variant original --mode oracle --output /tmp/delay-oracle",
+    "For lookup or cache measurements use --mode lookup or --mode cache with each variant; set JAX_LOG_COMPILES=1 to count circuit_diffeqsolve compilations."
+  ]
+}
