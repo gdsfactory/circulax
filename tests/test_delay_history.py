@@ -1,5 +1,8 @@
 """Bounded-history regression tests against the original full-history lookup."""
 
+from types import SimpleNamespace
+from typing import ClassVar, NamedTuple
+
 import diffrax
 import equinox as eqx
 import jax
@@ -10,6 +13,7 @@ import pytest
 from circulax.solvers.assembly import _interp_delayed
 from circulax.solvers.circuit_diffeq import circuit_diffeqsolve
 from circulax.solvers.delay_history import DelayTimes
+from circulax.solvers.transient import _delay_history_capacity, setup_transient
 
 
 def full_history_interp(hist_t, hist_y, tau, idx, t1, current=None):
@@ -227,3 +231,129 @@ def test_feedback_trace_gradients_match_finite_differences():
         axis=-1,
     )
     np.testing.assert_allclose(actual, expected, atol=2e-8, rtol=2e-8)
+
+
+class SizingParams(NamedTuple):
+    tau: jax.Array
+    amplitude: jax.Array
+
+
+class SizingGroup(eqx.Module):
+    """Minimal delayed group for exercising setup with the feedback DDE."""
+
+    params: SizingParams
+    name: ClassVar[str] = "feedback"
+    has_delay: ClassVar[bool] = True
+
+    @staticmethod
+    def tau_func(params):
+        return params.tau
+
+
+class GroupedFeedbackSolver(FeedbackSolver):
+    """Adapt the feedback oracle to setup_transient's compiled-group arguments."""
+
+    def step(self, terms, t0, t1, y0, args, solver_state, made_jump):
+        groups, _, times, values = args
+        params = groups["feedback"].params
+        return super().step(terms, t0, t1, y0, (params.tau, params.amplitude[0], times, values), solver_state, made_jump)
+
+
+def sized_feedback(parameters, *, capacity=None, oracle=False, controller=None, stop=1.03, throw=True):
+    group = SizingGroup(SizingParams(parameters[:2], jnp.broadcast_to(parameters[2], (2,))))
+    run = setup_transient({"feedback": group}, SimpleNamespace(sys_size=2, is_complex=False), GroupedFeedbackSolver(oracle=oracle))
+    if controller is None:
+        controller = diffrax.PIDController(rtol=1e-5, atol=1e-7, dtmin=1 / 64)
+    return run(
+        t0=0.0,
+        t1=stop,
+        dt0=0.8,
+        y0=parameters[3:],
+        saveat=diffrax.SaveAt(ts=jnp.linspace(0, stop, 41)),
+        stepsize_controller=controller,
+        history_capacity=capacity,
+        max_steps=512,
+        checkpoints=2,
+        throw=throw,
+    )
+
+
+@pytest.mark.parametrize("minimum", [0.0, -0.1, jnp.nan, jnp.inf, -jnp.inf])
+def test_invalid_pid_minimum_rejected_for_inference(minimum):
+    controller = diffrax.PIDController(rtol=1e-3, atol=1e-6, dtmin=minimum)
+    with pytest.raises(ValueError, match="PIDController.dtmin must be finite and positive"):
+        _delay_history_capacity(0.25, 0.1, controller)
+    # An explicit allocation does not infer or modify controller settings.
+    assert _delay_history_capacity(0.25, 0.1, controller, 32) == 32
+
+
+def test_capacity_selection_and_wrapped_controller_fallback():
+    controller = diffrax.PIDController(rtol=1e-3, atol=1e-6, dtmin=0.125)
+    assert _delay_history_capacity(0.5, 0.1, controller) == 7
+    assert _delay_history_capacity(0.5, 0.1, controller, 19) == 19
+    assert _delay_history_capacity(0.5, 0.125, diffrax.ConstantStepSize()) == 7
+    assert _delay_history_capacity(0.5, 0.1, diffrax.PIDController(rtol=1e-3, atol=1e-6)) == 1024
+    wrapped = diffrax.ClipStepSizeController(controller, step_ts=jnp.array([0.01, 0.02]))
+    assert _delay_history_capacity(0.5, 0.1, wrapped) == 1024
+
+    class CustomPID(diffrax.PIDController):
+        pass
+
+    assert _delay_history_capacity(0.5, 0.1, CustomPID(rtol=1e-3, atol=1e-6, dtmin=0.125)) == 1024
+
+
+def test_traced_capacity_inputs_use_checked_fallback():
+    def infer(delay, minimum):
+        controller = diffrax.PIDController(rtol=1e-3, atol=1e-6, dtmin=minimum)
+        return jnp.array(_delay_history_capacity(delay, 0.1, controller))
+
+    assert jax.jit(infer)(0.5, 0.125) == 1024
+    np.testing.assert_array_equal(jax.vmap(infer)(jnp.array([0.5, 1.0]), jnp.array([0.125, 0.25])), [1024, 1024])
+    controller = diffrax.PIDController(rtol=1e-3, atol=1e-6, dtmin=0.125)
+    assert jax.jit(lambda delay: jnp.array(_delay_history_capacity(delay, 0.1, controller)))(0.5) == 1024
+
+
+@pytest.mark.parametrize("clamp_to_floor", [False, True])
+def test_inferred_pid_capacity_matches_full_history(clamp_to_floor):
+    parameters = jnp.array([0.23, 0.07, 0.9, 0.12, -0.2])
+    minimum = 1 / 64
+    controller = diffrax.PIDController(rtol=1e-5, atol=1e-7, dtmin=minimum, dtmax=minimum if clamp_to_floor else None)
+    actual = sized_feedback(parameters, controller=controller)
+    expected = sized_feedback(parameters, capacity=513, oracle=True, controller=controller)
+    assert actual.stats["history_capacity"] == 18
+    assert actual.stats["num_accepted_steps"] > 18
+    np.testing.assert_allclose(actual.ys, expected.ys, atol=2e-13, rtol=2e-13)
+    assert actual.stats["num_steps"] == expected.stats["num_steps"]
+    assert actual.stats["num_rejected_steps"] == expected.stats["num_rejected_steps"]
+    if clamp_to_floor:
+        # 1.03 is not a multiple of dtmin; the final accepted step is shorter.
+        assert actual.stats["num_accepted_steps"] == 66
+    else:
+        assert actual.stats["num_rejected_steps"] > 0
+
+
+def test_inferred_capacity_gradients_and_duration_independence():
+    parameters = jnp.array([0.23, 0.07, 0.9, 0.12, -0.2])
+    for stop in [1.03, 2.03]:
+        solution = sized_feedback(parameters, stop=stop)
+        assert solution.stats["history_capacity"] == 18
+        assert solution.stats["history_bytes"] == 18 * 3 * 8
+    # Capture the inferred capacity outside AD; shapes cannot depend on a
+    # traced delay. The full-history oracle uses the same accepted mesh.
+    actual = jax.jacrev(lambda p: sized_feedback(p, capacity=18).ys)(parameters)
+    expected = jax.jacrev(lambda p: sized_feedback(p, capacity=513, oracle=True).ys)(parameters)
+    np.testing.assert_allclose(actual, expected, atol=2e-11, rtol=2e-11)
+    traced = jax.jit(lambda p: sized_feedback(p))(parameters)
+    assert traced.stats["history_capacity"] == 1024
+    np.testing.assert_allclose(traced.ys, sized_feedback(parameters).ys, atol=2e-13)
+
+
+def test_minimum_step_failure_and_overflow_remain_explicit():
+    parameters = jnp.array([0.23, 0.07, 0.9, 0.12, -0.2])
+    controller = diffrax.PIDController(rtol=1e-8, atol=1e-10, dtmin=1 / 64, force_dtmin=False)
+    actual = sized_feedback(parameters, controller=controller, throw=False)
+    expected = sized_feedback(parameters, controller=controller, capacity=513, oracle=True, throw=False)
+    assert actual.result == expected.result == diffrax.RESULTS.dt_min_reached
+    assert controller.force_dtmin is False
+    with pytest.raises(eqx.EquinoxRuntimeError, match="Delay history capacity exhausted"):
+        sized_feedback(parameters, capacity=3, throw=False).ys.block_until_ready()

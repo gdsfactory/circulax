@@ -36,11 +36,13 @@ from circulax.solvers.circuit_diffeq import circuit_diffeqsolve
 jax.config.update("jax_enable_x64", True)
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--variant", choices=["original", "current"], required=True)
-parser.add_argument("--mode", choices=["lookup", "mzm", "oracle", "cache"], default="lookup")
+parser.add_argument("--mode", choices=["lookup", "mzm", "oracle", "cache", "adaptive"], default="lookup")
 parser.add_argument("--reference", default="54620a09e4873387d567f74ec7b75870b9dd577a")
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--compare", type=Path, help="Original MZM output directory; assert complete trace agreement.")
 opts = parser.parse_args()
+if opts.mode == "adaptive" and opts.variant != "current":
+    parser.error("--mode adaptive compares inferred and explicit capacities on the current solver.")
 if opts.mode == "oracle" and opts.variant != "original":
     parser.error("--mode oracle requires --variant original to load the numerical reference.")
 if opts.mode == "mzm" and not (ROOT / "examples/photonic/traveling_wave_mzm_tutorial.py").is_file():
@@ -87,7 +89,39 @@ results = {
     "reference": opts.reference,
 }
 
-if opts.mode == "cache":
+if opts.mode == "adaptive":
+    spec = importlib.util.spec_from_file_location("delay_regressions", ROOT / "tests/test_delay_history.py")
+    regression = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = regression
+    spec.loader.exec_module(regression)
+    parameters = jnp.array([0.23, 0.07, 0.9, 0.12, -0.2])
+    results["adaptive_capacity"] = []
+    reference = None
+    for label, capacity in [("inferred", None), ("previous_fallback", 1024)]:
+        started = time.perf_counter()
+        solution = regression.sized_feedback(parameters, capacity=capacity)
+        solution.ys.block_until_ready()
+        cold_seconds = time.perf_counter() - started
+        if reference is None:
+            reference = np.asarray(solution.ys)
+        actual = np.asarray(solution.ys)
+        np.testing.assert_allclose(actual, reference, rtol=2e-13, atol=2e-13)
+        started = time.perf_counter()
+        for _ in range(20):
+            regression.sized_feedback(parameters, capacity=capacity).ys.block_until_ready()
+        record = {
+            "case": label,
+            "cold_seconds": cold_seconds,
+            "warm_seconds": (time.perf_counter() - started) / 20,
+            "capacity": int(solution.stats["history_capacity"]),
+            "history_bytes": int(solution.stats["history_bytes"]),
+            "accepted": int(solution.stats["num_accepted_steps"]),
+            "rejected": int(solution.stats["num_rejected_steps"]),
+            "trace_max_abs_error": float(np.max(np.abs(actual - reference))),
+        }
+        results["adaptive_capacity"].append(record)
+        print(record, flush=True)
+elif opts.mode == "cache":
     import diffrax
 
     from circulax import compile_circuit

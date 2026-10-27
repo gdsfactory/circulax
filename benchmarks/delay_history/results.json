@@ -257,7 +257,7 @@
     "32-UI calls use a stable ODETerm and retain max_steps=9236 in both variants. Each variant compiled once across cold/warm calls. Cold call totals include tracing, lowering, compilation and execution; XLA-only compilation is listed separately.",
     "NRZ and PAM4 solver times include tracing/compilation for each new circuit. Notebook wall times also include setup/DC work and were NRZ 193.7 vs 13.6 seconds, PAM4 clean 175.5 vs 14.9 seconds, PAM4 jittered 158.7 vs 14.0 seconds (original vs current).",
     "history_bytes counts allocated timestamp and state arrays, not process RSS, saved output, executables or reverse-mode checkpoints. Bounded history retains full state rows; delayed-column compaction is not implemented.",
-    "Concrete constant-step calls infer ceil(max_delay/dt0)+3 slots. Adaptive or externally traced calls default to 1024; callers may supply a static history_capacity. An unconditional runtime error precedes eviction of a required bracket, including when throw=False. There is no assumed lower adaptive step size.",
+    "Concrete direct ConstantStepSize calls infer ceil(max_delay/dt0)+3 slots. Direct PIDController calls with concrete finite positive dtmin and max_delay infer ceil(max_delay/dtmin)+3; other adaptive, wrapped, custom or externally traced calls default to 1024. Explicit history_capacity takes precedence. An unconditional runtime error precedes eviction of a required bracket, including when throw=False. There is no assumed lower adaptive step size.",
     "The history ring is ordinary checkpointed state. Equinox write-once output-buffer optimisation is invalid for overwritten samples. Reverse-mode checkpoints retain/recompute ring snapshots; their memory is separate from the raw ring and depends on checkpoint settings.",
     "The untouched original full-history forward solver is the numerical oracle. Its checkpointed history-buffer adjoint is itself incorrect for the feedback regression; original_vs_finite_difference records that error. Removing only history from its output-buffer selector yields the ordinary-history gradient reference. Both fixed and adaptive trace Jacobians agree with that reference and with finite differences on the same accepted mesh.",
     "Adaptive gradient comparisons freeze accepted timestamps, matching Diffrax discrete-adjoint semantics. Differentiating PID mesh-selection decisions is outside this change. Newton solves retain Optimistix ImplicitAdjoint; Newton iterations are not unrolled for AD.",
@@ -291,6 +291,74 @@
     "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_LOG_COMPILES=1 taskset -c 0-3 .venv/bin/python benchmarks/delay_history/run.py --variant original --mode mzm --output /tmp/delay-original",
     "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_LOG_COMPILES=1 taskset -c 0-3 .venv/bin/python benchmarks/delay_history/run.py --variant current --mode mzm --compare /tmp/delay-original --output /tmp/delay-current",
     "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 taskset -c 0-3 .venv/bin/python benchmarks/delay_history/run.py --variant original --mode oracle --output /tmp/delay-oracle",
-    "For lookup or cache measurements use --mode lookup or --mode cache with each variant; set JAX_LOG_COMPILES=1 to count circuit_diffeqsolve compilations."
-  ]
+    "For lookup or cache measurements use --mode lookup or --mode cache with each variant; set JAX_LOG_COMPILES=1 to count circuit_diffeqsolve compilations.",
+    "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_LOG_COMPILES=1 taskset -c 4-7 .venv/bin/python benchmarks/delay_history/run.py --variant current --mode adaptive --output /tmp/delay-adaptive"
+  ],
+  "adaptive_minimum_timestep": {
+    "variant": "current",
+    "jax": "0.7.2",
+    "backend": "cpu",
+    "affinity": [
+      4,
+      5,
+      6,
+      7
+    ],
+    "threads": "1",
+    "reference": "54620a09e4873387d567f74ec7b75870b9dd577a",
+    "adaptive_capacity": [
+      {
+        "case": "inferred",
+        "cold_seconds": 0.8778961179923499,
+        "warm_seconds": 0.001163714849826647,
+        "capacity": 18,
+        "history_bytes": 432,
+        "accepted": 66,
+        "rejected": 3,
+        "trace_max_abs_error": 0.0
+      },
+      {
+        "case": "previous_fallback",
+        "cold_seconds": 0.802011350999237,
+        "warm_seconds": 0.0011647313003777526,
+        "capacity": 1024,
+        "history_bytes": 24576,
+        "accepted": 66,
+        "rejected": 3,
+        "trace_max_abs_error": 0.0
+      }
+    ],
+    "xla_compile_seconds": [
+      0.352381706,
+      0.332659006
+    ],
+    "parameters": {
+      "maximum_delay": 0.23,
+      "dtmin": 0.015625,
+      "dt0": 0.8,
+      "t0": 0.0,
+      "t1": 1.03,
+      "rtol": 1e-05,
+      "atol": 1e-07
+    },
+    "note": "Same two-state feedback DDE, accepted/rejected steps and complete traces. Capacities are inferred from PIDController.dtmin versus the previous 1024-slot fallback; no measurable warm-runtime change in this small benchmark. Measurements are synchronized and include setup in call totals; XLA compilation is listed separately.",
+    "validation": {
+      "pytest": "107 passed, 7 skipped, 13 warnings in 142.04 seconds on the PR development base",
+      "additional_jit_vmap_check": "1 passed; traced minimum-timestep and delay inputs retain the checked fallback",
+      "coverage": [
+        "automatic direct PID dtmin sizing",
+        "explicit override precedence",
+        "invalid zero/negative/non-finite bounds",
+        "missing bound and wrapped/custom controller fallback",
+        "JIT/vmap traced bounds",
+        "adaptive rejected steps and floor-reaching steps",
+        "short final interval",
+        "complete feedback trace Jacobians versus full history",
+        "history memory independent of duration",
+        "force_dtmin=False failure unchanged",
+        "explicit undersized capacity still raises with throw=False",
+        "native complex optical trace comparison with full history"
+      ]
+    }
+  }
 }

@@ -1,5 +1,6 @@
 """Transient solvers to be used with Diffrax."""
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -1209,6 +1210,38 @@ def _zero_vector_field(t, y, args):
 _DEFAULT_TRANSIENT_TERM = diffrax.ODETerm(_zero_vector_field)
 
 
+def _delay_history_capacity(max_delay, dt0, controller, capacity=None) -> int:
+    """Choose a static ring capacity without changing step-size control.
+
+    Only direct built-in controllers have a known lower-step contract. Wrappers
+    can insert arbitrarily many shorter steps, so they retain the checked
+    fallback. The three spare slots cover startup, interpolation brackets and
+    the final interval clipped below the controller's minimum step.
+    """
+    if capacity is not None:
+        return capacity
+    if type(controller) is ConstantStepSize:
+        minimum, name = dt0, "dt0"
+    elif type(controller) is diffrax.PIDController:
+        minimum, name = controller.dtmin, "PIDController.dtmin"
+    else:
+        return 1024
+    if minimum is None:
+        return 1024
+    try:
+        minimum = float(minimum)
+    except (jax.errors.ConcretizationTypeError, TypeError):
+        return 1024
+    if not math.isfinite(minimum) or minimum <= 0:
+        msg = f"{name} must be finite and positive to infer delay history capacity."
+        raise ValueError(msg)
+    try:
+        horizon = float(max_delay)
+    except (jax.errors.ConcretizationTypeError, TypeError):
+        return 1024
+    return max(2, math.ceil(horizon / minimum) + 3)
+
+
 def setup_transient(
     groups: list, linear_strategy: CircuitLinearSolver, transient_solver: AbstractSolver = None
 ) -> Callable[..., diffrax.Solution]:
@@ -1231,10 +1264,13 @@ def setup_transient(
 
             history_capacity (int, optional): Static accepted-sample capacity
                 for delayed circuits. Concrete constant-step runs infer
-                ceil(max_delay / dt0) + 3; adaptive or traced runs use 1024.
+                ceil(max_delay / dt0) + 3. Direct PIDController calls with a
+                concrete, finite, positive dtmin infer ceil(max_delay / dtmin)
+                + 3. Other adaptive, wrapped or traced runs use 1024.
                 Capacity includes the initial sample and interpolation brackets.
                 An explicit runtime error prevents eviction of required history;
-                smaller adaptive steps may require a larger capacity. Saved
+                controllers without an inferred lower bound may need a larger
+                capacity. Sizing does not change dtmin or force_dtmin. Saved
                 output and reverse-mode checkpoints have separate memory costs.
             t0 (float): The start time of the simulation.
             t1 (float): The end time of the simulation.
@@ -1322,18 +1358,7 @@ def setup_transient(
             for group in args[0].values():
                 if getattr(group, "has_delay", False):
                     max_delay = jnp.maximum(max_delay, jnp.max(_group_tau(group, group.params)))
-            if history_capacity is None:
-                # Concrete constant-step runs can use the physical horizon.
-                # Under an outer JIT/grad, use a static default; callers can
-                # supply a tighter capacity for their parameter domain.
-                history_capacity = 1024
-                if isinstance(stepsize_controller, ConstantStepSize):
-                    import math
-
-                    try:
-                        history_capacity = max(2, math.ceil(float(max_delay) / float(dt0)) + 3)
-                    except (jax.errors.ConcretizationTypeError, TypeError):
-                        pass
+            history_capacity = _delay_history_capacity(max_delay, dt0, stepsize_controller, history_capacity)
 
         sol = circuit_diffeqsolve(
             terms=term,
