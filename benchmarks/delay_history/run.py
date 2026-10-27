@@ -39,6 +39,9 @@ parser.add_argument("--variant", choices=["original", "current"], required=True)
 parser.add_argument("--mode", choices=["lookup", "mzm", "oracle", "cache", "adaptive"], default="lookup")
 parser.add_argument("--reference", default="54620a09e4873387d567f74ec7b75870b9dd577a")
 parser.add_argument("--output", type=Path, required=True)
+parser.add_argument("--mzm-controller", choices=["constant", "pid"], default="constant")
+parser.add_argument("--mzm-vpp", type=float, help="Override differential drive Vpp and skip the notebook calibration sweep.")
+parser.add_argument("--mzm-capacity", type=int, help="Explicit history capacity for MZM comparisons; omit to infer.")
 parser.add_argument("--compare", type=Path, help="Original MZM output directory; assert complete trace agreement.")
 opts = parser.parse_args()
 if opts.mode == "adaptive" and opts.variant != "current":
@@ -277,8 +280,18 @@ else:
     namespace = {"__name__": "__benchmark__"}
     # Capture complete real/unrolled state traces for numerical comparisons.
     records = []
+    mzm_controller = None
 
     def measured(**kwargs):
+        global mzm_controller
+        if opts.mzm_controller == "pid":
+            if mzm_controller is None:
+                mzm_controller = diffrax.PIDController(
+                    rtol=1e-4, atol=1e-6, dtmin=namespace["integration_dt"], dtmax=4 * namespace["integration_dt"]
+                )
+            kwargs["stepsize_controller"] = mzm_controller
+        if opts.mzm_capacity is not None:
+            kwargs["history_capacity"] = opts.mzm_capacity
         index = len(records)
         started = time.perf_counter()
         sol = dispatch(**kwargs)
@@ -287,6 +300,8 @@ else:
             "call": index,
             "seconds": time.perf_counter() - started,
             "steps": int(sol.stats["num_steps"]),
+            "accepted": int(sol.stats["num_accepted_steps"]),
+            "rejected": int(sol.stats["num_rejected_steps"]),
             "history_capacity": int(sol.stats.get("history_capacity", kwargs["max_steps"] + 1)),
             "history_bytes": int(sol.stats.get("history_bytes", (kwargs["max_steps"] + 1) * (kwargs["y0"].size + 1) * 8)),
         }
@@ -305,8 +320,13 @@ else:
         if cell["cell_type"] != "code":
             continue
         print("CELL", index, flush=True)
-        exec(compile("".join(cell["source"]), f"mzm-cell-{index}", "exec"), namespace)
-        if index == 22:
+        source = "".join(cell["source"])
+        if opts.mzm_vpp is not None and "target_er_db" in source and "outer_dc" in source:
+            namespace["differential_vpp"] = opts.mzm_vpp
+            print("CALIBRATION SKIPPED; differential Vpp", opts.mzm_vpp, flush=True)
+            continue
+        exec(compile(source, f"mzm-cell-{index}", "exec"), namespace)
+        if "transient_link = compile_circuit(" in source:
             # Same native-delay circuit and history budget as the reported
             # 2048-step benchmark; a stable term isolates warm execution.
             from circulax.solvers import setup_transient
@@ -331,9 +351,22 @@ else:
                     term=term,
                     throw=True,
                 ).ys.block_until_ready()
-        if index in [25, 28]:
+        if "fold_eye(" in source and "plt.subplots" in source:
             plt.gcf().savefig(opts.output / f"figure-{index}.png", dpi=120)
         plt.close("all")
     results["solves"] = records
+    results["differential_vpp"] = float(namespace["differential_vpp"])
+    results["mzm_controller"] = opts.mzm_controller
+    results["explicit_history_capacity"] = opts.mzm_capacity
+    results["integration_dt"] = namespace["integration_dt"]
+    results["unknowns"] = int(namespace["solution"].ys.shape[-1])
+    if mzm_controller is not None:
+        results["pid"] = {
+            "rtol": float(mzm_controller.rtol),
+            "atol": float(mzm_controller.atol),
+            "dtmin": float(mzm_controller.dtmin),
+            "dtmax": float(mzm_controller.dtmax),
+            "force_dtmin": mzm_controller.force_dtmin,
+        }
 
 (opts.output / "results.json").write_text(json.dumps(results, indent=2) + "\n")
