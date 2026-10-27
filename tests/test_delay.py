@@ -474,3 +474,30 @@ def test_delay_line_fdomain_ac_sweep():
     )
     phase_err = jnp.angle(S21 * jnp.conj(S21_analytic))
     assert jnp.max(jnp.abs(phase_err)) < 1e-6, f"Phase error: {jnp.max(jnp.abs(phase_err)):.2e} rad"
+
+
+def test_pid_dtmin_infers_complex_delay_history(two_delay_lines_netlist):
+    """The native optical path uses dtmin-sized history without changing traces."""
+    import numpy as np
+
+    net, models, *_ = two_delay_lines_netlist
+    groups, size, _ = compile_netlist(net, models)
+    linear = analyze_circuit(groups, size, backend="dense", is_complex=True)
+    initial = linear.solve_dc(groups, jnp.zeros(2 * size))
+    run = setup_transient(groups, linear)
+    controller = diffrax.PIDController(rtol=1e-4, atol=1e-6, dtmin=1e-14)
+    kwargs = dict(
+        t0=0.0,
+        t1=10e-12,
+        dt0=1e-13,
+        y0=initial,
+        saveat=diffrax.SaveAt(ts=jnp.linspace(0.0, 10e-12, 101)),
+        stepsize_controller=controller,
+        max_steps=2000,
+        throw=True,
+    )
+    actual = run(**kwargs)
+    expected = run(**kwargs, history_capacity=2001)
+    assert actual.stats["history_capacity"] == 203
+    assert actual.stats["num_steps"] == expected.stats["num_steps"]
+    np.testing.assert_allclose(actual.ys, expected.ys, rtol=1e-11, atol=1e-11)

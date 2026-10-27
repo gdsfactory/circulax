@@ -28,6 +28,8 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from circulax.solvers.delay_history import DelayTimes
+
 try:
     from bosdi.circulax import OsdiComponentGroup
 except ImportError:
@@ -230,19 +232,19 @@ def _is_osdi(group) -> bool:
 
 
 def _interp_delayed(
-    hist_t: Array,
+    hist_t: Array | DelayTimes,
     hist_cols: Array,
     tau: Array,
     idx: Array,
     t1: float,
     current: Array | None = None,
 ) -> Array:
-    """Per-instance delayed read via ``jnp.interp``, vmapped over ``idx``'s leading axis.
+    """Per-instance binary bracket search followed by two local row/column gathers.
 
     Args:
-        hist_t: Ascending accepted-step sample times, shape ``(max_steps+1,)``
-            (inf-padded tail past the current step count).
-        hist_cols: Sample values to interpolate, shape ``(max_steps+1, M)``.
+        hist_t: Ring timestamps and chronological indices (``DelayTimes``),
+            or ascending sample times with an inf-padded tail.
+        hist_cols: Physical sample storage, shape ``(capacity, M)``.
         tau: Per-instance delay, shape ``(N,)``.
         idx: Per-instance column indices into ``hist_cols``, shape ``(N, width)``.
         t1: Current evaluation time.
@@ -257,36 +259,41 @@ def _interp_delayed(
         ``y_guess[idx]`` for the undelayed read.
 
     """
-    finite = jnp.isfinite(hist_t)
-    last_idx = jnp.maximum(jnp.sum(finite, dtype=jnp.int32) - 1, 0)
-    t_prev = hist_t[last_idx]
-    pad_order = jnp.arange(hist_t.shape[0], dtype=hist_t.dtype) - last_idx
-    interp_t = jnp.where(finite, hist_t, t_prev + pad_order)
+    is_ring = isinstance(hist_t, DelayTimes)
+    if is_ring:
+        history = hist_t
+    else:
+        # Compatibility with ascending, inf-padded callers. Find the valid
+        # prefix by binary search rather than scanning the allocated buffer.
+        count = jnp.searchsorted(hist_t, jnp.inf, side="left")
+        history = DelayTimes(hist_t, jnp.int32(0), count)
+    last_idx = history.physical(history.count - 1)
+    t_prev = history.times[last_idx]
+    query = t1 - tau
+    upper = history.search(query)
+    lower = jnp.clip(upper - 1, 0, history.count - 1)
+    upper = jnp.clip(upper, 0, history.count - 1)
+    if not is_ring:
+        # jnp.interp chooses the left slope at the final point of a completely
+        # full array, but the right (constant padded) slope before an inf tail.
+        final_hit = (history.count == hist_t.size) & (history.count > 1) & (query == t_prev)
+        lower = jnp.where(final_hit, history.count - 2, lower)
+    lo, hi = history.physical(lower), history.physical(upper)
+    left_t, right_t = history.times[lo], history.times[hi]
+    left = hist_cols[lo[:, None], idx]
+    right = hist_cols[hi[:, None], idx]
+    span = right_t - left_t
+    weight = (query - left_t) / jnp.where(span > 0, span, 1.0)
+    from_history = left + weight[:, None] * (right - left)
 
-    def _read_one(tau_i: Array, idx_i: Array, current_i: Array) -> Array:
-        tq = t1 - tau_i
-        cols = hist_cols[:, idx_i]  # (max_steps+1, width)
-        # Replace the inf-padded buffer tail before interpolation. Although
-        # that branch is not selected for a current-step query, inf/inf slopes
-        # inside jnp.interp would otherwise poison derivatives with NaNs.
-        interp_cols = jnp.where(finite[:, None], cols, cols[last_idx])
-        from_history = jax.vmap(lambda c: jnp.interp(tq, interp_t, c), in_axes=1)(interp_cols)
-
-        # For a sub-step delay, tq lies in the step currently being solved.
-        # Linear interpolation therefore depends on the current Newton trial.
-        # Avoid a zero denominator at initialisation; that branch is inactive
-        # unless a caller attempts a zero-length step.
-        previous = hist_cols[last_idx, idx_i]
-        span = t1 - t_prev
-        safe_span = jnp.where(span > 0, span, 1.0)
-        weight = jnp.where(span > 0, (tq - t_prev) / safe_span, 0.0)
-        weight = jnp.clip(weight, 0.0, 1.0)
-        in_current_step = previous + weight * (current_i - previous)
-        return jnp.where(tq > t_prev, in_current_step, from_history)
-
+    previous = hist_cols[last_idx, idx]
     if current is None:
-        current = hist_cols[last_idx, idx]
-    return jax.vmap(_read_one)(tau, idx, current)
+        current = previous
+    span = t1 - t_prev
+    weight = jnp.where(span > 0, (query - t_prev) / jnp.where(span > 0, span, 1.0), 0.0)
+    weight = jnp.clip(weight, 0.0, 1.0)
+    in_current_step = previous + weight[:, None] * (current - previous)
+    return jnp.where((query > t_prev)[:, None], in_current_step, from_history)
 
 
 def _group_tau(group, params) -> Array:
@@ -305,8 +312,8 @@ def _real_hist_locs(group, params, current: Array, t1: float, hist_t: Array, his
 def _complex_hist_locs(group, params, current: Array, t1: float, hist_t: Array, hist_y: Array, half_size: int) -> Array:
     """Per-instance delayed local-var vector, complex (unrolled real/imag) layout."""
     tau = _group_tau(group, params)
-    hist_r = _interp_delayed(hist_t, hist_y[:, :half_size], tau, group.var_indices, t1, current.real)
-    hist_i = _interp_delayed(hist_t, hist_y[:, half_size:], tau, group.var_indices, t1, current.imag)
+    hist_r = _interp_delayed(hist_t, hist_y, tau, group.var_indices, t1, current.real)
+    hist_i = _interp_delayed(hist_t, hist_y, tau, group.var_indices + half_size, t1, current.imag)
     return hist_r + 1j * hist_i
 
 
@@ -885,7 +892,7 @@ def assemble_system_complex(
                 def _with_current(vr_current, vi_current, p_current):
                     h_r = _interp_delayed(
                         hist_t,
-                        hist_y[:, :half_size],
+                        hist_y,
                         tau_i[None],
                         idx_i[None],
                         t1,
@@ -893,9 +900,9 @@ def assemble_system_complex(
                     )[0]
                     h_i = _interp_delayed(
                         hist_t,
-                        hist_y[:, half_size:],
+                        hist_y,
                         tau_i[None],
-                        idx_i[None],
+                        idx_i[None] + half_size,
                         t1,
                         vi_current[None],
                     )[0]

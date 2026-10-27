@@ -51,6 +51,8 @@ from diffrax._step_size_controller import (
 from diffrax._term import AbstractTerm, WrapTerm
 from jaxtyping import Array, ArrayLike, PyTree
 
+from circulax.solvers.delay_history import DelayTimes
+
 # ---------------------------------------------------------------------------
 # Simplified state – no event fields, no dense fields, no progress meter
 # ---------------------------------------------------------------------------
@@ -80,6 +82,8 @@ class CircuitState(eqx.Module):
     # components (``record_history=False``), so no buffer cost is paid.
     hist_t: Array | None
     hist_y: Array | None
+    hist_start: IntScalarLike
+    hist_count: IntScalarLike
 
 
 # ---------------------------------------------------------------------------
@@ -100,17 +104,14 @@ def _is_none(x: Any) -> bool:
 
 
 def _outer_buffers(state: CircuitState):
-    """Return the mutable output buffers carried through the while-loop.
+    """Select write-once outputs only.
 
-    ``hist_t``/``hist_y`` are always included structurally (even when
-    ``None``, i.e. no delayed components) rather than conditionally omitted
-    by value — the ``buffers=`` selector must be a pure function of pytree
-    *structure*, not of leaf values, for equinox's checkpointed backward
-    pass to resolve buffer perturbations correctly.
+    Ring history is ordinary checkpointed state: Equinox's output-buffer
+    optimisation forbids overwrites and would produce incorrect adjoints.
     """
     save_states = jtu.tree_leaves(state.save_state, is_leaf=_is_save_state)
     save_states = [s for s in save_states if _is_save_state(s)]
-    return [s.ts for s in save_states] + [s.ys for s in save_states] + [state.hist_t, state.hist_y]
+    return [s.ts for s in save_states] + [s.ys for s in save_states]
 
 
 def _inner_buffers(save_state: SaveState):
@@ -136,6 +137,7 @@ def _circuit_loop(
     terms,
     args,
     init_state: CircuitState,
+    max_delay,
     inner_while_loop,
     outer_while_loop,
 ) -> CircuitState:
@@ -185,18 +187,9 @@ def _circuit_loop(
     # ------------------------------------------------------------------
 
     def body_fun(state: CircuitState) -> CircuitState:
-        # Delayed components read history accepted up to (but not including)
-        # this step, i.e. the buffer as carried into this iteration — it is
-        # appended to further down, once the step below is accepted.
-        #
-        # `state.hist_t`/`state.hist_y` are `eqxi`'s internal `_Buffer` proxy
-        # (registered in `_outer_buffers` for efficient donation), not plain
-        # arrays -- ordinary jnp ops like `jnp.interp` don't accept them
-        # directly. Materialise via full-slice indexing (`_Buffer.__getitem__`
-        # unwraps one level) before handing them to the solver/assembly path;
-        # the write further below still operates on `state.hist_t`/`hist_y`
-        # themselves, so this doesn't disturb the buffer-donation machinery.
-        step_args = args if state.hist_t is None else (*args, state.hist_t[:], state.hist_y[:])
+        step_args = (
+            args if state.hist_t is None else (*args, DelayTimes(state.hist_t, state.hist_start, state.hist_count), state.hist_y)
+        )
 
         # made_jump is always False for circuits (no discontinuities in input)
         (y, y_error, dense_info, solver_state, solver_result) = solver.step(
@@ -245,19 +238,25 @@ def _circuit_loop(
         num_accepted_steps = state.num_accepted_steps + jnp.where(keep_step, 1, 0)
         num_rejected_steps = state.num_rejected_steps + jnp.where(keep_step, 0, 1)
 
-        # ------------------------------------------------------------------
-        # Record this accepted step in the delay-history buffer. Slot index
-        # is derived from the *pre-step* accepted-step count, so a rejected
-        # step retries the same slot; the where(...) makes the write a no-op
-        # (self-assignment) on rejection rather than clobbering with a stale
-        # duplicate point.
-        # ------------------------------------------------------------------
-        hist_t = state.hist_t
-        hist_y = state.hist_y
+        # Only accepted states enter the ring. Before overwriting, the next
+        # oldest point must still bracket every future query. In particular,
+        # counting dt0-sized steps is NOT a bound for adaptive stepping.
+        hist_t, hist_y = state.hist_t, state.hist_y
+        hist_start, hist_count = state.hist_start, state.hist_count
         if hist_t is not None:
-            hist_idx = jnp.minimum(state.num_accepted_steps + 1, hist_t.shape[0] - 1)
+            capacity = hist_t.shape[0]
+            full = hist_count == capacity
+            next_oldest = hist_t[(hist_start + 1) % capacity]
+            hist_t = eqxi.error_if(
+                hist_t,
+                keep_step & full & (next_oldest > tprev - max_delay),
+                "Delay history capacity exhausted: increase history_capacity; adaptive accepted steps may be smaller than dt0.",
+            )
+            hist_idx = (hist_start + hist_count) % capacity
             hist_t = hist_t.at[hist_idx].set(jnp.where(keep_step, tprev, hist_t[hist_idx]))
             hist_y = hist_y.at[hist_idx].set(jnp.where(keep_step, y, hist_y[hist_idx]))
+            hist_start = (hist_start + (keep_step & full)) % capacity
+            hist_count = jnp.minimum(hist_count + keep_step, capacity)
 
         interpolator = solver.interpolation_cls(t0=state.tprev, t1=state.tnext, **dense_info)
 
@@ -267,8 +266,13 @@ def _circuit_loop(
             if subsaveat.ts is None:
                 return ss
 
+            # Checkpoint recomputation can round a step endpoint differently.
+            # Keep on-grid saves in the same iteration in both passes; otherwise
+            # a save can disappear from the adjoint at a floating-point tie.
+            save_until = state.tnext + 100 * jnp.finfo(state.tnext.dtype).eps * jnp.abs(state.tnext)
+
             def _cond(_ss):
-                return keep_step & (subsaveat.ts[_ss.saveat_ts_index] <= state.tnext) & (_ss.saveat_ts_index < len(subsaveat.ts))
+                return keep_step & (subsaveat.ts[_ss.saveat_ts_index] <= save_until) & (_ss.saveat_ts_index < len(subsaveat.ts))
 
             def _body(_ss):
                 _t = subsaveat.ts[_ss.saveat_ts_index]
@@ -310,6 +314,8 @@ def _circuit_loop(
             save_state=save_state,
             hist_t=hist_t,
             hist_y=hist_y,
+            hist_start=hist_start,
+            hist_count=hist_count,
         )
 
     # ------------------------------------------------------------------
@@ -380,6 +386,8 @@ def circuit_diffeqsolve(
     throw: bool = True,
     checkpoints: int | None = None,
     record_history: bool = False,
+    history_capacity: int = 1024,
+    max_delay: RealScalarLike | None = None,
 ) -> Solution:
     """Stripped-down :func:`diffrax.diffeqsolve` for circuit simulation.
 
@@ -394,12 +402,13 @@ def circuit_diffeqsolve(
     ``checkpoints`` controls the number of binomial checkpoints used by
     ``RecursiveCheckpointAdjoint`` (``None`` = auto from ``max_steps``).
 
-    ``record_history``, when ``True``, allocates a ``(t, y)`` buffer of every
-    accepted step (sized ``max_steps + 1``, which must therefore be finite)
-    and threads it into ``args`` as ``(*args, hist_t, hist_y)`` for solvers
-    to use for fixed-delay lookups (see ``circulax.solvers.assembly``'s
-    ``hist_t``/``hist_y`` parameters). No-op cost when ``False`` — the
-    circuit has no delayed components.
+    ``record_history`` enables a ring of ``history_capacity`` accepted
+    samples (including y0). ``max_delay`` is the largest physical delay.
+    Capacity is static for JAX; exhaustion raises before evicting a required
+    interpolation bracket, even for adaptive/rejected steps. Increase the
+    capacity when accepted steps cluster within the delay horizon. History is
+    checkpointed state, not a write-once output buffer, to preserve reverse AD.
+    No history is allocated for circuits without delays.
 
     """
     # ------------------------------------------------------------------
@@ -516,11 +525,13 @@ def circuit_diffeqsolve(
     # Allocate the delay-history buffer
     # ------------------------------------------------------------------
     if record_history:
-        if max_steps is None:
-            msg = "record_history=True requires a finite max_steps to size the delay-history buffer."
-            raise ValueError(msg)
-        hist_t = jnp.full(max_steps + 1, jnp.inf, dtype=time_dtype)
-        hist_y = jnp.full((max_steps + 1, *y0.shape), jnp.inf, dtype=y0.dtype)
+        if max_delay is None:
+            raise ValueError("record_history=True requires max_delay.")
+        if history_capacity < 2:
+            raise ValueError("history_capacity must be at least 2.")
+        hist_t = jnp.full(history_capacity, jnp.inf, dtype=time_dtype)
+        hist_y = jnp.zeros((history_capacity, *y0.shape), dtype=y0.dtype)
+
     else:
         hist_t = None
         hist_y = None
@@ -541,6 +552,8 @@ def circuit_diffeqsolve(
         save_state=save_state,
         hist_t=hist_t,
         hist_y=hist_y,
+        hist_start=jnp.int32(0),
+        hist_count=jnp.int32(1),
     )
 
     # ------------------------------------------------------------------
@@ -566,6 +579,7 @@ def circuit_diffeqsolve(
         terms=terms,
         args=args,
         init_state=init_state,
+        max_delay=max_delay,
         inner_while_loop=inner_while_loop,
         outer_while_loop=outer_while_loop,
     )
@@ -581,6 +595,8 @@ def circuit_diffeqsolve(
         "num_accepted_steps": final_state.num_accepted_steps,
         "num_rejected_steps": final_state.num_rejected_steps,
         "max_steps": max_steps,
+        "history_capacity": 0 if hist_t is None else hist_t.shape[0],
+        "history_bytes": 0 if hist_t is None else hist_t.nbytes + hist_y.nbytes,
     }
 
     sol = Solution(

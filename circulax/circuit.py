@@ -527,7 +527,14 @@ class Circuit:
                 Array-valued params are **not** supported — raises ``ValueError``.
             transient_solver: Override the Diffrax solver (default BDF2).
             **kwargs: Forwarded to ``setup_transient`` / Diffrax (e.g.
-                ``max_steps``).
+                ``max_steps``, ``history_capacity``). For delayed circuits,
+                ``history_capacity`` bounds retained accepted samples. Concrete
+                fixed-step runs default to ceil(max_delay / dt0) + 3 samples;
+                direct ``PIDController`` calls with a concrete positive ``dtmin``
+                use ceil(max_delay / dtmin) + 3. Other adaptive, wrapped or
+                traced runs default to 1024. Exhaustion raises
+                before discarding a needed interpolation bracket; increase
+                capacity if adaptive steps cluster within the delay window.
 
         Returns:
             A ``diffrax.Solution`` with ``.ts`` and ``.ys`` attributes.

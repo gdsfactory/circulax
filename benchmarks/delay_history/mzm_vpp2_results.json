@@ -1,0 +1,666 @@
+{
+  "issue": "https://github.com/gdsfactory/circulax/issues/94",
+  "pull_request": "https://github.com/gdsfactory/circulax/pull/95",
+  "differential_vpp": 2.0,
+  "calibration_performed": false,
+  "physics_base": "f73ecab893ac6a4b102f548ddb72236c7c324365",
+  "solver_commit": "946219cc9b4c5d8b61f5b7cc0db81ea8916b54a5",
+  "input_sha256": {
+    "examples/photonic/traveling_wave_mzm_reference.ipynb": "ed570a52d5b951f532e7c9ee2ec681a08f2b5a396b8f4ee6df258fdd78716358",
+    "examples/photonic/traveling_wave_mzm_tutorial.py": "47f742638ff6dae73a094cb3bc9a11cffda88d5bcde467d98c4a2d4c2a153002"
+  },
+  "benchmark_script_sha256": "fc066db2a716737961779f9b8ede31a5576a9e29d3add2253da3f9d57d81dfab",
+  "environment": {
+    "python": "3.12.14",
+    "jax": "0.7.2",
+    "jaxlib": "0.7.2",
+    "backend": "cpu",
+    "dtype": "float64",
+    "affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "openblas_threads": 1,
+    "omp_threads": 1
+  },
+  "variants": {
+    "original": {
+      "variant": "original",
+      "jax": "0.7.2",
+      "backend": "cpu",
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "threads": "1",
+      "reference": "54620a09e4873387d567f74ec7b75870b9dd577a",
+      "solves": [
+        {
+          "call": 0,
+          "seconds": 35.25019852799596,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        },
+        {
+          "call": 1,
+          "seconds": 30.85563996100973,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        },
+        {
+          "call": 2,
+          "seconds": 142.4421743290004,
+          "steps": 9152,
+          "accepted": 9152,
+          "rejected": 0,
+          "history_capacity": 9173,
+          "history_bytes": 73310616
+        },
+        {
+          "call": 3,
+          "seconds": 198.68089688799228,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        },
+        {
+          "call": 4,
+          "seconds": 152.27879377400677,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        }
+      ],
+      "differential_vpp": 2.0,
+      "mzm_controller": "constant",
+      "explicit_history_capacity": null,
+      "integration_dt": 2.7901785714285714e-13,
+      "unknowns": 998
+    },
+    "current": {
+      "variant": "current",
+      "jax": "0.7.2",
+      "backend": "cpu",
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "threads": "1",
+      "reference": "54620a09e4873387d567f74ec7b75870b9dd577a",
+      "solves": [
+        {
+          "call": 0,
+          "seconds": 7.956589594992693,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        {
+          "call": 1,
+          "seconds": 0.7902756609983044,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        {
+          "call": 2,
+          "seconds": 10.795234579010867,
+          "steps": 9152,
+          "accepted": 9152,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        {
+          "call": 3,
+          "seconds": 10.376575084999786,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 2.3159252293680765e-13
+        },
+        {
+          "call": 4,
+          "seconds": 10.584835363988532,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 1.6575629757653587e-13
+        }
+      ],
+      "differential_vpp": 2.0,
+      "mzm_controller": "constant",
+      "explicit_history_capacity": null,
+      "integration_dt": 2.7901785714285714e-13,
+      "unknowns": 998
+    },
+    "pid-fallback": {
+      "variant": "current",
+      "jax": "0.7.2",
+      "backend": "cpu",
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "threads": "1",
+      "reference": "54620a09e4873387d567f74ec7b75870b9dd577a",
+      "solves": [
+        {
+          "call": 0,
+          "seconds": 7.855652213998837,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        {
+          "call": 1,
+          "seconds": 0.7923005140037276,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        {
+          "call": 2,
+          "seconds": 13.217198485988774,
+          "steps": 8098,
+          "accepted": 8037,
+          "rejected": 61,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        {
+          "call": 3,
+          "seconds": 14.106011885000044,
+          "steps": 8427,
+          "accepted": 8406,
+          "rejected": 21,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        {
+          "call": 4,
+          "seconds": 12.973925655998755,
+          "steps": 8431,
+          "accepted": 8406,
+          "rejected": 25,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        }
+      ],
+      "differential_vpp": 2.0,
+      "mzm_controller": "pid",
+      "explicit_history_capacity": 1024,
+      "integration_dt": 2.7901785714285714e-13,
+      "unknowns": 998,
+      "pid": {
+        "rtol": 0.0001,
+        "atol": 1e-06,
+        "dtmin": 2.7901785714285714e-13,
+        "dtmax": 1.1160714285714286e-12,
+        "force_dtmin": true
+      }
+    },
+    "pid-inferred": {
+      "variant": "current",
+      "jax": "0.7.2",
+      "backend": "cpu",
+      "affinity": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "threads": "1",
+      "reference": "54620a09e4873387d567f74ec7b75870b9dd577a",
+      "solves": [
+        {
+          "call": 0,
+          "seconds": 7.3627417649986455,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        {
+          "call": 1,
+          "seconds": 0.3834070670127403,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        {
+          "call": 2,
+          "seconds": 10.988162834997638,
+          "steps": 8098,
+          "accepted": 8037,
+          "rejected": 61,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        {
+          "call": 3,
+          "seconds": 10.58038413801114,
+          "steps": 8427,
+          "accepted": 8406,
+          "rejected": 21,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        {
+          "call": 4,
+          "seconds": 10.755909051993513,
+          "steps": 8431,
+          "accepted": 8406,
+          "rejected": 25,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        }
+      ],
+      "differential_vpp": 2.0,
+      "mzm_controller": "pid",
+      "explicit_history_capacity": null,
+      "integration_dt": 2.7901785714285714e-13,
+      "unknowns": 998,
+      "pid": {
+        "rtol": 0.0001,
+        "atol": 1e-06,
+        "dtmin": 2.7901785714285714e-13,
+        "dtmax": 1.1160714285714286e-12,
+        "force_dtmin": true
+      }
+    }
+  },
+  "comparisons": {
+    "fixed": [
+      {
+        "case": "2048-step cold",
+        "before": {
+          "call": 0,
+          "seconds": 35.25019852799596,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        },
+        "after": {
+          "call": 0,
+          "seconds": 7.956589594992693,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 4.430315037259168,
+        "trace_shape": [
+          1025,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      },
+      {
+        "case": "2048-step warm",
+        "before": {
+          "call": 1,
+          "seconds": 30.85563996100973,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        },
+        "after": {
+          "call": 1,
+          "seconds": 0.7902756609983044,
+          "steps": 2048,
+          "accepted": 2048,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 39.04414811666069,
+        "trace_shape": [
+          1025,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      },
+      {
+        "case": "NRZ",
+        "before": {
+          "call": 2,
+          "seconds": 142.4421743290004,
+          "steps": 9152,
+          "accepted": 9152,
+          "rejected": 0,
+          "history_capacity": 9173,
+          "history_bytes": 73310616
+        },
+        "after": {
+          "call": 2,
+          "seconds": 10.795234579010867,
+          "steps": 9152,
+          "accepted": 9152,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 13.194912374201685,
+        "trace_shape": [
+          4577,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      },
+      {
+        "case": "PAM4 clean",
+        "before": {
+          "call": 3,
+          "seconds": 198.68089688799228,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        },
+        "after": {
+          "call": 3,
+          "seconds": 10.376575084999786,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 2.3159252293680765e-13
+        },
+        "speedup": 19.147059146249735,
+        "trace_shape": [
+          4609,
+          998
+        ],
+        "trace_max_abs_error": 2.3159252293680765e-13,
+        "trace_rms_error": 8.060560328709779e-16
+      },
+      {
+        "case": "PAM4 jittered",
+        "before": {
+          "call": 4,
+          "seconds": 152.27879377400677,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 9237,
+          "history_bytes": 73822104
+        },
+        "after": {
+          "call": 4,
+          "seconds": 10.584835363988532,
+          "steps": 9216,
+          "accepted": 9216,
+          "rejected": 0,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 1.6575629757653587e-13
+        },
+        "speedup": 14.38650565053529,
+        "trace_shape": [
+          4609,
+          998
+        ],
+        "trace_max_abs_error": 1.6575629757653587e-13,
+        "trace_rms_error": 6.407152900066579e-16
+      }
+    ],
+    "adaptive": [
+      {
+        "case": "2048-step cold",
+        "before": {
+          "call": 0,
+          "seconds": 7.855652213998837,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        "after": {
+          "call": 0,
+          "seconds": 7.3627417649986455,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 1.0669465892914258,
+        "trace_shape": [
+          1025,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      },
+      {
+        "case": "2048-step warm",
+        "before": {
+          "call": 1,
+          "seconds": 0.7923005140037276,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        "after": {
+          "call": 1,
+          "seconds": 0.3834070670127403,
+          "steps": 971,
+          "accepted": 935,
+          "rejected": 36,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 2.0664734225605708,
+        "trace_shape": [
+          1025,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      },
+      {
+        "case": "NRZ",
+        "before": {
+          "call": 2,
+          "seconds": 13.217198485988774,
+          "steps": 8098,
+          "accepted": 8037,
+          "rejected": 61,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        "after": {
+          "call": 2,
+          "seconds": 10.988162834997638,
+          "steps": 8098,
+          "accepted": 8037,
+          "rejected": 61,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 1.202857901221812,
+        "trace_shape": [
+          4577,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      },
+      {
+        "case": "PAM4 clean",
+        "before": {
+          "call": 3,
+          "seconds": 14.106011885000044,
+          "steps": 8427,
+          "accepted": 8406,
+          "rejected": 21,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        "after": {
+          "call": 3,
+          "seconds": 10.58038413801114,
+          "steps": 8427,
+          "accepted": 8406,
+          "rejected": 21,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 1.333223038124175,
+        "trace_shape": [
+          4609,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      },
+      {
+        "case": "PAM4 jittered",
+        "before": {
+          "call": 4,
+          "seconds": 12.973925655998755,
+          "steps": 8431,
+          "accepted": 8406,
+          "rejected": 25,
+          "history_capacity": 1024,
+          "history_bytes": 8183808
+        },
+        "after": {
+          "call": 4,
+          "seconds": 10.755909051993513,
+          "steps": 8431,
+          "accepted": 8406,
+          "rejected": 25,
+          "history_capacity": 12,
+          "history_bytes": 95904,
+          "trace_max_abs_error": 0.0
+        },
+        "speedup": 1.2062137745199837,
+        "trace_shape": [
+          4609,
+          998
+        ],
+        "trace_max_abs_error": 0.0,
+        "trace_rms_error": 0.0
+      }
+    ]
+  },
+  "xla_compile_seconds_in_call_order": {
+    "original": [
+      3.458539724,
+      3.687602997,
+      10.8525877,
+      3.886269331
+    ],
+    "current": [
+      4.126028061,
+      4.487850904,
+      4.110830545,
+      4.114210367
+    ],
+    "pid-fallback": [
+      4.169462204,
+      3.893624544,
+      4.614345789,
+      4.109469175
+    ],
+    "pid-inferred": [
+      3.935361147,
+      4.685954571,
+      4.012013197,
+      4.796062231
+    ]
+  },
+  "notes": [
+    "All four variants ran serially with identical affinity and thread limits on the same shared host; absolute timings can vary with other host workloads.",
+    "The notebook was executed from a frozen copy. Its DC extinction-ratio calibration cell was skipped; differential_vpp=2.0 was set directly. The original notebook/helper files were not edited.",
+    "Within each comparison, model, source waveform, tolerances, timestep controller, sample timestamps, record length and max_steps were identical. Complete traces include all 998 real/unrolled unknowns.",
+    "Fixed-step results compare the original full-history solver with the latest bounded-history solver. Adaptive results compare explicit 1024-slot history with dtmin-inferred history using the latest solver in both cases.",
+    "Adaptive PID settings are recorded in variants. dtmin equals the fixed integration timestep, dtmax is four times dtmin, and force_dtmin retains the controller default. Adaptive versus fixed-step runtimes are not presented as an isolated history-sizing speedup.",
+    "The 2048-step cold/warm pair uses one stable ODETerm and max_steps=9236. The full records are NRZ 9152 nominal fixed steps and PAM4 9216 nominal fixed steps. No record was shortened or timestep coarsened between either comparison pair.",
+    "All calls were synchronized with block_until_ready. Cold call totals include tracing, lowering, compilation and execution. XLA-only compilation is listed separately. Full-record times include their first compilation.",
+    "history_bytes counts raw timestamp/state arrays, excluding saved output, executables, process RSS and reverse-mode checkpoints.",
+    "These measurements use a 2 Vpp drive and should not be mixed with the earlier 4 Vpp benchmark results."
+  ],
+  "differential_outer_levels_volts": [
+    -1.0,
+    1.0
+  ],
+  "max_steps_budget_by_case": {
+    "2048-step cold": 9236,
+    "2048-step warm": 9236,
+    "NRZ": 9172,
+    "PAM4 clean": 9236,
+    "PAM4 jittered": 9236
+  },
+  "reproduction": {
+    "shared_prefix": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JAX_LOG_COMPILES=1 taskset -c 0-3 .venv/bin/python benchmarks/delay_history/run.py",
+    "original": "--variant original --mode mzm --mzm-vpp 2.0 --output /tmp/issue95-vpp2-original",
+    "current": "--variant current --mode mzm --mzm-vpp 2.0 --compare /tmp/issue95-vpp2-original --output /tmp/issue95-vpp2-current",
+    "adaptive_fallback": "--variant current --mode mzm --mzm-vpp 2.0 --mzm-controller pid --mzm-capacity 1024 --output /tmp/issue95-vpp2-pid-fallback",
+    "adaptive_inferred": "--variant current --mode mzm --mzm-vpp 2.0 --mzm-controller pid --compare /tmp/issue95-vpp2-pid-fallback --output /tmp/issue95-vpp2-pid-inferred",
+    "inputs": "Run in a checkout containing the recorded f73ecab physics/model files and the notebook/helper revisions identified by SHA256, with the four solvers/assembly/delay_history/transient files from solver commit 946219c. The benchmark used an isolated worktree to preserve the original uncommitted tutorial."
+  }
+}
