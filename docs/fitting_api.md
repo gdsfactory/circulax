@@ -268,3 +268,56 @@ response. The generated circuit is passive and causal by construction; this
 is not a causality certificate for the supplied data. Validate the line response
 over the required band and increase `n_sections` until the spatial approximation
 converges. Accuracy outside the fitted band is not guaranteed.
+
+## Reduced uniform lines from RLGC
+
+For a compact two-port without internal taps, use the reduced component factory:
+
+```python
+from circulax.components import reduced_rlgc_transmission_line
+
+line = reduced_rlgc_transmission_line(
+    frequencies, R=r_per_m, L=l_per_m, G=g_per_m, C=c_per_m,
+    length=2e-3, z0=50.0,
+)
+models = {"line": line}  # Connect line,p1 and line,p2 in the parent circuit.
+```
+
+Inputs are real nonnegative per-metre scalars, sampled arrays or functions of
+frequency in Hz. The factory evaluates the exact uniform distributed line and
+fits its S-parameters using the existing vector-fitting API. It does not assume
+constant characteristic impedance. Length is fixed when fitting; refit after
+changing it. There are no internal taps or junction loads.
+
+The default enforces sampled passivity. Stable proper poles and nonnegative
+optional port delays make the returned realization causal. Held-out accuracy,
+S/Y pole stability and wider-grid passivity checks must pass before a circuit
+is returned. Invalid data or an inadequate fit raises `ValueError`. Arbitrary
+input RLGC curves are not thereby certified causal, and sampled passivity is
+not a global certificate. Accuracy outside the fitted band is not guaranteed.
+
+To inspect or save a fit without compiling it:
+
+```python
+from circulax.fitting import fit_rlgc, rlgc_sparameters, circuit_from_coefficients
+
+coefficients = fit_rlgc(frequencies, R=r_per_m, L=l_per_m, G=g_per_m,
+                        C=c_per_m, length=2e-3)
+reference = rlgc_sparameters(frequencies, R=r_per_m, L=l_per_m, G=g_per_m,
+                            C=c_per_m, length=2e-3)
+print(coefficients.metadata["validation"])
+coefficients.save("line.npz")
+line = circuit_from_coefficients(coefficients)
+```
+
+At least six frequency samples are required; every fifth interior sample is
+reserved for validation. `options=ModelFitOptions(...)` controls fit order,
+error limits and optional native propagation-delay separation. Reciprocity
+is required; disabling enforcement still requires sampled passivity to pass.
+Explicit port delays must be physically consistent with reflections. A purely
+rational finite-band approximation does not preserve an exact hard wavefront.
+
+Choose `rlgc_transmission_line` for a passive RLC ladder with distributed loads;
+choose `reduced_rlgc_transmission_line` for a compact fixed-length two-port.
+The [standalone RLGC example](examples/rlgc_transmission_line.md) compares the
+reduced line against the original dispersive RLGC data and runs a native pulse.

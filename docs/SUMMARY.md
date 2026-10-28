@@ -24,6 +24,8 @@
     * [Ring Modulator](examples/ring_modulator.md)
 * Advanced Topics
     * [Vector Fitting](examples/vector_fitting.md)
+    * [Reduced RLGC Transmission Line](examples/rlgc_transmission_line.md)
+    * [Traveling-Wave MZM](examples/traveling_wave_mzm.md)
     * [Time Delay](examples/time_delay.md)
     * [Inverse Design](inverse_design.md)
         * [LC Filter Synthesis](examples/01_lc_filter_synthesis.md)
