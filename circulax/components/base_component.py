@@ -32,6 +32,8 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from circulax.disciplines import Discipline, Nature
+
 PhysicsReturn = tuple[dict[str, Array], dict[str, Array]]
 
 
@@ -123,6 +125,9 @@ class CircuitComponent(eqx.Module):
 
     ports: ClassVar[tuple[str, ...]] = ()
     states: ClassVar[tuple[str, ...]] = ()
+    _port_disciplines: ClassVar[tuple[Discipline | None, ...]] = ()
+    _unknown_natures: ClassVar[tuple[Nature | None, ...]] = ()
+    _equation_natures: ClassVar[tuple[Nature | None, ...]] = ()
 
     _uses_time: ClassVar[bool] = False
     _is_fdomain: ClassVar[bool] = False
@@ -313,6 +318,10 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
     holomorphic: bool = False,
     ac_source_stamp: dict[str, float] | None = None,
     ideal_voltage_constraint_ports: tuple[str, ...] = (),
+    discipline: Discipline | None = None,
+    port_disciplines: dict[str, Discipline] | None = None,
+    state_natures: dict[str, Nature] | None = None,
+    equation_natures: dict[str, Nature] | None = None,
 ) -> type[CircuitComponent]:
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
@@ -618,10 +627,29 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
             )
         return first
 
+    port_disciplines = dict(port_disciplines or {})
+    state_natures = dict(state_natures or {})
+    equation_natures = dict(equation_natures or {})
+    for label, values, allowed, value_type in (
+        ("port_disciplines", port_disciplines, ports, Discipline),
+        ("state_natures", state_natures, states, Nature),
+        ("equation_natures", equation_natures, states, Nature),
+    ):
+        if set(values) - set(allowed) or any(not isinstance(value, value_type) for value in values.values()):
+            raise ValueError(f"{fn.__name__}: invalid {label}; keys must be in {allowed} and values must be {value_type.__name__}")
+    if discipline is not None and not isinstance(discipline, Discipline):
+        raise ValueError("discipline must be a Discipline")
+    resolved_ports = tuple(port_disciplines.get(port, discipline) for port in ports)
+    unknown_natures = tuple(d.potential if d else None for d in resolved_ports) + tuple(state_natures.get(s) for s in states)
+    resolved_equations = tuple(d.flow if d else None for d in resolved_ports) + tuple(equation_natures.get(s) for s in states)
+
     namespace = {
         "__annotations__": annotations,
         "ports": ports,
         "states": states,
+        "_port_disciplines": resolved_ports,
+        "_unknown_natures": unknown_natures,
+        "_equation_natures": resolved_equations,
         "_fast_physics": staticmethod(_fast_physics),
         "_invoke_physics": _invoke_physics,
         "_uses_time": uses_time,
@@ -665,6 +693,10 @@ def component(
     holomorphic: bool = False,
     ac_source_stamp: dict[str, float] | None = None,
     ideal_voltage_constraint_ports: tuple[str, ...] = (),
+    discipline: Discipline | None = None,
+    port_disciplines: dict[str, Discipline] | None = None,
+    state_natures: dict[str, Nature] | None = None,
+    equation_natures: dict[str, Nature] | None = None,
 ) -> Any:
     """Decorator for defining a time-independent circuit component.
 
@@ -674,6 +706,10 @@ def component(
     class. Ports and internal states share the ``signals`` namespace.
 
     Args:
+        discipline: Default potential/flow discipline for all ports.
+        port_disciplines: Per-port overrides of the default discipline.
+        state_natures: Unknown nature for each internal state.
+        equation_natures: Residual nature for each internal state equation.
         ports: Ordered tuple of port names. Must match the connection keys
             used in the netlist.
         states: Ordered tuple of internal state variable names. State
@@ -722,6 +758,10 @@ def component(
         holomorphic=holomorphic,
         ac_source_stamp=ac_source_stamp,
         ideal_voltage_constraint_ports=ideal_voltage_constraint_ports,
+        discipline=discipline,
+        port_disciplines=port_disciplines,
+        state_natures=state_natures,
+        equation_natures=equation_natures,
     )
 
 
@@ -733,6 +773,10 @@ def source(
     holomorphic: bool = False,
     ac_source_stamp: dict[str, float] | None = None,
     ideal_voltage_constraint_ports: tuple[str, ...] = (),
+    discipline: Discipline | None = None,
+    port_disciplines: dict[str, Discipline] | None = None,
+    state_natures: dict[str, Nature] | None = None,
+    equation_natures: dict[str, Nature] | None = None,
 ) -> Any:
     """Decorator for defining a time-dependent circuit component.
 
@@ -742,6 +786,10 @@ def source(
     sources or delayed step functions.
 
     Args:
+        discipline: Default potential/flow discipline for all ports.
+        port_disciplines: Per-port overrides of the default discipline.
+        state_natures: Unknown nature for each internal state.
+        equation_natures: Residual nature for each internal state equation.
         ports: Ordered tuple of port names.
         states: Ordered tuple of internal state variable names.
         amplitude_param: Name of the parameter that represents the source
@@ -781,4 +829,8 @@ def source(
         holomorphic=holomorphic,
         ac_source_stamp=ac_source_stamp,
         ideal_voltage_constraint_ports=ideal_voltage_constraint_ports,
+        discipline=discipline,
+        port_disciplines=port_disciplines,
+        state_natures=state_natures,
+        equation_natures=equation_natures,
     )

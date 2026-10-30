@@ -8,6 +8,7 @@ import jax.numpy as jnp
 
 from circulax.components.base_component import PhysicsReturn, Signals, component, source
 from circulax.components.optical_passive import _wave_stamp
+from circulax.disciplines import optical, optical_flow, optical_potential, wave_amplitude
 from circulax.s_transforms import fdomain_component, s_to_y
 
 # ===========================================================================
@@ -15,7 +16,14 @@ from circulax.s_transforms import fdomain_component, s_to_y
 # ===========================================================================
 
 
-@component(ports=("p1", "p2"), states=("a1", "a2"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential},
+    ports=("p1", "p2"),
+    states=("a1", "a2"),
+    holomorphic=True,
+)
 def OpticalWaveguide(
     signals: Signals,
     length_um: float = 100.0,
@@ -88,7 +96,13 @@ def OpticalWaveguide(
     return _wave_stamp(signals, ("p1", "p2"), ("a1", "a2"), S)
 
 
-@component(ports=("p1", "p2"), states=("i_p2",))
+@component(
+    discipline=optical,
+    state_natures={"i_p2": optical_flow},
+    equation_natures={"i_p2": optical_potential},
+    ports=("p1", "p2"),
+    states=("i_p2",),
+)
 def OpticalDelayLine(
     signals: Signals,
     length_um: float = 100.0,
@@ -223,7 +237,14 @@ def delay_line_fdomain(
     return s_to_y(S)
 
 
-@component(ports=("grating", "waveguide"), states=("a1", "a2"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential},
+    ports=("grating", "waveguide"),
+    states=("a1", "a2"),
+    holomorphic=True,
+)
 def Grating(
     signals: Signals,
     center_wavelength_nm: float = 1310.0,
@@ -281,7 +302,14 @@ def Grating(
     return _wave_stamp(signals, ("grating", "waveguide"), ("a1", "a2"), S)
 
 
-@component(ports=("p1", "p2", "p3"), states=("a1", "a2", "a3"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude, "a3": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential, "a3": optical_potential},
+    ports=("p1", "p2", "p3"),
+    states=("a1", "a2", "a3"),
+    holomorphic=True,
+)
 def Splitter(signals: Signals, split_ratio: float = 0.5) -> PhysicsReturn:
     """Reciprocal matched three-port splitter with configurable power split.
 
@@ -332,7 +360,14 @@ def Splitter(signals: Signals, split_ratio: float = 0.5) -> PhysicsReturn:
     return _wave_stamp(signals, ("p1", "p2", "p3"), ("a1", "a2", "a3"), S)
 
 
-@component(ports=("p1", "p2", "p3", "p4"), states=("a1", "a2", "a3", "a4"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude, "a3": wave_amplitude, "a4": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential, "a3": optical_potential, "a4": optical_potential},
+    ports=("p1", "p2", "p3", "p4"),
+    states=("a1", "a2", "a3", "a4"),
+    holomorphic=True,
+)
 def DirectionalCoupler(
     signals: Signals,
     coupling: float = 0.5,
@@ -407,6 +442,9 @@ def DirectionalCoupler(
 
 
 @component(
+    discipline=optical,
+    state_natures={"i_src": optical_flow},
+    equation_natures={"i_src": optical_potential},
     ports=("p1", "p2"),
     states=("i_src",),
     holomorphic=True,
@@ -459,6 +497,9 @@ def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> P
 
 
 @source(
+    discipline=optical,
+    state_natures={"i_src": optical_flow},
+    equation_natures={"i_src": optical_potential},
     ports=("p1", "p2"),
     states=("i_src",),
     holomorphic=True,
@@ -528,7 +569,14 @@ def OpticalSourcePulse(
 # ===========================================================================
 
 
-@component(ports=("p1", "p2", "p3", "p4"), states=("i_top", "i_bot"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"i_top": optical_flow, "i_bot": optical_flow},
+    equation_natures={"i_top": optical_potential, "i_bot": optical_potential},
+    ports=("p1", "p2", "p3", "p4"),
+    states=("i_top", "i_bot"),
+    holomorphic=True,
+)
 def TunableBeamSplitter(
     signals: Signals,
     theta: float = jnp.pi / 4,

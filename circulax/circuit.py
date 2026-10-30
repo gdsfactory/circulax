@@ -12,6 +12,7 @@ import jax
 import jax.numpy as jnp
 import kfnetlist as kfnl
 
+from circulax.disciplines import TolerancePolicy
 from circulax.netlist import _is_recursive_netlist
 from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
@@ -82,6 +83,7 @@ class Circuit:
         rtol: float = 1e-6,
         atol: float = 1e-6,
         max_steps: int = 100,
+        tolerances: TolerancePolicy | None = None,
         _source_netlist: dict | kfnl.Netlist | None = None,
         _source_models: dict | None = None,
         _is_pure_sax: bool = False,  # noqa: FBT001, FBT002
@@ -93,6 +95,7 @@ class Circuit:
         self.rtol = rtol
         self.atol = atol
         self.max_steps = max_steps
+        self.tolerances = tolerances
         self._source_netlist = _source_netlist
         self._source_models = _source_models
         self._is_pure_sax = _is_pure_sax
@@ -129,7 +132,7 @@ class Circuit:
         the compile settings are, so a circuit whose tolerances were changed gets a fresh bench.
         """
         selected = tuple(ports)
-        key = (selected, float(z0), getattr(self.solver, "g_leak", 1e-9), self.rtol, self.atol, self.max_steps)
+        key = (selected, float(z0), getattr(self.solver, "g_leak", 1e-9), self.rtol, self.atol, self.max_steps, self.tolerances)
         if key not in self._wavelength_benches:
             self._wavelength_benches[key] = build_wavelength_bench(self, compile_circuit, selected, float(z0))
         return self._wavelength_benches[key]
@@ -389,6 +392,8 @@ class Circuit:
         dc_circuit = self._for_analysis("dc")
         if dc_circuit is not self:
             return dc_circuit.dc(y_guess=y_guess, rtol=rtol, atol=atol, max_steps=max_steps, params=params, **param_updates)
+        if self.tolerances is not None and (rtol is not None or atol is not None):
+            raise ValueError("Scalar rtol/atol overrides cannot be combined with TolerancePolicy")
         rtol = self.rtol if rtol is None else rtol
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
@@ -421,6 +426,8 @@ class Circuit:
         dc_circuit = self._for_analysis("dc")
         if dc_circuit is not self:
             return dc_circuit.dc_checked(y_guess=y_guess, params=params, rtol=rtol, atol=atol, max_steps=max_steps, **param_updates)
+        if self.tolerances is not None and (rtol is not None or atol is not None):
+            raise ValueError("Scalar rtol/atol overrides cannot be combined with TolerancePolicy")
         rtol = self.rtol if rtol is None else rtol
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
@@ -497,6 +504,64 @@ class Circuit:
             atol=atol,
             max_steps=max_steps,
             **param_updates,
+        )
+
+    @property
+    def convergence_layout(self) -> Any:
+        """Resolved unknown/equation metadata, or None for scalar legacy solves."""
+        return self.solver.convergence_layout
+
+    def dc_diagnostics(self, y: jax.Array, *, params: dict[str, Any] | None = None) -> dict[str, jax.Array]:
+        """Recheck a DC estimate against its physical equation and update bounds.
+
+        Returns JAX arrays; ``convergence_layout.names`` labels their indices.
+        Pass the same parameter updates used to obtain ``y``.
+        """
+        from circulax.solvers.assembly import assemble_system_complex, assemble_system_real
+        from circulax.solvers.linear import DC_DT, GROUND_STIFFNESS
+
+        circuit = self._for_analysis("dc")
+        layout = circuit.convergence_layout
+        if layout is None:
+            raise ValueError("dc_diagnostics requires a TolerancePolicy")
+        updates = circuit._require_scalar_params(params or {}, "dc_diagnostics")
+        groups = circuit._with_param_values(updates)
+        assemble = assemble_system_complex if circuit.solver.is_complex else assemble_system_real
+        residual, _, values = assemble(y, groups, t1=0.0, dt=DC_DT)
+        rhs = residual.at[circuit.solver.ground_indices].add(GROUND_STIFFNESS * y[circuit.solver.ground_indices])
+        delta = circuit.solver._solve_impl(values, -rhs).value
+        update_error, residual_error = layout.errors(y, y, delta, residual)
+        physical = layout.magnitude(residual).at[0].set(layout.magnitude(y)[0])
+        return {
+            "update_error": update_error,
+            "residual_error": residual_error,
+            "residual": residual,
+            "normalized_residual": physical / (layout.residual_atol + layout.rtol * layout.residual_reference),
+        }
+
+    def adaptive_controller(self, **kwargs: Any) -> Any:
+        """Build a Diffrax PID controller using unknown-nature local errors.
+
+        Its tolerances are independent of nonlinear residual tolerances.
+        ``local_error_factor`` on the policy scales local atol and rtol together.
+        Explicit controllers passed to transient retain their own settings.
+        """
+        import diffrax
+
+        layout = self.solver.convergence_layout
+        if layout is None:
+            raise ValueError("adaptive_controller requires compile_circuit(tolerances=TolerancePolicy(...))")
+        if {"atol", "rtol", "norm"} & kwargs.keys():
+            raise ValueError("Set local_error_factor on TolerancePolicy; controller tolerances and norm are derived from it")
+        from circulax.solvers.step_size import ComplexPIDController, complex_max_norm
+
+        controller = ComplexPIDController if self.solver.is_complex else diffrax.PIDController
+        norm = complex_max_norm if self.solver.is_complex else lambda error: jnp.max(jnp.abs(error))
+        return controller(
+            atol=layout.local_atol(is_complex=self.solver.is_complex),
+            rtol=layout.rtol * layout.local_error_factor,
+            norm=norm,
+            **kwargs,
         )
 
     def transient(
@@ -818,6 +883,7 @@ class Circuit:
         run_hb = setup_harmonic_balance(
             groups,
             self.sys_size,
+            convergence_layout=self.solver.convergence_layout,
             freq=freq,
             num_harmonics=harmonics,
             is_complex=self.solver.is_complex,
@@ -825,6 +891,8 @@ class Circuit:
             osc_node=osc_idx,
             amplitude_tries=amplitude_tries,
         )
+        if self.tolerances is not None and (rtol is not None or atol is not None):
+            raise ValueError("Scalar rtol/atol overrides cannot be combined with TolerancePolicy")
         rtol = self.rtol if rtol is None else rtol
         atol = self.atol if atol is None else atol
         max_steps = self.max_steps if max_steps is None else max_steps
@@ -976,8 +1044,9 @@ def compile_circuit(
     backend: str = "default",
     is_complex: bool | str = "auto",
     g_leak: float = 1e-9,
-    rtol: float = 1e-6,
-    atol: float = 1e-6,
+    rtol: float | None = None,
+    atol: float | None = None,
+    tolerances: TolerancePolicy | None = None,
     max_steps: int = 100,
     params_map: dict[str, dict[str, str]] | None = None,
     simparams: Mapping[str, float] | None = None,
@@ -1003,6 +1072,8 @@ def compile_circuit(
         is_complex: If ``True``, treat the circuit as complex-valued (photonic).
             If ``"auto"`` (default), infer this from component outputs.
         g_leak: Leakage conductance for regularisation.
+        tolerances: Opt into nature-aware update and equation convergence.
+            Requires annotated models; incompatible with scalar rtol/atol.
         rtol: Relative tolerance for the Newton solver.
         atol: Absolute tolerance for the Newton solver.
         max_steps: Max Newton iterations.
@@ -1023,6 +1094,11 @@ def compile_circuit(
     from circulax.netlist import _flatten_circuit_netlists, _is_recursive_netlist
     from circulax.solvers.linear import analyze_circuit
 
+    if tolerances is not None and (rtol is not None or atol is not None):
+        raise ValueError("Use tolerances= or legacy rtol/atol, not both")
+    legacy_rtol, legacy_atol = rtol, atol
+    rtol = 1e-6 if rtol is None else rtol
+    atol = 1e-6 if atol is None else atol
     models_map = dict(models_map)
     source_netlist: dict | kfnl.Netlist | None = None
     source_models: dict | None = None
@@ -1053,7 +1129,7 @@ def compile_circuit(
         raise ValueError(msg)
     if is_complex:
         _validate_holomorphic_flags(groups)
-    solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak)
+    solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak, tolerances=tolerances)
     is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) for g in groups.values())
     circuit = Circuit(
         solver=solver,
@@ -1063,6 +1139,7 @@ def compile_circuit(
         rtol=rtol,
         atol=atol,
         max_steps=max_steps,
+        tolerances=tolerances,
         _source_netlist=source_netlist,
         _source_models=source_models,
         _is_pure_sax=is_pure_sax,
@@ -1073,9 +1150,10 @@ def compile_circuit(
         backend=backend,
         is_complex=is_complex,
         g_leak=g_leak,
-        rtol=rtol,
-        atol=atol,
+        rtol=legacy_rtol,
+        atol=legacy_atol,
         max_steps=max_steps,
+        tolerances=tolerances,
         params_map=params_map,
     )
     _configure_native_variants(circuit, models_map, recompile)

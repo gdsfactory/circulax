@@ -2,6 +2,7 @@
 * Guide
     * [Devices: Choosing Components](components/devices.md)
     * [Writing Components](writing_components.md)
+    * [Disciplines and Physical Tolerances](disciplines.md)
     * [Electronic Sample Components](components/index.md)
     * [Photonic Component Library](components/photonics.md)
     * [Transient Simulation](transient.md)
