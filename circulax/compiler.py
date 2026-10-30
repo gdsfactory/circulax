@@ -12,6 +12,7 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.components.base_component import PhysicsReturn, Signals
+from circulax.disciplines import Discipline, Nature
 from circulax.netlist import build_net_map_kfnetlist, prune_unreachable_instances, sax_to_kfnetlist
 
 try:
@@ -74,6 +75,11 @@ class ComponentGroup(eqx.Module):
     combined_func: Any = eqx.field(static=True, default=None)
     holomorphic: bool = eqx.field(static=True, default=False)
     is_sax_wrapped: bool = eqx.field(static=True, default=False)
+
+    port_disciplines: tuple[Discipline | None, ...] = eqx.field(static=True, default=())
+    unknown_natures: tuple[Nature | None, ...] = eqx.field(static=True, default=())
+    equation_natures: tuple[Nature | None, ...] = eqx.field(static=True, default=())
+    variable_names: tuple[tuple[str, ...], ...] = eqx.field(static=True, default=())
 
     # Fixed time-delay support (see circulax.solvers.assembly). ``has_delay``
     # is inferred from ``signals.at_delay(...)`` during compilation;
@@ -403,6 +409,10 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
             is_sax_wrapped=getattr(comp_cls, "_is_sax_wrapped", False),
             has_delay=has_delay,
             tau_func=comp_cls.tau_of if has_delay else None,
+            port_disciplines=getattr(comp_cls, "_port_disciplines", ()),
+            unknown_natures=getattr(comp_cls, "_unknown_natures", ()),
+            equation_natures=getattr(comp_cls, "_equation_natures", ()),
+            variable_names=tuple(tuple(f"{item['name']},{name}" for name in comp_cls.ports + comp_cls.states) for item in items),
         )
 
     # --- Process OSDI buckets (requires circulax[verilog-a] / bosdi) ---

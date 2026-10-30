@@ -11,6 +11,7 @@ import jax
 import jax.numpy as jnp
 
 from circulax.components.base_component import PhysicsReturn, Signals, component
+from circulax.disciplines import optical, optical_potential, wave_amplitude
 
 
 def _wave_stamp(
@@ -26,7 +27,14 @@ def _wave_stamp(
     return result, {}
 
 
-@component(ports=("p1", "p2"), states=("a1", "a2"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential},
+    ports=("p1", "p2"),
+    states=("a1", "a2"),
+    holomorphic=True,
+)
 def OpticalAttenuator(signals: Signals, loss_dB: float = 0.0, z0: float = 1.0) -> PhysicsReturn:
     """Matched reciprocal attenuator.
 
@@ -61,7 +69,14 @@ def OpticalAttenuator(signals: Signals, loss_dB: float = 0.0, z0: float = 1.0) -
     return _wave_stamp(signals, ("p1", "p2"), ("a1", "a2"), jnp.array([[0, t], [t, 0]]), z0)
 
 
-@component(ports=("p1", "p2"), states=("a1", "a2"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential},
+    ports=("p1", "p2"),
+    states=("a1", "a2"),
+    holomorphic=True,
+)
 def OpticalPhaseShifter(signals: Signals, phase: float = 0.0, loss_dB: float = 0.0, z0: float = 1.0) -> PhysicsReturn:
     """Matched reciprocal phase bias, transmission exp(+i phase-loss_dB ln(10)/20).
 
@@ -99,7 +114,7 @@ def OpticalPhaseShifter(signals: Signals, phase: float = 0.0, loss_dB: float = 0
     return _wave_stamp(signals, ("p1", "p2"), ("a1", "a2"), jnp.array([[0, t], [t, 0]]), z0)
 
 
-@component(ports=("p1",), holomorphic=True)
+@component(discipline=optical, ports=("p1",), holomorphic=True)
 def OpticalTermination(signals: Signals, z0: float = 1.0) -> PhysicsReturn:
     """Matched absorbing one-port termination.
 
@@ -134,7 +149,14 @@ def OpticalTermination(signals: Signals, z0: float = 1.0) -> PhysicsReturn:
     return {"p1": signals.p1 / z0}, {}
 
 
-@component(ports=("p1", "p2"), states=("a1", "a2"), holomorphic=True)
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential},
+    ports=("p1", "p2"),
+    states=("a1", "a2"),
+    holomorphic=True,
+)
 def OpticalInterface(
     signals: Signals,
     reflectivity: float = 0.0,
@@ -191,7 +213,13 @@ def OpticalInterface(
     return _wave_stamp(signals, ("p1", "p2"), ("a1", "a2"), scattering, z0)
 
 
-@component(ports=("p1", "p2"), states=("a1", "a2"))
+@component(
+    discipline=optical,
+    state_natures={"a1": wave_amplitude, "a2": wave_amplitude},
+    equation_natures={"a1": optical_potential, "a2": optical_potential},
+    ports=("p1", "p2"),
+    states=("a1", "a2"),
+)
 def NonlinearOpticalWaveguide(
     signals: Signals,
     length_um: float = 100.0,

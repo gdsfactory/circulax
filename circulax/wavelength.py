@@ -9,11 +9,12 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 import numpy as np
 
+from circulax.disciplines import optical
 from circulax.components.base_component import PhysicsReturn, Signals, component
 from circulax.testbench import attach_testbench
 
 
-@component(ports=("p1", "p2"), holomorphic=True)
+@component(ports=("p1", "p2"), holomorphic=True, discipline=optical)
 def _matched_port(signals: Signals, incident: complex = 0j, z0: float = 1.0) -> PhysicsReturn:
     """Apply a matched shunt and incident-wave excitation without clamping."""
     current = (signals.p1 - signals.p2) / z0 - 2 * incident / jnp.sqrt(z0)
@@ -130,8 +131,11 @@ def build_wavelength_bench(circuit: Any, compile_fn: Callable, selected: tuple[s
             models,
             is_complex=True,
             g_leak=getattr(circuit.solver, "g_leak", 1e-9),
-            rtol=circuit.rtol,
-            atol=circuit.atol,
+            **(
+                {"tolerances": circuit.tolerances}
+                if circuit.tolerances is not None
+                else {"rtol": circuit.rtol, "atol": circuit.atol}
+            ),
             max_steps=circuit.max_steps,
         )
     return WavelengthBench(bench, {port: fixture["name"] for port, fixture in fixtures.items()})
