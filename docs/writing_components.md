@@ -507,3 +507,114 @@ For distributed electrodes, use `mode_transmission_line` with attenuation, RF
 phase effective index and characteristic impedance versus frequency. The MZM
 tutorial uses that workflow and checks the loaded RF group index against the
 optical group index. It has no Bessel shaping in its propagation or drivers.
+
+## Device explanations and executable examples
+
+Keep device explanations and small runnable examples in the component or factory's
+**own docstring**. The `@component`, `@source` and frequency-domain decorators
+preserve that docstring on the public class. The ordinary API reference already
+renders it through mkdocstrings. The Devices guide and photonic walkthrough are
+also generated from it; do not edit those generated files directly.
+
+Use these three sections to opt a device into the guide:
+
+```python
+@component(ports=("p1", "p2"))
+def ExampleResistor(signals: Signals, resistance: float = 100.0) -> PhysicsReturn:
+    """Ohmic two-terminal resistor with current positive into p1.
+
+    Resistance is in ohms and must be positive. Connect p1/p2 to the circuit
+    nodes. This algebraic model has no charge, inductance or heating.
+
+    Device group:
+        Electronic / Basic elements
+
+    Device reference:
+        index.md
+
+    Examples:
+        ```python
+        from circulax.components.example import ExampleResistor
+
+        f, q = ExampleResistor(resistance=100.0)(p1=1.0, p2=0.0)
+        assert abs(f["p1"] - 0.01) < 1e-12
+        ```
+    """
+    current = (signals.p1 - signals.p2) / resistance
+    return {"p1": current, "p2": -current}, {}
+```
+
+Replace the illustrative module import above with the component's real module.
+`Device reference` is a Markdown file relative to `docs/components/`; use that
+page for extensive derivations, provenance, comparison data and validity limits.
+`Device group` controls the guide's grouping. Groups beginning with `Photonic`
+also appear in `examples/photonic/device_guide.ipynb`.
+
+Put the physical explanation, port meanings, units, assumptions and limitations
+before the metadata sections. Keep `Examples` to fenced Python blocks. Each block
+must import everything it needs and work independently of the other examples;
+there are no implicit notebook variables or helper definitions. Use meaningful
+assertions. A minimal constitutive example can demonstrate F/Q or charge units;
+a loaded-circuit example should construct actual physical sources and loads.
+Plots are allowed: import Matplotlib, call `plt.show()`, then close the figure.
+The CLI/test runner uses a headless backend; Jupyter displays the same plot inline.
+Never put stochastic residual sampling, external simulator requirements or
+large reference downloads in these small examples.
+
+After editing a docstring:
+
+```bash
+pixi run device-docs          # regenerate guide, notebook and walkthrough Markdown
+pixi run device-docs-check    # reject stale generated prose/code
+pixi run device-examples      # execute every example independently, without Jupyter
+```
+
+Equivalent commands are `python scripts/device_docs.py --write`, `--check` and
+`--execute`. Generation uses AST parsing and the standard library: it does not
+import component modules, trace JAX or launch kernels. Normal MkDocs builds
+render the guide directly from current docstrings through `docs/gen_doc_stubs.py`.
+The notebook/doc conversion scripts regenerate device sources before their usual
+work. The generator's `--check` compares generated source cells and prose while
+allowing saved execution outputs and kernel metadata. Docstring changes and a fingerprint of library Python sources invalidate
+old notebook outputs (including when only underlying physics or solver code changes); unchanged regeneration preserves them. To refresh figures,
+execute the generated notebook, then run `device-docs` again. A strict fresh-source
+check runs in CI and the normal pytest suite executes each docstring example.
+
+The generated files are:
+
+- `docs/components/devices.md`: explanations and runnable blocks for every opted-in device.
+- `examples/photonic/device_guide.ipynb`: the photonic subset, with source-object metadata on each cell.
+- `docs/examples/device_guide.md`: the same walkthrough, including current saved outputs/figures.
+
+Larger circuit tutorials remain separate notebooks/scripts importing the library.
+For example, keep the CW–MZM–photodiode link and distributed convergence study as
+system examples. Do not copy their device implementations or maintain a second
+copy of the small device examples in them.
+
+### Cite implementation sources and validation references separately
+
+If a device is ported, translated or adapted from Verilog-A, its docstring must
+cite the original file using a commit-pinned permalink. Include the model version,
+original developers, applicable license/retained notices, and the local source or
+regeneration location. A citation supplements the required attribution notices.
+
+If a device is tested against Verilog-A/OSDI, cite that comparison source too,
+even when the native implementation was independently written. Identify the test
+or fixture location and any convention mapping, source adaptations or comparison
+limits. A source-code comparison does not imply measured-device calibration.
+Use two separate labels in the docstring's prose, before `Device group`:
+
+```text
+**Implementation source:** Adapted from [model.va](commit-pinned-file-URL),
+model version ..., developed by ...; retained notices/source location ...
+
+**Validation reference:** Compared against [reference.va](commit-pinned-file-URL)
+through OSDI; cases in tests/test_model.py, with mapping/limitations ...
+```
+
+An independently derived model can have only `Validation reference`. Do not label
+a comparison source as its implementation origin. Conversely, a translation alone
+does not establish successful validation. Cite analytical/published equations
+where those provide the evidence; do not invent a Verilog-A equivalent or describe
+an untested candidate as a validation reference. Both labels and their links flow
+unchanged into the generated Devices guide and, for photonic devices, the notebook.

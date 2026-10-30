@@ -1,0 +1,317 @@
+Third-party reference model notices
+
+Native sample implementations derive from the following VA-Models sources.
+Upstream commit: 6099b4e12e6f66ff530f59b8d01fb909094be85a
+Repository: https://github.com/dwarning/VA-Models
+
+Original source-header notices follow verbatim. Full reference sources and
+regeneration information are retained in tests/data/va_models in the source repository.
+The individual model terms apply to their respective derived implementations;
+the Circulax project license does not replace those terms.
+
+
+==============================================================================
+R2_CMC / R2_ET_CMC
+code/r2_cmc/vacode/r2_cmc_body.include
+==============================================================================
+// r2_cmc and r2_et_cmc version 1.0.1
+
+/*
+Copyright (c) 2020 Silicon Integration Initiative, Inc.
+
+Licensed under Educational Community License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License. You may
+obtain a copy of the license at
+http://opensource.org/licenses/ECL-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+The R2_CMC standard has been developed by the Silicon Integration Initiative's Compact Model Coalition.
+
+CMC Release Date: May 15, 2020
+Public Release Date: November 15, 2021
+
+A link to the most recent version of this standard can be found at:
+http://www.si2.org/cmc
+*/
+
+
+//
+//  This file contains the core of the r2_cmc model
+//
+
+
+==============================================================================
+R3_CMC
+code/r3_cmc/vacode/r3_cmc.va
+==============================================================================
+// r3_cmc version 1.1.2
+
+/*
+Copyright (c) 2023 Silicon Integration Initiative, Inc.
+
+Licensed under Educational Community License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License. You may
+obtain a copy of the license at
+http://opensource.org/licenses/ECL-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+The R3_CMC standard has been developed by the Silicon Integration Initiative's Compact Model Coalition.
+
+CMC Release Date: June 16, 2023
+Public Release Date: December 16, 2024
+
+A link to the most recent version of this standard can be found at:
+http://www.si2.org/cmc
+*/
+
+
+==============================================================================
+JUNCAP200
+code/psp103/vacode/juncap200.va
+==============================================================================
+//======================================================================================
+//======================================================================================
+// Filename: juncap200.va
+//======================================================================================
+//======================================================================================
+//
+//  (c) Copyright notice
+//
+//  Since 2015 until today, PSP has been co-developed by NXP Semiconductors and
+//  CEA-Leti. For this part of the model, each claim undivided ownership and copyrights
+//  Since 2012 until 2015, PSP has been co-developed by NXP Semiconductors and
+//  Delft University of Technology. For this part of the model, each claim undivided
+//  ownership and copyrights
+//  Until and including 2011, PSP has been co-developed by NXP Semiconductors and
+//  Arizona State University. For this part of the model, NXP Semiconductors claims
+//  undivided ownership and copyrights.
+//
+//
+//  Version: 200.6.2, April 2021
+//
+//======================================================================================
+//======================================================================================
+//
+// Further information can be found in the file releasenotesPSP103.txt
+//
+
+
+==============================================================================
+MOSVAR
+code/MOSVAR/vacode/mosvar.va
+==============================================================================
+//======================================================================================
+//======================================================================================
+// Filename: mosvar.va
+//======================================================================================
+//======================================================================================
+//
+//  (c) Copyright 2008, All Rights Reserved, Arizona State University and
+//  Freescale Semiconductor
+//
+//  (c) Copyright 2015, All Rights Reserved, Silicon Integration Initiative, Inc.
+//
+//
+//  Version: 1.3.0, July 2015
+//
+//======================================================================================
+//======================================================================================
+//
+//   Software is distributed as is, completely without expressed or implied warranty or
+//  service support.  ASU, Si2, their members and employees are not liable for the
+//  condition or performance of the software.
+//
+//   ASU and Si2 own the copyright and grants users a perpetual, irrevocable, worldwide,
+//  non-exclusive, royalty-free license with respect to the software as set forth below.
+//
+//   ASU and Si2 hereby disclaims all implied warranties.
+//
+//   ASU and Si2 grant the users the right to modify, copy, and redistribute the
+//  software and documentation, both within the user's organization and externally,
+//  subject to the following restrictions:
+//
+//  1. The users agree not to charge for the code itself but may charge for additions,
+//     extensions, or support.
+//
+//  2. In any product based on the software, the users agree to acknowledge developers
+//     of the software. This acknowledgment shall appear in the product documentation.
+//
+//  3. The users agree to obey all government restrictions governing redistribution or
+//     export of the software.
+//
+//  4. The users agree to reproduce any copyright notice which appears on the software
+//     and documentation on any copy or modification of such made available to others.
+//
+//======================================================================================
+//======================================================================================
+//
+// Further information can be found in the file MOSVAR1p3p0.pdf
+//
+
+
+==============================================================================
+EKV 2.6
+code/ekv/vacode/ekv26.va
+==============================================================================
+/*
+EKV MOS model version 2.6 rev.15 with documentation at: http://ekv.epfl.ch
+Matthias Bucher, Christophe Lallement, Christian Enz, Fabien Theodoloz, Francois Krummenacher
+Electronics Laboratories, Swiss Federal Institute of Technology Lausanne, Switzerland
+This Verilog-A was developed by Wladek Grabinski with modifications
+by Tiburon Design Automation (www.tiburon-da.com).
+This software has been provided pursuant to a License Agreement containing restrictions on its use.
+It may not be copied or distributed in any form or medium, disclosed to third parties,
+reverse engineered or used in any manner not provided for in said License Agreement
+except with the prior written authorization.
+Licensed under the Educational Community License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+
+You may obtain a copy of the License at http://opensource.org/licenses/ECL-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under
+the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+either express or implied. See the License for the specific language governing permissions
+and limitations under the License.
+
+$RCSfile: ekv.va,v $ $Revision: 1.9 $    $Date: 2003/12/17 01:20:10 $
+$RCSfile: ekv.va,v $ $Revision: 2.6.15 $ $Date: 2020/05/29 11:50:10 $
+*/
+
+
+==============================================================================
+DIODE_CMC
+code/diode_cmc/vacode/diode_cmc.va
+==============================================================================
+//======================================================================================
+//======================================================================================
+// Filename: diode_cmc.va
+//======================================================================================
+//
+//
+//                        Silicon Integration Initiative (Si2)
+//                      Compact Model Coalition In-Code Statement
+//
+//    Software is distributed as is, completely without warranty or service support.  NXP
+//    Semiconductors, Hiroshima University, and Silicon Integration Initiative, Inc. (Si2),
+//    along with their employees are not liable for the condition or performance of the software.
+//
+//    NXP Semiconductors, Hiroshima University, and Si2 own the copyright and grant users
+//    a perpetual, irrevocable, worldwide, non-exclusive, royalty-free license with respect to the
+//    software as set forth below.
+//
+//    NXP Semiconductors, Hiroshima University, and Si2 hereby disclaim all implied
+//    warranties.
+//
+//    NXP Semiconductors, Hiroshima University, and Si2 grant the users the right to modify,
+//    copy, and redistribute the software and documentation, both within the user's organization
+//    and externally, subject to the following restrictions
+//
+//      1. The users agree not to charge for the NXP Semiconductors, Hiroshima University,
+//      and Si2 -developed code itself but may charge for additions, extensions, or support.
+//
+//      2. In any product based on the software, the users agree to acknowledge NXP
+//      Semiconductors, Hiroshima University, and Si2 that developed the software.  This
+//      acknowledgment shall appear in the product documentation.
+//
+//      3. Redistributions to others of source code and documentation must retain the copyright
+//      notice, disclaimer, and list of conditions.
+//
+//      4. Redistributions to others in binary form must reproduce the copyright notice,
+//      disclaimer, and list of conditions in the documentation and/or other materials provided
+//      with the distribution.
+//
+//                                                     CMC In-Code Statement Revision 1.1 6/9/2016
+//
+//
+//
+// The diode_cmc is based on Juncap2 200.3.3 (test) from NXP Semiconductors.
+//
+// Portions commented as diode_cmc code: additional models since 2009.
+//
+// Portions commented as diode_cmc recovery and high-injection equations code: recovery model by Hiroshima University.
+//
+// All other parts are taken from Juncap2 200.3.3. Copyright 2008 NXP Semiconductors, All Rights Reserved.
+//======================================================================================
+//======================================================================================
+//
+//
+
+
+==============================================================================
+Angelov
+code/angelov/vacode/angelov.va
+==============================================================================
+/*
+
+ The MIT License (MIT)
+
+ Copyright (c) 2002-2015 Tiburon design Automation, Inc
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ Verilog-A definition of Angelov GaNFET
+
+ Rev. 2.10.06813
+
+*/
+
+
+==============================================================================
+Angelov GaN
+code/angelov/vacode/angelov_gan.va
+==============================================================================
+/*
+
+ The MIT License (MIT)
+
+  Copyright (c) 2002-2015 Tiburon design Automation, Inc
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+ Verilog-A definition of Angelov GaNFET with Thermal Node, Backgate Node and high voltage  E-mode
+
+        based on angelov_gan.va Rev. 2.22.24052023
+
+*/
+
+
+R2_CMC and R2_ET_CMC are licensed under the Educational Community License 2.0.
+A copy is included in ECL-2.0.txt alongside this notice.

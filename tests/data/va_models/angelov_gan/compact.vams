@@ -1,0 +1,8 @@
+// Minimal compatibility definitions needed by angelov.va.
+// Numerical defaults match VA-Models 6099b4e12e6f66ff530f59b8d01fb909094be85a.
+// This file replaces the unrelated legacy compact.vams utility collection.
+`ifndef COMPACT_VAMS
+`define COMPACT_VAMS 1
+`define SPICE_GMIN 1.0e-12
+`define DEFAULT_TNOM 27
+`endif

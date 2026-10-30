@@ -1,6 +1,9 @@
 * [Home](index.md)
 * Guide
+    * [Devices: Choosing Components](components/devices.md)
     * [Writing Components](writing_components.md)
+    * [Electronic Sample Components](components/index.md)
+    * [Photonic Component Library](components/photonics.md)
     * [Transient Simulation](transient.md)
     * [Waveform Sources](waveform_sources.md)
     * [Rational Model Enforcement](rational_model_enforcement.md)
@@ -19,6 +22,7 @@
     * [Harmonic Balance](examples/harmonic_balance.md)
     * [LC Ladder](examples/lc_ladder.md)
 * Photonic Examples
+    * [Device Walkthrough](examples/device_guide.md)
     * [Mach-Zehnder Modulator](examples/mzm.md)
     * [Photonics Transient](examples/photonics_transient.md)
     * [Ring Modulator](examples/ring_modulator.md)

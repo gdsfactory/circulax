@@ -1,0 +1,8 @@
+adms/Xyce: Missing node collapsing workaround with MINR 1mOhm
+
+Introduce standard conform instance parameter definitions
+
+"units" instead "unit" as parameter attribute
+
+Origin of the model:
+https://si2.org/download-links/

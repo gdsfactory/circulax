@@ -1,0 +1,24 @@
+def _limexp(value):
+    threshold = 69.07755278982137  # OpenVAF limexp linearization at log(1e30).
+    return jnp.where(value > threshold, 1e30 * (1.0 + value - threshold), jnp.exp(jnp.minimum(value, threshold)))
+
+
+def _channel_current(mode, original, vds, vgd, vpk, p1m, p2, p3, ipk, positive, positive_nested, alphar, alphas, lam, lvg, lsb, vtr):
+    offset = vgd - vpk
+    plain = p1m * offset + p2 * offset**2 + p3 * offset**3
+    nested = p1m * (offset + p2 * offset**2 + p3 * offset**3)
+    negative = 1.0 + jnp.tanh(plain)
+    negative_nested = 1.0 + jnp.tanh(0.5 * (_limexp(nested) - _limexp(-nested)))
+    branch_positive = ipk * positive * (1.0 + jnp.tanh((alphar + alphas * positive) * vds))
+    branch_positive *= 1.0 + (lam + lvg * positive) * vds + lsb * _limexp(vds - vtr)
+    branch_negative = ipk * negative * (1.0 - jnp.tanh((alphar + alphas * negative) * vds))
+    branch_negative *= 1.0 - (lam + lvg * negative) * vds
+    model1 = 0.5 * (branch_positive - branch_negative)
+    model2 = ipk * positive_nested * jnp.tanh((alphar + alphas * positive_nested) * vds)
+    model2 *= 1.0 + (lam + lvg * positive_nested) * vds + lsb * _limexp(-vgd - vtr)
+    branch_positive = ipk * positive_nested * (1.0 + jnp.tanh((alphar + alphas * positive_nested) * vds))
+    branch_positive *= 1.0 + (lam + lvg * positive_nested) * vds + lsb * _limexp(vds - vtr)
+    branch_negative = ipk * negative_nested * (1.0 - jnp.tanh((alphar + alphas * negative_nested) * vds))
+    branch_negative *= 1.0 - (lam + lvg * negative_nested) * vds
+    model3 = 0.5 * (branch_positive - branch_negative)
+    return jnp.select((mode == 0, mode == 1, mode == 2), (original, model1, model2), default=model3)

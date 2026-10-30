@@ -124,9 +124,13 @@ jobs:
       - name: Verify native OSDI integration is installed
         run: pixi run -e ${{ matrix.env }} python -c "from bosdi.circulax import osdi_component; import osdi_jax"
 
+      - name: Check generated device documentation
+        run: pixi run -e ${{ matrix.env }} device-docs-check
+
       - name: Run fast tests
         env:
           JAX_PLATFORMS: cpu
+          MPLBACKEND: Agg
         run: pixi run -e ${{ matrix.env }} pytest_run
 
   ihp_parity:

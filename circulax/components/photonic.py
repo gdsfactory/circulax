@@ -7,6 +7,7 @@ import jax.nn as jnn
 import jax.numpy as jnp
 
 from circulax.components.base_component import PhysicsReturn, Signals, component, source
+from circulax.components.optical_passive import _wave_stamp
 from circulax.s_transforms import fdomain_component, s_to_y
 
 # ===========================================================================
@@ -14,7 +15,7 @@ from circulax.s_transforms import fdomain_component, s_to_y
 # ===========================================================================
 
 
-@component(ports=("p1", "p2"), holomorphic=True)
+@component(ports=("p1", "p2"), states=("a1", "a2"), holomorphic=True)
 def OpticalWaveguide(
     signals: Signals,
     length_um: float = 100.0,
@@ -29,7 +30,9 @@ def OpticalWaveguide(
     The effective index is linearised around ``center_wavelength_nm`` using the
     group index to approximate dispersion. Phase and loss are combined into a
     complex transmission coefficient ``T``, from which the 2×2 S-matrix and
-    corresponding Y-matrix are derived.
+    corresponding exact wave constraints are derived. This is a static
+    carrier response with no envelope group delay, even though ``n_group``
+    sets the wavelength dispersion slope.
 
     Args:
         signals: Field amplitudes at input (``p1``) and output (``p2``).
@@ -39,6 +42,32 @@ def OpticalWaveguide(
         n_group: Group refractive index, used to compute the dispersion slope. Defaults to ``4.0``.
         center_wavelength_nm: Reference wavelength for dispersion expansion in nm. Defaults to ``1310.0``.
         wavelength_nm: Operating wavelength in nm. Defaults to ``1310.0``.
+
+    Carrier phase and attenuation for a fixed wavelength.
+
+    Device group:
+        Photonic / Optical sources and propagation
+
+    Device reference:
+        optical_passive.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import OpticalWaveguide
+
+        jax.config.update("jax_enable_x64", True)
+        model = OpticalWaveguide()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(OpticalWaveguide.__name__, "ports:", model.ports)
+        ```
 
     """
     d_lam = wavelength_nm - center_wavelength_nm
@@ -56,15 +85,7 @@ def OpticalWaveguide(
     T = T_mag * jnp.exp(-1j * phi)
     S = jnp.array([[0.0, T], [T, 0.0]], dtype=jnp.complex128)
 
-    # Convert to Admittance (Y)
-    Y = s_to_y(S)
-
-    # Calculate Currents (I = Y * V)
-    # Note: Explicit complex cast ensures JAX treats the interaction as complex
-    v_vec = jnp.array([signals.p1, signals.p2], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-
-    return {"p1": i_vec[0], "p2": i_vec[1]}, {}
+    return _wave_stamp(signals, ("p1", "p2"), ("a1", "a2"), S)
 
 
 @component(ports=("p1", "p2"), states=("i_p2",))
@@ -79,7 +100,7 @@ def OpticalDelayLine(
     """Waveguide modelled as an explicit time-of-flight delay line (real group delay).
 
     Unlike :func:`OpticalWaveguide` -- which is a steady-state S-matrix stamp
-    only valid for CW/frequency-domain analysis -- this component enforces
+    with no envelope flight time -- this component enforces
     the actual transient envelope delay: the output field at ``p2`` is the
     input field at ``p1`` from ``tau = length_um * n_group / c`` seconds ago,
     attenuated and phase-shifted, via a VCVS-style constraint (same pattern as
@@ -102,6 +123,32 @@ def OpticalDelayLine(
         n_group: Group refractive index; sets the propagation delay via
             ``tau = length_um * n_group / c``. Defaults to ``4.0``.
         wavelength_nm: Operating wavelength in nm. Defaults to ``1310.0``.
+
+    A directed, buffered envelope delay used by existing examples.
+
+    Device group:
+        Photonic / Optical sources and propagation
+
+    Device reference:
+        photonic_conventions.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import OpticalDelayLine
+
+        jax.config.update("jax_enable_x64", True)
+        model = OpticalDelayLine()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(OpticalDelayLine.__name__, "ports:", model.ports)
+        ```
 
     """
     phi = 2.0 * jnp.pi * neff * (length_um / wavelength_nm) * 1000.0
@@ -145,6 +192,27 @@ def delay_line_fdomain(
         n_group: Group refractive index; sets the propagation delay via
             ``tau = length_um * n_group / c``. Defaults to ``4.0``.
 
+    A frequency-domain delay response.
+
+    Device group:
+        Photonic / Optical sources and propagation
+
+    Device reference:
+        photonic_conventions.md
+
+    Examples:
+        ```python
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import delay_line_fdomain
+
+        model = delay_line_fdomain(length_um=100.0)
+        admittance = model.solver_call(jnp.asarray(1e9), model)
+        assert admittance.shape == (2, 2)
+        assert np.isfinite(admittance).all()
+        ```
+
     """
     c_um_per_s = 2.99792458e14
     loss_val = loss_dB_cm * (length_um / 10000.0)
@@ -155,7 +223,7 @@ def delay_line_fdomain(
     return s_to_y(S)
 
 
-@component(ports=("grating", "waveguide"), holomorphic=True)
+@component(ports=("grating", "waveguide"), states=("a1", "a2"), holomorphic=True)
 def Grating(
     signals: Signals,
     center_wavelength_nm: float = 1310.0,
@@ -167,7 +235,7 @@ def Grating(
 
     Loss increases quadratically with detuning from ``center_wavelength_nm``,
     approximating the Gaussian spectral response of a typical grating coupler.
-    Transmission is clipped to ``0.9999`` to keep the Y-matrix well-conditioned.
+    Exact wave constraints preserve unit transmission at the lossless center.
 
     Args:
         signals: Field amplitudes at the grating (``grating``) and waveguide (``waveguide``) ports.
@@ -176,30 +244,51 @@ def Grating(
         bandwidth_1dB: Full 1 dB bandwidth in nm. Defaults to ``20.0``.
         wavelength_nm: Operating wavelength in nm. Defaults to ``1310.0``.
 
+    The existing wavelength-dependent lumped coupling response.
+
+    Device group:
+        Photonic / Passive routing and phase
+
+    Device reference:
+        optical_passive.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import Grating
+
+        jax.config.update("jax_enable_x64", True)
+        model = Grating()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(Grating.__name__, "ports:", model.ports)
+        ```
+
     """
     delta = wavelength_nm - center_wavelength_nm
     excess_loss = (delta / (0.5 * bandwidth_1dB)) ** 2
     loss_dB = peak_loss_dB + excess_loss
 
     T = 10.0 ** (-loss_dB / 20.0)
-    # Numerical stability clip
-    T = jnp.minimum(T, 0.9999)
 
     S = jnp.array([[0.0, T], [T, 0.0]], dtype=jnp.complex128)
-    Y = s_to_y(S)
-
-    v_vec = jnp.array([signals.grating, signals.waveguide], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-
-    return {"grating": i_vec[0], "waveguide": i_vec[1]}, {}
+    return _wave_stamp(signals, ("grating", "waveguide"), ("a1", "a2"), S)
 
 
-@component(ports=("p1", "p2", "p3"), holomorphic=True)
+@component(ports=("p1", "p2", "p3"), states=("a1", "a2", "a3"), holomorphic=True)
 def Splitter(signals: Signals, split_ratio: float = 0.5) -> PhysicsReturn:
-    """Lossless asymmetric optical splitter (Y-junction) with a configurable power split ratio.
+    """Reciprocal matched three-port splitter with configurable power split.
 
-    The S-matrix is constructed to be unitary, with the cross-port coupling
-    carrying a ``j`` phase shift to satisfy energy conservation.
+    The full S matrix is contractive, not unitary: its singular values are
+    (1, 1, 0). A coherent dark combination incident at p2/p3 is absorbed.
+    A matched reciprocal lossless three-port is impossible. A single input
+    at p1 divides power without loss. Wave constraints retain exact endpoints.
 
     Args:
         signals: Field amplitudes at the input (``p1``) and two output ports
@@ -208,21 +297,42 @@ def Splitter(signals: Signals, split_ratio: float = 0.5) -> PhysicsReturn:
             ``1 - split_ratio`` is routed to ``p3``. Defaults to ``0.5``
             (50/50 splitter).
 
+    The existing passive three-port routing matrix.
+
+    Device group:
+        Photonic / Passive routing and phase
+
+    Device reference:
+        optical_passive.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import Splitter
+
+        jax.config.update("jax_enable_x64", True)
+        model = Splitter()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(Splitter.__name__, "ports:", model.ports)
+        ```
+
     """
     r = jnp.sqrt(split_ratio)
     tc = jnp.sqrt(1.0 - split_ratio)
 
     S = jnp.array([[0.0, r, 1j * tc], [r, 0.0, 0.0], [1j * tc, 0.0, 0.0]], dtype=jnp.complex128)
 
-    Y = s_to_y(S)
-
-    v_vec = jnp.array([signals.p1, signals.p2, signals.p3], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-
-    return {"p1": i_vec[0], "p2": i_vec[1], "p3": i_vec[2]}, {}
+    return _wave_stamp(signals, ("p1", "p2", "p3"), ("a1", "a2", "a3"), S)
 
 
-@component(ports=("p1", "p2", "p3", "p4"), holomorphic=True)
+@component(ports=("p1", "p2", "p3", "p4"), states=("a1", "a2", "a3", "a4"), holomorphic=True)
 def DirectionalCoupler(
     signals: Signals,
     coupling: float = 0.5,
@@ -239,18 +349,43 @@ def DirectionalCoupler(
 
     where t = sqrt(1 - coupling), k = sqrt(coupling).
 
-    .. note::
-        ``coupling`` is clipped to (1e-6, 1−1e-6) to prevent ``I + S`` from becoming
-        singular at the degenerate all-through (coupling=0) and all-cross (coupling=1)
-        operating points where the S-matrix has an eigenvalue of −1.
+    Exact wave constraints support coupling=0 and coupling=1 without loss
+    or clipping. The full S matrix is reciprocal and unitary for 0<=coupling<=1.
+    Parameter derivatives of sqrt(coupling) are singular at the endpoints;
+    use an angle parameterization when differentiating exactly there.
 
     Args:
         signals: Field amplitudes at all four ports.
         coupling: Power fraction routed to the cross port (p4 for p1 input, p3 for p2 input).
             Defaults to ``0.5`` (50/50 splitter).
 
+    Four-port coherent power splitting and recombination.
+
+    Device group:
+        Photonic / Passive routing and phase
+
+    Device reference:
+        optical_passive.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import DirectionalCoupler
+
+        jax.config.update("jax_enable_x64", True)
+        model = DirectionalCoupler()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(DirectionalCoupler.__name__, "ports:", model.ports)
+        ```
+
     """
-    coupling = jnp.clip(coupling, 1e-6, 1.0 - 1e-6)
     t = jnp.sqrt(1.0 - coupling)
     k = jnp.sqrt(coupling)
 
@@ -263,10 +398,7 @@ def DirectionalCoupler(
         ],
         dtype=jnp.complex128,
     )
-    Y = s_to_y(S)
-    v_vec = jnp.array([signals.p1, signals.p2, signals.p3, signals.p4], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-    return {"p1": i_vec[0], "p2": i_vec[1], "p3": i_vec[2], "p4": i_vec[3]}, {}
+    return _wave_stamp(signals, ("p1", "p2", "p3", "p4"), ("a1", "a2", "a3", "a4"), S)
 
 
 # ===========================================================================
@@ -291,6 +423,33 @@ def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> P
         signals: Port fields and source-current state ``i_src``.
         power: Output optical power in watts. Defaults to ``1.0``.
         phase: Output field phase in radians. Defaults to ``0.0``.
+
+    Prescribed optical voltage envelope. Connect p1/p2; power sets the squared clamped voltage. It is not a matched
+    incident-power source under reflection; use OpticalCW for that boundary.
+
+    Device group:
+        Photonic / Optical sources and propagation
+
+    Device reference:
+        photonic_conventions.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import OpticalSource
+
+        jax.config.update("jax_enable_x64", True)
+        model = OpticalSource()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(OpticalSource.__name__, "ports:", model.ports)
+        ```
 
     """
     v_val = jnp.sqrt(power) * jnp.exp(1j * phase)
@@ -328,6 +487,33 @@ def OpticalSourcePulse(
         delay: Turn-on delay in seconds. Defaults to ``0.2e-9``.
         rise: Sigmoid rise time constant in seconds. Defaults to ``0.05e-9``.
 
+    Prescribed sigmoid optical voltage pulse. Connect p1/p2. This is a voltage clamp, rather than a matched
+    incident-power source under reflection.
+
+    Device group:
+        Photonic / Optical sources and propagation
+
+    Device reference:
+        photonic_conventions.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import OpticalSourcePulse
+
+        jax.config.update("jax_enable_x64", True)
+        model = OpticalSourcePulse()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(OpticalSourcePulse.__name__, "ports:", model.ports)
+        ```
+
     """
     val = jnp.sqrt(power) * jnn.sigmoid((t - delay) / rise)
     v_val = val * jnp.exp(1j * phase)
@@ -347,8 +533,10 @@ def TunableBeamSplitter(
     signals: Signals,
     theta: float = jnp.pi / 4,
 ) -> PhysicsReturn:
-    """Ideal lossless 2×2 directional coupler with a variable coupling angle.
+    """Directed buffered 2×2 field mixer with a variable coupling angle.
 
+    This unilateral behavioral block is not a reciprocal passive scattering
+    device under arbitrary terminations. For that use DirectionalCoupler.
     Implements a tunable beam splitter using a Modified Nodal Analysis (MNA)
     voltage-controlled voltage source (VCVS) stamp, which avoids the
     near-singular ``(I + S)`` matrix that arises when applying ``s_to_y`` to
@@ -377,6 +565,32 @@ def TunableBeamSplitter(
         signals: Port fields and branch-current states ``i_top`` and ``i_bot``.
         theta: Coupling angle in radians.  Controls the power split ratio:
             ``P_cross / P_total = sin²(theta)``.  Defaults to ``pi/4`` (50/50).
+
+    Retained directed mixing/combining blocks from older demonstrations.
+
+    Device group:
+        Photonic / Passive routing and phase
+
+    Device reference:
+        modulators.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.photonic import TunableBeamSplitter
+
+        jax.config.update("jax_enable_x64", True)
+        model = TunableBeamSplitter()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.complex128)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(TunableBeamSplitter.__name__, "ports:", model.ports)
+        ```
 
     """
     c = jnp.cos(theta).astype(jnp.complex128)

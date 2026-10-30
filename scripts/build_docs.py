@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+subprocess.run([sys.executable, str(ROOT / "scripts/device_docs.py"), "--write"], check=True)
 docs_examples = ROOT / "docs" / "examples"
 
 shutil.rmtree(docs_examples, ignore_errors=True)
@@ -31,3 +32,6 @@ for gif in (ROOT / "examples").rglob("*.gif"):
     print(f"Copied {gif.name}")
 
 print(f"Docs built in {docs_examples}")
+
+# Keep the single-source device page renderer authoritative after nbconvert.
+subprocess.run([sys.executable, str(ROOT / "scripts/device_docs.py"), "--write"], check=True)

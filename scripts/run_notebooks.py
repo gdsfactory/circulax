@@ -19,6 +19,7 @@ except ImportError:
 _NEEDS_OSDI = {"ring_oscillator_osdi.ipynb", "05_psp103_ring_param_fitting.ipynb"}
 
 ROOT = Path(__file__).parent.parent
+subprocess.run([sys.executable, str(ROOT / "scripts/device_docs.py"), "--write"], check=True)
 notebooks = sorted(p for p in (ROOT / "examples").rglob("*.ipynb") if ".ipynb_checkpoints" not in p.parts)
 
 if not notebooks:

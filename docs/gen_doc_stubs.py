@@ -11,7 +11,7 @@ specs_root = (this_dir / "../specs").resolve()
 for spec_name in ("hierarchy.md",):
     spec_path = specs_root / spec_name
     with mkdocs_gen_files.open(spec_name, "w") as fd:
-        fd.write(spec_path.read_text())
+        fd.write(spec_path.read_text(encoding="utf-8"))
     mkdocs_gen_files.set_edit_path(spec_name, Path("../specs") / spec_name)
 
 src_root = (this_dir / "../circulax").resolve()
@@ -41,3 +41,16 @@ for path in src_root.rglob("*.py"):
         fd.write(f"::: {identifier}")
 
     mkdocs_gen_files.set_edit_path(output_filename, path)
+
+
+# Device explanations/examples come from source docstrings; generation never imports JAX.
+from scripts.device_docs import WALKTHROUGH, artifacts
+
+pages, _, device_images = artifacts()
+for generated_path, content in pages.items():
+    with mkdocs_gen_files.open(generated_path.relative_to("docs"), "w") as fd:
+        fd.write(content)
+    mkdocs_gen_files.set_edit_path(generated_path.relative_to("docs"), "../circulax/components")
+for name, data in device_images.items():
+    with mkdocs_gen_files.open(WALKTHROUGH.parent.relative_to("docs") / name, "wb") as fd:
+        fd.write(data)

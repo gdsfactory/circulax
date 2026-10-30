@@ -18,6 +18,7 @@ from circulax.netlist import (
     prune_unreachable_instances,
     sax_to_kfnetlist,
 )
+from circulax.optical_analysis import quadrature_response as quadrature_response
 from circulax.s_transforms import fdomain_component, fdomain_model, sax_component
 from circulax.solvers import analyze_circuit, setup_ac_sweep, setup_harmonic_balance, setup_transient
 from circulax.testbench import attach_testbench

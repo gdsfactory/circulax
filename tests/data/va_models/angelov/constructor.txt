@@ -1,0 +1,24 @@
+# Preserve Verilog-A $param_given semantics at the Python constructor boundary.
+import numpy as np
+from functools import wraps as _wraps
+from inspect import signature as _signature
+
+_Angelov_init = Angelov.__init__
+_Angelov_signature = _signature(_Angelov_init)
+
+@_wraps(_Angelov_init)
+def _angelov_init(self, *args, **kwargs):
+    bound = _Angelov_signature.bind_partial(self, *args, **kwargs)
+    # Fixed finite-resistance topology: zero-valued branches need distinct
+    # collapsed KCL. Reject them instead of silently leaving singular rows.
+    for name in ("Rg", "Rd", "Rs", "Ri", "Rgd", "Rc", "Rcin"):
+        value = bound.arguments.get(name, _Angelov_signature.parameters[name].default)
+        if not isinstance(value, jax.core.Tracer) and bool(np.any(np.asarray(value) <= 0)):
+            raise ValueError(f"Angelov requires {name}>0; zero-resistance collapsed topology is unsupported")
+    for name, allowed in (("Selft", (0, 1)), ("Idsmod", (0, 1, 2, 3)), ("Igmod", (0, 1)), ("Capmod", (0, 1, 2))):
+        value = bound.arguments.get(name, _Angelov_signature.parameters[name].default)
+        if not isinstance(value, jax.core.Tracer) and bool(np.any(~np.isin(np.asarray(value), np.asarray(allowed)))):
+            raise ValueError(f"Angelov {name} must be one of {allowed}")
+    _Angelov_init(self, *args, **kwargs)
+
+Angelov.__init__ = _angelov_init

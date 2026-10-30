@@ -221,6 +221,9 @@ native-tests = { cmd = ["pytest", "tests/netlist_io/test_osdi_analysis.py", "tes
 # ---------------------------------------------------------------------------
 
 [tool.pixi.tasks]
+device-docs = { cmd = ["python", "scripts/device_docs.py", "--write"], description = "Generate device pages and notebook from component docstrings" }
+device-docs-check = { cmd = ["python", "scripts/device_docs.py", "--check"], description = "Reject stale generated device documentation" }
+device-examples = { cmd = ["python", "scripts/device_docs.py", "--execute"], description = "Execute all self-contained docstring device examples" }
 copy_readme      = { cmd = ["python", "scripts/copy_readme.py"],   description = "Copy README into docs/ and strip docs/ prefixes" }
 install_ipkernel = "python -m ipykernel install --user --name circulax"
 nbrun            = { cmd = ["python", "scripts/run_notebooks.py"], depends-on = ["install_ipkernel", "compile_osdi"], description = "Execute all notebooks in-place with papermill" }

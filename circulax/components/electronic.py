@@ -20,15 +20,51 @@ _PN_ALIASES = {"p1": "P", "p2": "N"}
 
 @component(ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
 def Resistor(signals: Signals, R: float = 1e3) -> PhysicsReturn:
-    """Ohm's Law: I = V/R."""
+    """Ohmic two-terminal resistor. Connect p1/p2; R is in ohms and current into p1 is (V1-V2)/R.
+
+    Device group:
+        Electronic / Basic elements
+
+    Device reference:
+        index.md
+
+    Examples:
+        ```python
+        from circulax.components.electronic import Resistor
+
+        f, q = Resistor(R=100.0)(p1=1.0, p2=0.0)
+        assert abs(f["p1"] - 0.01) < 1e-12
+        assert f["p1"] + f["p2"] == 0
+        print("Current at 1 V:", f["p1"], "A")
+        ```
+
+    """
     i = (signals.p1 - signals.p2) / (R + 1e-12)
     return {"p1": i, "p2": -i}, {}
 
 
 @component(ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
 def Capacitor(signals: Signals, C: float = 1e-12) -> PhysicsReturn:
-    """Q = C * V.
-    Returns Charge (q) so the solver computes I = dq/dt.
+    """Two-terminal stored charge Q=C*(V1-V2).
+
+    Connect p1/p2; C is in farads. The same charge law supplies AC and transient dynamics.
+
+    Device group:
+        Electronic / Basic elements
+
+    Device reference:
+        index.md
+
+    Examples:
+        ```python
+        from circulax.components.electronic import Capacitor
+
+        f, q = Capacitor(C=1e-12)(p1=2.0, p2=0.0)
+        assert abs(q["p1"] - 2e-12) < 1e-24
+        assert q["p1"] + q["p2"] == 0
+        print("Stored terminal charge:", q["p1"], "C")
+        ```
+
     """  # noqa: D205
     v_drop = signals.p1 - signals.p2
     q_val = C * v_drop
@@ -37,7 +73,33 @@ def Capacitor(signals: Signals, C: float = 1e-12) -> PhysicsReturn:
 
 @component(ports=("p1", "p2"), states=("i_L",), port_aliases=_PN_ALIASES, holomorphic=True)
 def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
-    """V = L * di/dt formulated via flux: f['i_L'] = V, q['i_L'] = -L*i_L."""
+    """Two-terminal inductive branch. L is in henries; its branch current is an internal solved state.
+
+    Device group:
+        Electronic / Basic elements
+
+    Device reference:
+        index.md
+
+    Examples:
+        ```python
+        import jax
+        import jax.numpy as jnp
+        import numpy as np
+
+        from circulax.components.electronic import Inductor
+
+        jax.config.update("jax_enable_x64", True)
+        model = Inductor()
+        # Constitutive F/Q evaluation; physical circuit boundaries are shown in the model reference.
+        y = jnp.zeros(len(model.ports) + len(model.states), dtype=jnp.float64)
+        f, q = model.solver_call(0.0, y, model)
+        assert np.isfinite(f).all()
+        assert np.isfinite(q).all()
+        print(Inductor.__name__, "ports:", model.ports)
+        ```
+
+    """
     v_drop = signals.p1 - signals.p2
     return ({"p1": signals.i_L, "p2": -signals.i_L, "i_L": v_drop}, {"i_L": -L * signals.i_L})
 
@@ -698,9 +760,9 @@ def _junction_charge(v, Cj0, Vj, m) -> float:
 
     Returns ``Q = integral from 0 to v of Cj(v') dv'``, so ``dQ/dv = +Cj(v) > 0``.
     Uses linear extrapolation beyond ``fc * Vj`` (``fc = 0.5``) to avoid the
-    power-law singularity as ``v → Vj``.  The anchor at the threshold is a
-    precomputed constant so the diverging ``dq_normal/dv`` cannot leak through
-    ``jnp.where`` into the extrapolation region.
+    power-law singularity as ``v → Vj``. The inactive power-law branch is
+    evaluated only up to the threshold, keeping reverse-mode derivatives
+    finite in the extrapolation region as well.
 
     Args:
         v: Junction voltage in volts.
@@ -715,7 +777,8 @@ def _junction_charge(v, Cj0, Vj, m) -> float:
     fc = 0.5
     v_thresh = fc * Vj
     # Standard SPICE depletion charge: Cj0*Vj/(1-m) * [1 - (1 - v/Vj)^(1-m)]
-    q_normal = Cj0 * Vj / (1.0 - m) * (1.0 - jnp.power(jnp.maximum(0.0, 1.0 - v / Vj), 1.0 - m))
+    v_normal = jnp.minimum(v, v_thresh)
+    q_normal = Cj0 * Vj / (1.0 - m) * (1.0 - jnp.power(1.0 - v_normal / Vj, 1.0 - m))
 
     # Linear extrapolation beyond threshold: fixed anchor + constant slope C_linear
     C_linear = Cj0 / jnp.power(1.0 - fc, m)  # Cj(v_thresh)
