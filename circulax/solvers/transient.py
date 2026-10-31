@@ -640,7 +640,9 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
 # History terms:
 #   Q_hist_1 = Q(y_n)
 #   Q_hist_2 = Q(y_n) + (a21/γ) · (Q(Y1) - Q(y_n))
-#   Q_hist_3 = Q(y_n) + (b1/γ)  · (Q(Y1) - Q(y_n)) + (b2/γ) · (Q(Y2) - Q(y_n))
+#   Q_hist_3 = Q(y_n) + (b1/γ)  · (Q(Y1) - Q(y_n)) + (b2/γ) · (Q(Y2) - Q_hist_2)
+# Each charge increment must subtract its own stage history:
+#   K_i = (Q(Y_i) - Q_hist_i) / (γh) = -F(Y_i).
 
 _SDIRK3_G = 0.4358665215084589  # A-stable root of 6γ³ - 18γ² + 9γ - 1 = 0
 _SDIRK3_INV_G = 1.0 / _SDIRK3_G  # alpha = 1/γ for assembly (step size = γh)
@@ -715,7 +717,7 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
         Y2, r2 = _run_stage(Y1, q_hist_2, t_s2)
         Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
         q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
-        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         # Stage 3 — t_s3 = t1 (c3 = 1), y_{n+1} = Y3
         Y3, r3 = _run_stage(Y2, q_hist_3, t1)
@@ -802,7 +804,7 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
         Y2, r2 = _run_stage(Y1, q_hist_2)
         Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
         q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
-        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         Y3, r3 = _run_stage(Y2, q_hist_3)
         free_numeric(numeric_handle)
@@ -889,7 +891,7 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
         Y2, r2 = _run_stage(Y1, q_hist_2, t_s2)
         Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
         q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
-        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         Y3, r3 = _run_stage(Y2, q_hist_3, t1)
         free_numeric(numeric_handle)
