@@ -48,7 +48,7 @@ def _delay_line(
 
 
 def _voltage_amplifier_2port(
-    frequency: rf.Frequency, G: float, Zi: float, Zo: float, Z0: float = 50.0, name: str = "amp"
+    frequency: rf.Frequency, *, G: float, Zi: float, Zo: float, Z0: float = 50.0, name: str = "amp"
 ) -> rf.Network:
     """Create a two-port voltage amplifier network."""
     s = np.ones([len(frequency), 2, 2], dtype=complex)
@@ -61,6 +61,7 @@ def _voltage_amplifier_2port(
 
 def _generate_loaded_circuit(
     half_unloaded_section: rf.Network,
+    *,
     r_length: float = 0.0047,
     c_per_length: float = 3.2e-10,
     d: float = 0.0001,

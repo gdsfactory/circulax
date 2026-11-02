@@ -20,6 +20,9 @@
     * [LC Ladder](examples/lc_ladder.md)
 * Photonic Examples
     * [Mach-Zehnder Modulator](examples/mzm.md)
+    * [Push-Pull Traveling-Wave MZM](examples/traveling_wave_mzm_reference.md)
+    * [Single-Arm Traveling-Wave MZM](examples/traveling_wave_mzm.md)
+    * [Traveling-Wave MZM Validation](examples/traveling_wave_mzm_validation.md)
     * [Photonics Transient](examples/photonics_transient.md)
     * [Ring Modulator](examples/ring_modulator.md)
 * Advanced Topics

@@ -1,5 +1,5 @@
 ! Created with skrf 1.13.0 (http://scikit-rf.org).
-# Hz S RI R 30.0 
+# Hz S RI R 30.0
 ! Port[1] = rf_in
 ! Port[2] = integration_in
 ! Port[3] = rf_out
