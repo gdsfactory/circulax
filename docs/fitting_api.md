@@ -207,8 +207,8 @@ curves do not automatically admit this passive, causal realization. The
 factory rejects invalid inputs and fits exceeding the requested tolerance.
 
 `n_eff` is the real RF **phase index**. Group index is
-`n_group = n_eff + f*dn_eff/df`; velocity matching compares the **loaded RF group
-index** with the optical group index. If mode-solver data already includes the
+`n_group = n_eff + f*dn_eff/df`; velocity matching compares the **loaded RF phase
+index** at each modulation frequency with the optical group index. If mode-solver data already includes the
 PN junction's distributed R/C, do not add those elements again in the circuit.
 If the mode data excludes the junctions, add them and verify the resulting
 loaded propagation, as in the traveling-wave MZM tutorial.
@@ -317,7 +317,80 @@ is required; disabling enforcement still requires sampled passivity to pass.
 Explicit port delays must be physically consistent with reflections. A purely
 rational finite-band approximation does not preserve an exact hard wavefront.
 
+## Long uniform lines: characteristic admittance and exact delay
+
+An S-parameter fit has to follow the line's phase rotation, so a line many
+wavelengths long needs many poles. `characteristic_rlgc_transmission_line`
+removes the delay instead (method of characteristics). With port currents
+flowing into the line,
+
+$$
+Y_cV_1-I_1=H\,(Y_cV_2+I_2),\qquad Y_cV_2-I_2=H\,(Y_cV_1+I_1),
+$$
+
+$$
+Y_c=\sqrt{Y/Z},\qquad H=e^{-\gamma L}=e^{-s\tau}\,H_\mathrm{min}(s).
+$$
+
+The delay $\tau$ is realized exactly. Only the smooth $Y_c$ and
+$H_\mathrm{min}$ are fitted. Reflections at mismatched ends need no special
+treatment: unlike port delays on S, this de-embeds the propagation rather than
+the S-parameters.
+
+```python
+from circulax.components import characteristic_rlgc_transmission_line
+from circulax.fitting import fit_rlgc_characteristic
+
+frequencies = np.r_[0.0, np.geomspace(1e5, 250e9, 500)]  # must include DC
+line = characteristic_rlgc_transmission_line(
+    frequencies, R=r_per_m, L=l_per_m, G=g_per_m, C=c_per_m, length=5e-3,
+)
+model = fit_rlgc_characteristic(frequencies, R=r_per_m, L=l_per_m, G=g_per_m,
+                                C=c_per_m, length=5e-3)
+print(model.delay, model.metadata)  # order, S error, passivity diagnostics
+line = model.circuit()
+```
+
+Both fits use the same order, increased from 4 until every check passes:
+
+- maximum S error against the exact, unfloored line on all samples is within
+  `tolerance`;
+- the poles are stable;
+- on a grid from DC to ten times the band, S has singular values at most one,
+  $\mathrm{Re}\,Y_c\ge0$ and $|H_\mathrm{min}|\le1$.
+
+Otherwise it raises `ValueError`.
+
+The default delay is 0.98 times the phase delay at the highest frequency. This
+leaves the minimum-phase part, such as skin-effect internal inductance, to
+$H_\mathrm{min}$.
+
+**DC.** With $G=0$, $Y_c(0)=0$ and $H(0)=1$, so the DC resistance is a 0/0
+limit. Arbitrarily small fit errors then make it wrong.
+
+- The fit floors $G$ at $2\pi f_\mathrm{low}C$ and $R$ at $2\pi f_\mathrm{low}L$,
+  where $f_\mathrm{low}$ is the lowest nonzero frequency. This puts the floor's
+  corner inside the grid.
+- It also pins the fitted values at DC exactly.
+- A floor below the first grid frequency, such as $G=10^{-9}$ S/m, leaves the
+  transition unfitted and does not work.
+- If the floors alone would exceed `tolerance`, the error message gives the
+  lowest frequency required.
+
+The realization uses one small component per real pole or conjugate pair,
+which keeps the Jacobian sparse. It works in real and complex circuits for DC,
+AC, harmonic balance and transient analysis. On a 5 mm thin-film lithium niobate electrode fitted to
+250 GHz (the line of the [TFLN traveling-wave MZM example](examples/tfln_traveling_wave_mzm.md)), it needs 16 + 16 poles,
+against 67 for the S-parameter fit. A 56-bit transient runs in 0.4 s (real) instead of about 15 s,
+and is closer to the exact response. The first fit in a session takes about 10 s,
+almost all of it JIT compilation of the vector fit for each order tried. Later
+fits, for example a length sweep, reuse the compiled orders and take about 0.5 s.
+
+Sampled passivity is not a global certificate, and causality of the input data
+is not certified. There are no internal taps.
+
 Choose `rlgc_transmission_line` for a passive RLC ladder with distributed loads;
-choose `reduced_rlgc_transmission_line` for a compact fixed-length two-port.
+choose `reduced_rlgc_transmission_line` for a compact fixed-length two-port,
+and `characteristic_rlgc_transmission_line` when that two-port is electrically long.
 The [standalone RLGC example](examples/rlgc_transmission_line.md) compares the
 reduced line against the original dispersive RLGC data and runs a native pulse.

@@ -287,8 +287,10 @@ def mode_transmission_line(
     an independent choice of arbitrary curves need not admit this passive,
     causal Foster realization. Errors exceeding ``tolerance`` raise ValueError.
 
-    Group velocity is ``c/(n_eff + f*dn_eff/df)``. Compare the group index of
-    the *loaded* electrode to the optical group index when designing a MZM.
+    Group velocity is ``c/(n_eff + f*dn_eff/df)``. When designing a MZM,
+    compare the RF *phase* index of the *loaded* electrode at each modulation
+    frequency with the optical group index: the walk-off phase is
+    ``2*pi*f*L*(n_rf(f) - n_g_opt)/c``.
     Avoid adding a junction R/C twice if it is already included in mode data.
     No additional loads are included by this factory.
     """
@@ -362,6 +364,8 @@ def reduced_rlgc_transmission_line(
     taps: use :func:`rlgc_transmission_line` when distributed loading is needed.
     Fitting depends on length; refit for a different length. Use
     ``circulax.fitting.fit_rlgc`` to inspect, evaluate or save the coefficients.
+    For electrically long lines, :func:`characteristic_rlgc_transmission_line`
+    removes the propagation delay exactly and needs far fewer poles.
     """
     from circulax.fitting import circuit_from_coefficients, fit_rlgc
 
