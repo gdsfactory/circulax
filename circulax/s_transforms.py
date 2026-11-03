@@ -511,6 +511,11 @@ def fdomain_component(ports: tuple[str, ...]) -> Any:
     It must return a square Y-matrix of shape ``(n_ports, n_ports)`` with
     ``dtype=complex128``.
 
+    Complex-mode small-signal analysis evaluates both positive and negative
+    frequencies to preserve temporal phase independently of field rotation.
+    Real electrical models must obey ``Y(-f) = conj(Y(f))``; a static complex
+    optical coupling retains the same complex value at either frequency.
+
     Args:
         ports: Ordered tuple of port names matching the netlist connection keys.
 

@@ -192,6 +192,12 @@ is differentiated using DC registrations while charge derivatives use AC
 registrations. Complex-mode native/combined real-only Jacobians are explicitly
 unsupported because they do not supply a complete doubled-coordinate system.
 
+In complex mode, frequency-domain admittances are evaluated at both `+f` and
+`-f` to distinguish RF phase from optical field rotation. Define the response
+on signed frequencies: real electrical models obey `Y(-f) = conj(Y(f))`.
+A frequency-independent complex optical admittance instead retains its fixed
+field rotation. Both conventions can include an additional temporal response.
+
 The new API preserves non-holomorphic derivatives automatically. There is no
 `holomorphic=True` escape hatch. `sp()` remains the scattering analysis with
 reference impedances and matching terminations; `small_signal()` retains the

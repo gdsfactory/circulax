@@ -1,3 +1,5 @@
+# Copyright 2026 Circulax contributors
+
 """AC small-signal frequency sweep returning S-parameters.
 
 AC analysis linearises the circuit DAE at a DC operating point and sweeps a
@@ -153,7 +155,7 @@ def renormalize(
     z0_from = jnp.broadcast_to(jnp.atleast_1d(jnp.asarray(z0_from, dtype=jnp.complex128)), (n_freqs, n_ports))
     z0_to = jnp.broadcast_to(jnp.atleast_1d(jnp.asarray(z0_to, dtype=jnp.complex128)), (n_freqs, n_ports))
 
-    def _renorm_one(S_f, zf, zt):
+    def _renorm_one(S_f: Array, zf: Array, zt: Array) -> Array:
         I = jnp.eye(n_ports, dtype=jnp.complex128)
         gamma = (zt - zf) / (zt + zf)
         Gamma = jnp.diag(gamma)
@@ -212,7 +214,14 @@ def ac_admittance(
         if getattr(group, "is_fdomain", False):
             values = jax.vmap(functools.partial(group.physics_func, freq))(group.params).reshape(-1)
             if quadratures:
-                blocks = (values.real, -values.imag, values.imag, values.real)
+                # RF phase and optical-field phase are distinct. Recover the
+                # coordinate transfer functions from both envelope sidebands;
+                # taking real/imag at +f alone discards temporal phase (e.g.
+                # a real capacitor must contribute jwC to both diagonals).
+                negative = jax.vmap(functools.partial(group.physics_func, -freq))(group.params).reshape(-1)
+                direct = (values + jnp.conj(negative)) / 2
+                cross = (values - jnp.conj(negative)) / (2j)
+                blocks = (direct, -cross, cross, direct)
             else:
                 admittance = admittance.at[rows, cols].add(values)
         elif getattr(group, "has_delay", False):

@@ -332,13 +332,13 @@ def test_source_gradient_preserves_complex_power_response() -> None:
     assert jnp.allclose(jax.jit(jax.grad(power_gain))(1.0), expected, rtol=1e-7, atol=1e-20)
 
 
-def test_constant_complex_frequency_domain_field_coupling() -> None:
+@pytest.mark.parametrize("tau", [0.0, 1e-10])
+def test_complex_frequency_domain_field_coupling_preserves_rf_phase(tau: float) -> None:
     from circulax.s_transforms import fdomain_component
 
     @fdomain_component(ports=("p1",))
-    def optical_load(f: jax.Array, admittance: complex = 2 + 3j) -> jax.Array:
-        del f
-        return jnp.array([[admittance]])
+    def optical_load(f: jax.Array, admittance: complex = 2 + 3j, time_constant: float = tau) -> jax.Array:
+        return jnp.array([[admittance * (1 + 2j * jnp.pi * f * time_constant)]])
 
     circuit = compile_circuit(
         {
@@ -350,10 +350,34 @@ def test_constant_complex_frequency_domain_field_coupling() -> None:
         is_complex=True,
     )
     amplitude = 1 + 2j
-    result = circuit.small_signal()(freqs=jnp.array([1.0, 1e9]), sources={"I": -amplitude})
+    freqs = jnp.array([1.0, 1e9])
+    result = circuit.small_signal()(freqs=freqs, sources={"I": -amplitude})
     dx, dy = result.quadratures("load,p1")
-    assert jnp.allclose(dx, amplitude * jnp.real(1 / (2 + 3j)), rtol=1e-8)
-    assert jnp.allclose(dy, amplitude * jnp.imag(1 / (2 + 3j)), rtol=1e-8)
+    temporal_response = 1 / (1 + 2j * jnp.pi * freqs * tau)
+    assert jnp.allclose(dx, amplitude * jnp.real(1 / (2 + 3j)) * temporal_response, rtol=1e-8)
+    assert jnp.allclose(dy, amplitude * jnp.imag(1 / (2 + 3j)) * temporal_response, rtol=1e-8)
+
+
+@pytest.mark.parametrize("complex_mode", [False, True])
+def test_frequency_domain_capacitor_preserves_electrical_rf_phase(*, complex_mode: bool) -> None:
+    from circulax.s_transforms import fdomain_component
+
+    @fdomain_component(ports=("p1", "p2"))
+    def capacitor(f: jax.Array, C: float = 1e-6) -> jax.Array:
+        return 2j * jnp.pi * f * C * jnp.array([[1.0, -1.0], [-1.0, 1.0]])
+
+    primitive = _rc()
+    circuit = compile_circuit(
+        primitive.source_netlist,
+        {"voltage": WaveformVoltageSource, "current": WaveformCurrentSource, "resistor": Resistor, "capacitor": capacitor},
+        is_complex=complex_mode,
+    )
+    freqs = jnp.array([0.0, 10.0, 1000.0])
+    result = circuit.small_signal()(freqs=freqs, sources={"V": 1 + 2j})
+    expected = (1 + 2j) / (1 + 2j * jnp.pi * freqs * 1e-3)
+    dx, dy = result.quadratures("R,p2")
+    assert jnp.allclose(dx, expected, rtol=1e-7)
+    assert jnp.allclose(dy, 0.0, atol=1e-12)
 
 
 def test_jit_vmap_includes_automatic_dc_bias() -> None:
