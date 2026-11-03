@@ -1,6 +1,7 @@
 * [Home](index.md)
 * Guide
     * [Writing Components](writing_components.md)
+    * [Small-Signal Analysis](small_signal.md)
     * [Transient Simulation](transient.md)
     * [Waveform Sources](waveform_sources.md)
     * [Rational Model Enforcement](rational_model_enforcement.md)
