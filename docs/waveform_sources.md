@@ -8,6 +8,11 @@ The older `VoltageSource`, `VoltageSourceAC`, `PulseVoltageSource` and `CurrentS
 
 ## Binding SPICE text
 
+Waveform parsing and `circulax.netlist_io.expressions.evaluate_source` are included
+in a plain `pip install circulax`; they do not require NetlistParse or Rust.
+Scalar expressions support engineering suffixes, setting names, arithmetic,
+comparisons, logical operators, ternaries and the supported math functions.
+
 `circulax.netlist_io.parse_source` returns keyword settings named exactly like the component
 fields, so binding is `Cls(**settings)` (or the `settings` of a netlist instance):
 
@@ -82,3 +87,18 @@ Repeating PWL is also supported for current sources as an extension; ngspice sup
 `r`/`td` only for voltage sources, so current repeats are checked against the equivalent
 voltage waveform. Source-driven AC analysis is not part of these components. Instances bind identically from a plain
 netlist dict or a `kfnetlist.Netlist` (`settings=parse_source(...)`).
+
+## Optional SPICE/Spectre library files
+
+Loading full model-card files with `Library` still requires the NetlistParse Python
+extension. Until a compatible parser is published on PyPI, install the supported
+revision explicitly (building it requires a Rust toolchain):
+
+```bash
+pip install 'netlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py'
+```
+
+Pixi development, test and benchmark environments include this revision. The
+`netlists` extra is retained for compatibility but adds no dependencies; it does
+not install the extension. Missing-extension errors occur when reading a library
+file, while waveform and scalar-expression APIs remain available.
