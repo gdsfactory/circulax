@@ -1,3 +1,5 @@
+# Copyright 2026 Circulax contributors
+
 """Passive, causal RLC transmission-line factories from sampled RLGC data."""
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from circulax.components.electronic import Capacitor, Inductor, Resistor
 
 if TYPE_CHECKING:
     from circulax.circuit import Circuit
+    from circulax.fitting import ModelFitOptions
 
 
 @dataclass(frozen=True)
@@ -164,7 +167,37 @@ class RLGCTransmissionLine:
         )
 
 
-def rlgc_transmission_line(  # noqa: C901 -- validate physical arrays before fitting
+def _sample_rlgc(
+    frequencies: ArrayLike,
+    R: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    L: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    G: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    C: ArrayLike | Callable[[np.ndarray], ArrayLike],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Validate and sample per-metre RLGC without imposing a fit topology."""
+    f = np.asarray(frequencies)
+    if np.iscomplexobj(f) or f.ndim != 1 or len(f) < 2:
+        msg = "frequencies must be a real 1-D array with at least two samples"
+        raise ValueError(msg)
+    f = f.astype(float)
+    if not np.all(np.isfinite(f)) or f[0] < 0 or np.any(np.diff(f) <= 0):
+        msg = "frequencies must be finite, nonnegative and strictly increasing"
+        raise ValueError(msg)
+    values = []
+    for label, value in zip(("R", "L", "G", "C"), (R, L, G, C), strict=True):
+        array = np.asarray(value(f) if callable(value) else value)
+        if np.iscomplexobj(array) or array.shape not in ((), f.shape):
+            msg = f"{label} must be a real scalar or an array matching frequencies"
+            raise ValueError(msg)
+        array = np.broadcast_to(array.astype(float), f.shape)
+        if not np.all(np.isfinite(array)) or np.any(array < 0):
+            msg = f"{label} must be finite and nonnegative"
+            raise ValueError(msg)
+        values.append(array)
+    return f, *values
+
+
+def rlgc_transmission_line(
     frequencies: ArrayLike,
     *,
     R: ArrayLike,
@@ -201,29 +234,10 @@ def rlgc_transmission_line(  # noqa: C901 -- validate physical arrays before fit
     Fitting runs once in NumPy/SciPy. Generated Circulax component values are
     ordinary real RLC parameters; no S-to-state-space conversion is used.
     """
-    f = np.asarray(frequencies)
-    if np.iscomplexobj(f) or f.ndim != 1 or len(f) < 2:
-        msg = "frequencies must be a real 1-D array with at least two samples"
-        raise ValueError(msg)
-    f = f.astype(float)
-    if not np.all(np.isfinite(f)) or f[0] < 0 or np.any(np.diff(f) <= 0):
-        msg = "frequencies must be finite, nonnegative and strictly increasing"
-        raise ValueError(msg)
+    f, r, l, g, cap = _sample_rlgc(frequencies, R, L, G, C)
     if not np.isfinite(tolerance) or tolerance <= 0:
         msg = "tolerance must be finite and positive"
         raise ValueError(msg)
-    values = []
-    for label, value in zip(("R", "L", "G", "C"), (R, L, G, C), strict=True):
-        array = np.asarray(value)
-        if np.iscomplexobj(array) or array.shape not in ((), f.shape):
-            msg = f"{label} must be a real scalar or an array matching frequencies"
-            raise ValueError(msg)
-        array = np.broadcast_to(array.astype(float), f.shape)
-        if not np.all(np.isfinite(array)) or np.any(array < 0):
-            msg = f"{label} must be finite and nonnegative"
-            raise ValueError(msg)
-        values.append(array)
-    r, l, g, cap = values
     if not np.any(r) and not np.any(l):
         msg = "The line must have nonzero series impedance"
         raise ValueError(msg)
@@ -275,8 +289,10 @@ def mode_transmission_line(
     an independent choice of arbitrary curves need not admit this passive,
     causal Foster realization. Errors exceeding ``tolerance`` raise ValueError.
 
-    Group velocity is ``c/(n_eff + f*dn_eff/df)``. Compare the group index of
-    the *loaded* electrode to the optical group index when designing a MZM.
+    Group velocity is ``c/(n_eff + f*dn_eff/df)``. When designing a MZM,
+    compare the RF *phase* index of the *loaded* electrode at each modulation
+    frequency with the optical group index: the walk-off phase is
+    ``2*pi*f*L*(n_rf(f) - n_g_opt)/c``.
     Avoid adding a junction R/C twice if it is already included in mode data.
     No additional loads are included by this factory.
     """
@@ -325,3 +341,35 @@ def mode_transmission_line(
         poles=poles,
         tolerance=tolerance,
     )
+
+
+def reduced_rlgc_transmission_line(
+    frequencies: ArrayLike,
+    *,
+    R: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    L: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    G: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    C: ArrayLike | Callable[[np.ndarray], ArrayLike],
+    length: float,
+    z0: float = 50.0,
+    options: ModelFitOptions | None = None,
+) -> Circuit:
+    """Create a compact, transient-capable uniform line from RLGC versus Hz.
+
+    Fit the distributed two-port, rather than discretizing it into RLC sections.
+    The default fit enforces sampled passivity; stable proper poles and
+    nonnegative optional port delays make the realization causal. Invalid or
+    insufficiently accurate fits raise instead of returning an unchecked model.
+    Passivity is sampled, not globally certified; input causality is not certified.
+
+    Ports ``p1`` and ``p2`` are single-ended to ground. There are no internal
+    taps: use :func:`rlgc_transmission_line` when distributed loading is needed.
+    Fitting depends on length; refit for a different length. Use
+    ``circulax.fitting.fit_rlgc`` to inspect, evaluate or save the coefficients.
+    For electrically long lines, :func:`characteristic_rlgc_transmission_line`
+    removes the propagation delay exactly and needs far fewer poles.
+    """
+    from circulax.fitting import circuit_from_coefficients, fit_rlgc
+
+    fitted = fit_rlgc(frequencies, R=R, L=L, G=G, C=C, length=length, z0=z0, options=options)
+    return circuit_from_coefficients(fitted, name="ReducedTransmissionLine")

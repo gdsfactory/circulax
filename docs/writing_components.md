@@ -511,5 +511,5 @@ zero delay. The same equations apply to DC, AC and transient analyses.
 These buffered blocks can model driver bandwidth and its associated phase lag.
 For distributed electrodes, use `mode_transmission_line` with attenuation, RF
 phase effective index and characteristic impedance versus frequency. The MZM
-tutorial uses that workflow and checks the loaded RF group index against the
+tutorial uses that workflow and checks the loaded RF phase index against the
 optical group index. It has no Bessel shaping in its propagation or drivers.

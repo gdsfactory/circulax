@@ -4,10 +4,9 @@ Run from the repository root, with the same affinity/thread limits per variant:
   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 taskset -c 0-3 .venv/bin/python \
       benchmarks/delay_history/run.py --variant current --output /tmp/delay-current
 Use --variant original to load the solver and interpolation from --reference.
-The MZM mode requires the motivating tutorial revision and companion helper
-identified by SHA256 in results.json (these were uncommitted local inputs and
-are deliberately not bundled with this solver patch). It executes that notebook
-in memory, never rewriting it. Lookup, oracle and cache modes run standalone.
+The MZM mode executes examples/photonic/traveling_wave_mzm.ipynb in memory,
+never rewriting it. Historical results.json files record the exact input hashes
+used for those measurements. Lookup, oracle and cache modes run standalone.
 The default reference is the published pre-fix development commit; its solver
 sources match the f73ecab snapshot used for the recorded measurements.
 """
@@ -24,7 +23,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "examples/photonic"))
 
 import jax
 import jax.numpy as jnp
@@ -48,8 +46,8 @@ if opts.mode == "adaptive" and opts.variant != "current":
     parser.error("--mode adaptive compares inferred and explicit capacities on the current solver.")
 if opts.mode == "oracle" and opts.variant != "original":
     parser.error("--mode oracle requires --variant original to load the numerical reference.")
-if opts.mode == "mzm" and not (ROOT / "examples/photonic/traveling_wave_mzm_tutorial.py").is_file():
-    parser.error("MZM mode requires the uncommitted tutorial/helper revision identified in results.json.")
+if opts.mode == "mzm" and not (ROOT / "examples/photonic/traveling_wave_mzm.ipynb").is_file():
+    parser.error("MZM mode requires examples/photonic/traveling_wave_mzm.ipynb.")
 opts.output.mkdir(parents=True, exist_ok=True)
 
 
@@ -276,7 +274,7 @@ else:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    notebook = json.loads((ROOT / "examples/photonic/traveling_wave_mzm_reference.ipynb").read_text())
+    notebook = json.loads((ROOT / "examples/photonic/traveling_wave_mzm.ipynb").read_text())
     namespace = {"__name__": "__benchmark__"}
     # Capture complete real/unrolled state traces for numerical comparisons.
     records = []

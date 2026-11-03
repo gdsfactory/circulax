@@ -12,6 +12,7 @@ docs/ideas/
 *code-workspace
 site/*
 docs/examples/*_files
+docs/examples/*.md
 docs/images/lcr_animation.gif
 docs/examples/*.gif
 examples/**/*.gif
@@ -21,3 +22,6 @@ cmz_optimisation.gif
 .claude/
 
 /parity-results/
+
+# Local build products and extension logs
+/build/
