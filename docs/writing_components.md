@@ -2,6 +2,12 @@
 
 Components are pure Python functions with a decorator. They are automatically compatible with `jax.jit`, `jax.vmap`, and `jax.grad`.
 
+`@component` and `@source` validate signatures and create component classes without
+executing their physics or setup functions. Constructing an instance only stores
+its parameters; physics runs when the instance or solver interface is evaluated.
+Errors in the function body therefore surface on evaluation with the supplied
+parameters, rather than during an artificial evaluation of defaults at import.
+
 ---
 
 ## Quick Reference
