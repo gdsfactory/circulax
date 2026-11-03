@@ -29,6 +29,7 @@ def _native_circuit(*, num_states: int = 0, complex_mode: bool = False, holomorp
         ("dc", "dc"),
         ("sp_wavelength", "dc"),
         ("ac_response", "ac"),
+        ("small_signal", "ac"),
         ("sp_frequency", "ac"),
         ("tran", "tran"),
         ("hb", "tran"),
@@ -188,3 +189,12 @@ def test_prepared_native_variant_reuses_the_bench_built_by_preparation(monkeypat
     prepared.sp_wavelength(**kwargs)
     parent.sp_wavelength(**kwargs)
     assert len(compiles) == 1
+
+
+def test_small_signal_complex_native_rejects_before_registration_or_solve() -> None:
+    """Real-only native derivatives cannot form a full complex-coordinate model."""
+    circuit = _native_circuit(complex_mode=True)
+    circuit.groups["native"].model_id = 1
+    circuit._analysis_factory = _forbid_solve  # noqa: SLF001 -- capability check precedes registration
+    with pytest.raises(NotImplementedError, match="real-only"):
+        circuit.prepare_analysis("small_signal")

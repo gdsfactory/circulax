@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.netlist import _is_recursive_netlist
+from circulax.small_signal import SmallSignalModel, build_small_signal_model, validate_small_signal_groups
 from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
@@ -148,7 +149,7 @@ class Circuit:
         variants so callers may retain it for later execution. DC bias setup is
         also prepared for AC, transient and HB, without calculating that bias.
 
-        Supported names are op, dc, sp_wavelength, ac_response, sp_frequency,
+        Supported names are op, dc, sp_wavelength, ac_response, small_signal, sp_frequency,
         tran and hb. Native HB state-history and non-holomorphic optical
         driven-AC limitations are rejected before simulation execution.
 
@@ -162,6 +163,7 @@ class Circuit:
             "dc": "dc",
             "sp_wavelength": "dc",
             "ac_response": "ac",
+            "small_signal": "ac",
             "sp_frequency": "ac",
             "tran": "tran",
             "hb": "tran",
@@ -171,6 +173,8 @@ class Circuit:
             raise ValueError(msg)
 
         def reject_unsupported(circuit: Circuit) -> None:
+            if analysis == "small_signal":
+                validate_small_signal_groups(circuit.groups, is_complex=circuit.solver.is_complex)
             if analysis == "hb" and any(getattr(group, "num_states", 0) > 0 for group in circuit.groups.values()):
                 msg = "Native OSDI harmonic balance with ABI state slots is not supported"
                 raise NotImplementedError(msg)
@@ -667,6 +671,45 @@ class Circuit:
             z0=z0,
             wl_param=wl_param,
         )
+
+    def small_signal(
+        self,
+        *,
+        y_dc: jax.Array | None = None,
+        params: dict[str, Any] | None = None,
+        **param_updates: Any,
+    ) -> SmallSignalModel:
+        """Linearize at a fixed bias and return a reusable callable model.
+
+        Call the model (or its response method) with freqs in Hz and a mapping
+        of source instance names to complex peak phasors. The result retains
+        both optical field coordinates and provides voltage and power helpers.
+        No scattering loads or normalization are added. Carrier wavelength and
+        other parameters are fixed here, independently of the sweep frequency.
+
+        y_dc is optional; otherwise the standard DC solve is used. Supplied
+        bias must match these parameters and use the standard real coordinate
+        layout. Scalar parameter updates follow dc(); use external jax.vmap
+        for batches. Native registrations may be prepared ahead of tracing with
+        prepare_analysis("small_signal"). Complex native/combined real-only
+        Jacobians are explicitly unsupported; ordinary real native models work.
+        """
+        updates = self._coerce_param_updates(params, param_updates)
+        arrays = self._require_scalar_params(updates, "small_signal")
+        validate_small_signal_groups(self.groups, is_complex=self.solver.is_complex)
+        ac_circuit = self._for_analysis("ac")
+        groups = ac_circuit._with_param_values(arrays)  # noqa: SLF001 -- analysis variant
+        validate_small_signal_groups(groups, is_complex=self.solver.is_complex)
+        dc_groups = (
+            self._for_analysis("dc")._with_param_values(arrays)  # noqa: SLF001 -- analysis variant
+            if self._analysis_factory is not None
+            else None
+        )
+        if dc_groups is not None:
+            validate_small_signal_groups(dc_groups, is_complex=self.solver.is_complex)
+        if y_dc is None:
+            y_dc = self.dc(params=updates)
+        return build_small_signal_model(self, groups, y_dc, dc_groups=dc_groups)
 
     def ac_response(
         self,
