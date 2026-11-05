@@ -1,0 +1,780 @@
+diff --git a/benchmarks/README.md b/benchmarks/README.md
+index f71a141..76c093f 100644
+--- a/benchmarks/README.md
++++ b/benchmarks/README.md
+@@ -18,6 +18,10 @@ The release suite is intentionally small and reproducible:
+ | `mul` | 4-stage diode voltage multiplier | Nonlinear transient comparison |
+ | `ring` | PSP103 ring oscillator | OSDI compact-model scaling through bosdi |
+ 
++The optional `c6288` stress test runs a 10,112-transistor PSP103 multiplier
++through batched BOSDI and sparse KLU. See [c6288/README.md](c6288/README.md)
++for toolchain compatibility, validation, and bounded execution.
++
+ Additional OSDI smoke and accuracy cases are available as `juncap200`,
+ `mosvar`, and `ring-bsim4`. Older exploratory testbenches are retained under
+ `benchmarks/legacy/` and exposed through `legacy-*` runner names.
+diff --git a/benchmarks/ring/bench_circulax.py b/benchmarks/ring/bench_circulax.py
+index a093c1f..f88b841 100644
+--- a/benchmarks/ring/bench_circulax.py
++++ b/benchmarks/ring/bench_circulax.py
+@@ -33,7 +33,9 @@ jax.config.update("jax_enable_x64", True)
+ # subsequent runs hit the cache and skip the cost entirely.  Each
+ # (device-class, sys_size) pair has its own cache entry, so different
+ # N stages don't share but a re-bench at the same N is near-free.
+-_JAX_CACHE = Path.home() / ".cache" / "jax" / "circulax_ring"
++import os
++
++_JAX_CACHE = Path(os.environ.get("CIRCULAX_RING_CACHE", str(Path.home() / ".cache" / "jax" / "circulax_ring")))
+ _JAX_CACHE.mkdir(parents=True, exist_ok=True)
+ jax.config.update("jax_compilation_cache_dir", str(_JAX_CACHE))
+ jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
+@@ -50,7 +52,7 @@ N_STEPS = int(T1 / DT)
+ N_SAVE = 4000
+ 
+ 
+-def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
++def _build_ring(n_stages: int, variant: str, differentiable: bool = False, osdi_reduction: bool = True):
+     """Return (groups, sys_size, port_map) for an N-stage CMOS ring.
+ 
+     ``differentiable=True`` keeps float process parameters as JAX-traced
+@@ -97,7 +99,7 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
+                   "kick": SmoothPulse, "r_kick": Resistor, "cload": Capacitor}
+         return compile_netlist(
+             {"instances": instances, "connections": connections, "ports": {"out": "n1,p1"}},
+-            models,
++            models, osdi_reduction=osdi_reduction,
+         )
+     if variant in ("va", "va_static"):
+         import dataclasses
+@@ -287,7 +289,7 @@ def _dom_freq(t: np.ndarray, x: np.ndarray) -> float:
+ 
+ 
+ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
+-        backend: str = "klu_split", profile_dir: str | None = None) -> dict:
++        backend: str = "klu_split", profile_dir: str | None = None, osdi_reduction: bool = True, waveform_path: Path | None = None) -> dict:
+     """Build, DC-init, JIT-warm, time one 1 µs transient.
+ 
+     When ``profile_dir`` is supplied, ``jax.profiler.start_trace`` wraps
+@@ -297,7 +299,7 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
+     from circulax.solvers import analyze_circuit, setup_transient
+     from circulax.solvers.transient import TrapFactorizedTransientSolver
+ 
+-    groups, sys_size, port_map = _build_ring(n_stages, variant, differentiable=differentiable)
++    groups, sys_size, port_map = _build_ring(n_stages, variant, differentiable=differentiable, osdi_reduction=osdi_reduction)
+     solver = analyze_circuit(groups, sys_size, backend=backend)
+ 
+     t_dc = time.perf_counter()
+@@ -332,6 +334,16 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
+         return {"status": "dc_diverged", "n_stages": n_stages, "variant": variant,
+                 "notes": f"|y0|_max={y_max:.2e}"}
+ 
++    dc_audit = {}
++    if variant == "osdi":
++        from circulax.solvers.assembly import assemble_residual_only_real
++        residual, _ = assemble_residual_only_real(y0, groups, 0.0, 1e18)
++        dc_audit = {
++            "dc_initialization": "unchecked_source_and_gmin_homotopy",
++            "dc_initial_output_V": float(y0[port_map["n1,p1"]]),
++            "dc_max_residual_excluding_ground": float(jnp.max(jnp.abs(residual[1:]))),
++        }
++
+     run_fn = setup_transient(
+         groups, solver, transient_solver=TrapFactorizedTransientSolver,
+     )
+@@ -349,7 +361,7 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
+     saveat_warmup = diffrax.SaveAt(ts=jnp.linspace(0.0, 2 * DT, N_SAVE))
+     t_compile = time.perf_counter()
+     _ = run_fn(
+-        t0=0.0, t1=2 * DT, dt0=DT, y0=y0, saveat=saveat_warmup,
++        t0=jnp.asarray(0.0), t1=jnp.asarray(2 * DT), dt0=jnp.asarray(DT), y0=y0, saveat=saveat_warmup,
+         max_steps=max_steps, stepsize_controller=controller,
+     ).ys.block_until_ready()
+     compile_s = time.perf_counter() - t_compile
+@@ -360,7 +372,7 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
+ 
+     t0 = time.perf_counter()
+     sol = run_fn(
+-        t0=0.0, t1=T1, dt0=DT, y0=y0, saveat=saveat,
++        t0=jnp.asarray(0.0), t1=jnp.asarray(T1), dt0=jnp.asarray(DT), y0=y0, saveat=saveat,
+         max_steps=max_steps, stepsize_controller=controller,
+     )
+     sol.ys.block_until_ready()
+@@ -377,10 +389,13 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
+                 "n_steps": N_STEPS}
+ 
+     v = ys[:, port_map["n1,p1"]]
++    if waveform_path is not None:
++        np.savez_compressed(waveform_path, time=t, voltages=v)
+     mask = t > 100e-9
+     freq = _dom_freq(t[mask], v[mask]) if mask.any() else float("nan")
+ 
+     return {
++        **dc_audit,
+         "status": "ok", "n_stages": n_stages, "variant": variant, "backend": backend,
+         "wall_s": wall, "compile_s": compile_s, "dc_s": dc_s,
+         "n_steps": N_STEPS, "us_per_step": wall / N_STEPS * 1e6,
+diff --git a/benchmarks/run.py b/benchmarks/run.py
+index a233624..5c2d0f7 100644
+--- a/benchmarks/run.py
++++ b/benchmarks/run.py
+@@ -50,6 +50,9 @@ CASES: dict[str, BenchmarkCase] = {
+     ),
+     "juncap200": BenchmarkCase(ROOT / "juncap200" / "run.py", "IHP juncap200 DC sweep via OSDI [VA extra]"),
+     "mosvar": BenchmarkCase(ROOT / "mosvar" / "run.py", "IHP mosvar DC sweep via OSDI [VA extra]"),
++    "c6288": BenchmarkCase(
++        ROOT / "c6288" / "run.py", "PSP103 c6288 multiplier via batched BOSDI (stress test)"
++    ),
+     "ring-bsim4": BenchmarkCase(ROOT / "ring_bsim4" / "bench_bsim4_osdi.py", "BSIM4 ring oscillator via OSDI [VA extra]"),
+     # ── Legacy ───────────────────────────────────────────────────────────────
+     "legacy-rc-pulse": BenchmarkCase(ROOT / "legacy" / "rc_pulse_testbench.py", "Legacy RC pulse testbench"),
+diff --git a/circulax/circuit.py b/circulax/circuit.py
+index e1f5345..4d65c1f 100755
+--- a/circulax/circuit.py
++++ b/circulax/circuit.py
+@@ -97,6 +97,7 @@ class Circuit:
+         self._source_netlist = _source_netlist
+         self._source_models = _source_models
+         self._is_pure_sax = _is_pure_sax
++        self._osdi_reduction = True
+         self._simparams_factory = None
+         self._analysis_factory = None
+         self._analysis_variants = {}
+@@ -114,7 +115,10 @@ class Circuit:
+                     raise ValueError(msg)
+                 for name, group in self.groups.items():
+                     other = variant.groups[name]
+-                    for field in ("var_indices", "jac_rows", "jac_cols"):
++                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
++                        msg = "OSDI analysis changed the configured collapse mapping"
++                        raise ValueError(msg)
++                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+                         if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                             msg = "OSDI analysis changed the circuit scatter layout"
+                             raise ValueError(msg)
+@@ -1024,6 +1028,7 @@ def compile_circuit(
+     max_steps: int = 100,
+     params_map: dict[str, dict[str, str]] | None = None,
+     simparams: Mapping[str, float] | None = None,
++    osdi_reduction: bool = True,
+ ) -> Circuit:
+     """Compile a netlist into a callable :class:`Circuit`.
+ 
+@@ -1049,6 +1054,8 @@ def compile_circuit(
+         rtol: Relative tolerance for the Newton solver.
+         atol: Absolute tolerance for the Newton solver.
+         max_steps: Max Newton iterations.
++        osdi_reduction: Allocate surviving OSDI nodes from configured batch metadata.
++            Set False for the full representation or traced topology-dependent parameters.
+         simparams: Numeric settings queried by native Verilog-A $simparam calls.
+             Applied to every OSDI descriptor, overriding its simulator defaults;
+             retained across DC/AC/transient and device parameter updates. These
+@@ -1088,7 +1095,7 @@ def compile_circuit(
+         source_netlist = net_dict
+         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
+ 
+-    groups, sys_size, port_map = compile_netlist(net_dict, models_map, params_map=params_map)
++    groups, sys_size, port_map = compile_netlist(net_dict, models_map, params_map=params_map, osdi_reduction=osdi_reduction)
+     if is_complex == "auto":
+         is_complex = _infer_is_complex(groups)
+     elif not isinstance(is_complex, bool):
+@@ -1110,6 +1117,7 @@ def compile_circuit(
+         _source_models=source_models,
+         _is_pure_sax=is_pure_sax,
+     )
++    circuit._osdi_reduction = osdi_reduction  # noqa: SLF001 -- retain source recompilation policy
+     recompile = partial(
+         compile_circuit,
+         net_dict,
+@@ -1120,6 +1128,7 @@ def compile_circuit(
+         atol=atol,
+         max_steps=max_steps,
+         params_map=params_map,
++        osdi_reduction=osdi_reduction,
+     )
+     _configure_native_variants(circuit, models_map, recompile)
+     return circuit
+diff --git a/circulax/compiler.py b/circulax/compiler.py
+index a0d1127..6627d0a 100644
+--- a/circulax/compiler.py
++++ b/circulax/compiler.py
+@@ -190,6 +190,7 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
+     models_map: dict,
+     *,
+     params_map: dict[str, dict[str, str]] | None = None,
++    osdi_reduction: bool = True,
+ ) -> tuple[dict, int, dict]:
+     """Compile a netlist into batched, vectorized component groups ready for simulation.
+ 
+@@ -323,6 +324,23 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
+             }
+         )
+ 
++    # Configure the exact immutable batches before assigning global unknowns.
++    if osdi_buckets:
++        from circulax.osdi_topology import configure_batch, union_terminal_nets
++
++    configured = {
++        name: configure_batch(models_map[name], items, reduce=osdi_reduction)
++        for name, items in osdi_buckets.items()
++    }
++    remap = list(range(num_nodes))
++    if osdi_buckets:
++        remap, num_nodes = union_terminal_nets(num_nodes, osdi_buckets, configured)
++    port_to_node_map = {key: remap[value] for key, value in port_to_node_map.items()}
++    for items in (*buckets.values(), *osdi_buckets.values()):
++        for item in items:
++            item["ports"] = [remap[index] for index in item["ports"]]
++    sys_size = num_nodes
++
+     compiled_groups = {}
+ 
+     # Helper to generate unique names for split groups
+@@ -411,26 +429,11 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
+         group_name = comp_type
+         n_dev = len(items)
+         n_pins = descriptor.model.num_pins
+-        n_nodes = descriptor.model.num_nodes  # terminals + non-collapsed internal
+-        n_internal = n_nodes - n_pins  # extra unknowns per instance
++        n_nodes = descriptor.model.num_nodes  # raw slots, including collapsed internals
+ 
+-        params_arr = jnp.array(
+-            [[item["params_dict"][k] for k in descriptor.param_names] for item in items],
+-            dtype=jnp.float64,
+-        )  # (N, num_params)
++        params_arr, handle, topology = configured[comp_type]
+         states_arr = jnp.zeros((n_dev, descriptor.model.num_states), dtype=jnp.float64)
+ 
+-        # Bosdi Tier-3: pre-bake params into an OsdiBatchHandle so per-Newton-iter
+-        # OSDI calls skip the params upload (~20–40 % faster for PSP103).
+-        handle = None
+-        try:
+-            import numpy as _np
+-            from osdi_jax import osdi_setup_batch
+-
+-            handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
+-        except ImportError:
+-            pass  # older bosdi without Tier-3; legacy model_id + params path still works
+-
+         # Regularisation diagonal: 1.0 only on internal reactive-only nodes.
+         # External terminal nodes never need it — the wider circuit KCL provides
+         # their equations.  Internal reactive-only nodes have no equation from
+@@ -440,23 +443,31 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
+         reg_mask = (is_internal & is_reactive).astype(jnp.float64)
+         reg_diag = jnp.diag(reg_mask)  # (num_nodes, num_nodes)
+ 
+-        # Build (N, n_nodes) index array: terminal indices first, then one new
+-        # state slot per internal node per instance (appended to global state vector).
+-        all_var_idx_list = []
+-        for item in items:
+-            terminal_indices = item["ports"]
+-            internal_indices = []
+-            for _i in range(n_internal):
+-                internal_indices.append(sys_size)
+-                sys_size += 1
+-            all_var_idx_list.append(terminal_indices + internal_indices)
+-
+-        all_var_idx = jnp.array(all_var_idx_list, dtype=jnp.int32)  # (N, n_nodes)
++        from circulax.osdi_topology import ReducedOsdiGroup, allocate_raw_indices
+ 
++        all_var_idx, row_mask, jac_take, sys_size = allocate_raw_indices(
++            items, topology, n_nodes, n_pins, sys_size, port_to_node_map
++        )
++        all_var_idx = jnp.asarray(all_var_idx, dtype=jnp.int32)
+         jac_rows = jnp.broadcast_to(all_var_idx[:, :, None], (n_dev, n_nodes, n_nodes)).reshape(-1)
+         jac_cols = jnp.broadcast_to(all_var_idx[:, None, :], (n_dev, n_nodes, n_nodes)).reshape(-1)
++        extra = {}
++        group_cls = OsdiComponentGroup
++        if topology is not None:
++            if getattr(descriptor, "use_schur_reduction", False):
++                msg = "OSDI node collapse and Schur reduction cannot be combined"
++                raise ValueError(msg)
++            group_cls = ReducedOsdiGroup
++            jac_rows, jac_cols = jac_rows[jac_take], jac_cols[jac_take]
++            extra = {
++                "physical_rows": jnp.asarray(row_mask),
++                "jac_take": jnp.asarray(jac_take),
++                "representatives": tuple(map(tuple, topology.raw_to_representative.tolist())),
++                "configured_params": params_arr,
++            }
+ 
+-        compiled_groups[group_name] = OsdiComponentGroup(
++        compiled_groups[group_name] = group_cls(
++            **extra,
+             name=group_name,
+             model_id=descriptor.model.id,
+             num_pins=n_pins,
+diff --git a/circulax/netlist.py b/circulax/netlist.py
+index 5e5ac5a..34e19b2 100644
+--- a/circulax/netlist.py
++++ b/circulax/netlist.py
+@@ -66,12 +66,15 @@ def build_net_map_kfnetlist(nl: kfnl.Netlist) -> tuple[dict[str, int], int]:
+     """
+     port_to_idx: dict[str, int] = {}
+     current_idx = 1
++    # kfnetlist materializes a new Python mapping on every property access.
++    # Read it once, rather than cloning all instance settings for each pin.
++    instances = nl.instances
+ 
+     for net in nl.nets:
+         is_ground = any(
+             (
+                 isinstance(m, kfnl.PortRef)
+-                and (m.instance == "GND" or (m.instance in nl.instances and nl.instances[m.instance].component == "ground"))
++                and (m.instance == "GND" or (m.instance in instances and instances[m.instance].component == "ground"))
+             )
+             or (isinstance(m, kfnl.NetlistPort) and "GND" in m.name)
+             for m in net
+diff --git a/circulax/netlist_io/library.py b/circulax/netlist_io/library.py
+index bf6df0c..a74f89d 100644
+--- a/circulax/netlist_io/library.py
++++ b/circulax/netlist_io/library.py
+@@ -87,6 +87,7 @@ class ResolvedCircuit:
+         analysis: str = "dc",
+         state_policy: str = "reject",
+         simparams: Mapping[str, float] | None = None,
++        osdi_reduction: bool = True,
+     ) -> Any:
+         """Compile with immutable native analysis mode: dc (default), ac, or tran.
+ 
+@@ -110,6 +111,7 @@ class ResolvedCircuit:
+             analysis=analysis,
+             state_policy=state_policy,
+             simparams=simparams,
++            osdi_reduction=osdi_reduction,
+         )
+ 
+ 
+diff --git a/circulax/netlist_io/osdi.py b/circulax/netlist_io/osdi.py
+index a280beb..e76beba 100644
+--- a/circulax/netlist_io/osdi.py
++++ b/circulax/netlist_io/osdi.py
+@@ -328,6 +328,7 @@ def compile_resolved(
+     analysis: str = "dc",
+     state_policy: str = "reject",
+     simparams: Mapping[str, float] | None = None,
++    osdi_reduction: bool = True,
+ ) -> Circuit:
+     """Compile original cards using the same topology builder as registrations."""
+     netlist, models, _ = build_resolved(
+@@ -345,6 +346,7 @@ def compile_resolved(
+         models,
+         backend=backend,
+         is_complex=False,
++        osdi_reduction=osdi_reduction,
+         g_leak=0.0,
+         rtol=1e-8,
+         atol=1e-12,
+diff --git a/circulax/netlist_io/syntax.py b/circulax/netlist_io/syntax.py
+index 852d328..b9a2045 100644
+--- a/circulax/netlist_io/syntax.py
++++ b/circulax/netlist_io/syntax.py
+@@ -39,8 +39,7 @@ def parameters(node: Any) -> dict[str, Any]:
+ 
+ 
+ def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
+-    """Parse original UTF-8 or legacy Latin-1 model cards and includes.
+-    """
++    """Parse original UTF-8 or legacy Latin-1 model cards and includes."""
+     try:
+         import netlist_parser
+     except ModuleNotFoundError as exc:
+@@ -80,5 +79,5 @@ def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
+     if errors or incomplete(root):
+         msg = f"{path}: NetlistParse rejected syntax; spans={errors}; source={text[:100]!r}"
+         raise NetlistError(msg)
+-    aliases = {"Parameters": "ParamStatement", "Instance": "SubcktCall", "Include": "IncludeStatement"}
++    aliases = {"Parameters": "ParamStatement", "Instance": "SubcktCall", "Include": "IncludeStatement", "GlobalStatement": "Global"}
+     return [Statement(aliases.get(n.kind, n.kind), n, path) for n in children(root) if n.kind not in {"Title", "Notation"}]
+diff --git a/circulax/solvers/adjoint.py b/circulax/solvers/adjoint.py
+index a610254..2c528e5 100644
+--- a/circulax/solvers/adjoint.py
++++ b/circulax/solvers/adjoint.py
+@@ -109,23 +109,7 @@ def _build_jq_total(
+     y: jax.Array,
+     sys_size: int,
+ ) -> jax.Array:
+-    """Build the total capacitance matrix C (= dQ/dy) in dense form.
+-
+-    For non-OSDI groups uses ``assemble_gc_real`` which returns G and C
+-    separately.  For OSDI groups, ``assemble_gc_real`` returns C=0 because the
+-    OSDI assembly does not separate G and C.  We patch this by directly calling
+-    ``osdi_eval`` to get the ``cap`` tensor and scatter it using the group's
+-    COO indices.
+-
+-    Returns the unscaled C matrix (multiply by 1/dt at call site).
+-    """
+-    try:
+-        from bosdi.circulax import OsdiComponentGroup
+-
+-        _has_osdi = True
+-    except ImportError:
+-        _has_osdi = False
+-
++    """Build dQ/dy using the same physical row selection as forward assembly."""
+     C = jnp.zeros((sys_size, sys_size), dtype=jnp.float64)
+ 
+     all_rows_list, all_cols_list = [], []
+@@ -136,44 +120,10 @@ def _build_jq_total(
+     static_rows = jnp.concatenate(all_rows_list)
+     static_cols = jnp.concatenate(all_cols_list)
+ 
+-    # Non-OSDI contribution from assemble_gc_real
++    # Includes OSDI capacitance with reduced COO selection.
+     _, c_vals_all = assemble_gc_real(y, component_groups)
+     C = C.at[static_rows, static_cols].add(c_vals_all)
+ 
+-    # OSDI contribution: add cap (not included in assemble_gc_real's c_vals)
+-    if _has_osdi:
+-        for k in sorted(component_groups.keys()):
+-            g = component_groups[k]
+-            if not isinstance(g, OsdiComponentGroup):
+-                continue
+-            # Get cap from OSDI eval
+-            try:
+-                from osdi_jax import osdi_eval, osdi_eval_with_handle
+-
+-                _has_handle = True
+-            except ImportError:
+-                from osdi_jax import osdi_eval
+-
+-                _has_handle = False
+-
+-            v_all = y[g.var_indices].astype(jnp.float64)
+-            try:
+-                if _has_handle and g.handle is not None:
+-                    from osdi_jax import osdi_eval_with_handle
+-
+-                    _, _, _, cap, _ = osdi_eval_with_handle(g.handle, v_all, g.states)
+-                else:
+-                    _, _, _, cap, _ = osdi_eval(g.model_id, v_all, g.params, g.states)
+-            except Exception:  # noqa: BLE001,S112
+-                continue
+-
+-            cap = cap.reshape(-1, g.num_nodes, g.num_nodes)
+-            # Schur reduction if needed (simplification: skip for now, use full cap)
+-            # Scatter into global C
+-            rows = jnp.array(g.jac_rows).reshape(-1)
+-            cols = jnp.array(g.jac_cols).reshape(-1)
+-            C = C.at[rows, cols].add(cap.reshape(-1))
+-
+     return C
+ 
+ 
+@@ -197,14 +147,6 @@ def _jq_matvec_klu(
+     """Compute (J_q/dt)^T · v using sparse matvec, including OSDI cap."""
+     sys_size = v.shape[0]
+ 
+-    try:
+-        from bosdi.circulax import OsdiComponentGroup
+-
+-        _has_osdi = True
+-    except ImportError:
+-        _has_osdi = False
+-
+-    # Non-OSDI contribution
+     _, c_vals_all = assemble_gc_real(y, component_groups)
+ 
+     all_rows_list, all_cols_list = [], []
+@@ -215,40 +157,13 @@ def _jq_matvec_klu(
+     static_rows = jnp.concatenate(all_rows_list)
+     static_cols = jnp.concatenate(all_cols_list)
+ 
+-    # sparse C^T · v for non-OSDI (c_vals_all already has OSDI = 0)
++    # Includes the selected native capacitance entries.
+     result = jax.ops.segment_sum(c_vals_all * v[static_rows], static_cols, num_segments=sys_size)
+ 
+-    # OSDI contributions: add cap contributions directly
+-    if _has_osdi:
+-        for k in sorted(component_groups.keys()):
+-            g = component_groups[k]
+-            if not isinstance(g, OsdiComponentGroup):
+-                continue
+-            try:
+-                from osdi_jax import osdi_eval
+-
+-                try:
+-                    from osdi_jax import osdi_eval_with_handle
+-
+-                    if g.handle is not None:
+-                        _, _, _, cap, _ = osdi_eval_with_handle(g.handle, y[g.var_indices].astype(jnp.float64), g.states)
+-                    else:
+-                        _, _, _, cap, _ = osdi_eval(g.model_id, y[g.var_indices].astype(jnp.float64), g.params, g.states)
+-                except ImportError:
+-                    _, _, _, cap, _ = osdi_eval(g.model_id, y[g.var_indices].astype(jnp.float64), g.params, g.states)
+-            except Exception:  # noqa: BLE001,S112
+-                continue
+-
+-            rows = jnp.array(g.jac_rows).reshape(-1)
+-            cols = jnp.array(g.jac_cols).reshape(-1)
+-            cap_flat = cap.reshape(-1)
+-            # C^T · v: result[cols] += cap_flat * v[rows]
+-            result = result + jax.ops.segment_sum(cap_flat * v[rows], cols, num_segments=sys_size)
+-
+     return result / dt
+ 
+ 
+-def _compute_transient_fd_gradients(  # noqa: PLR0915
++def _compute_transient_fd_gradients(
+     group: Any,
+     y_cur: jax.Array,
+     y_prev: jax.Array,
+@@ -292,28 +207,15 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
+             ``n_params × n_devices`` to ``n_params``.
+ 
+     """
+-    from osdi_jax import osdi_residual_eval
++    from circulax.osdi_topology import checked_residual, gather
+ 
+-    try:
+-        from osdi_jax import osdi_residual_eval_with_handle
+-
+-        _has_handle = True
+-    except ImportError:
+-        _has_handle = False
+-
+-    mid = group.model_id
+     params_np = np.array(jax.device_get(group.params))  # (N, num_params)
+ 
+-    v_all_cur = y_cur[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
+-    v_all_prev = y_prev[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
++    v_all_cur = gather(group, y_cur)  # (N, num_nodes)
++    v_all_prev = gather(group, y_prev)  # (N, num_nodes)
+ 
+-    # Base F(y[k]) and Q(y[k]) and Q(y[k-1])
+-    if _has_handle and group.handle is not None:
+-        cur_base, chg_base_cur, _ = osdi_residual_eval_with_handle(group.handle, v_all_cur, group.states)
+-        _, chg_base_prev, _ = osdi_residual_eval_with_handle(group.handle, v_all_prev, group.states)
+-    else:
+-        cur_base, chg_base_cur, _ = osdi_residual_eval(mid, v_all_cur, group.params, group.states)
+-        _, chg_base_prev, _ = osdi_residual_eval(mid, v_all_prev, group.params, group.states)
++    cur_base, chg_base_cur, _ = checked_residual(group, v_all_cur, group.params)
++    _, chg_base_prev, _ = checked_residual(group, v_all_prev, group.params)
+ 
+     f_base = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(cur_base)
+     q_base_cur = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(chg_base_cur)
+@@ -329,8 +231,8 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
+             params_perturbed[:, pcol] = p_val + h
+             params_jax_pert = jnp.array(params_perturbed, dtype=jnp.float64)
+ 
+-            cur_pert, chg_pert_cur, _ = osdi_residual_eval(mid, v_all_cur, params_jax_pert, group.states)
+-            _, chg_pert_prev, _ = osdi_residual_eval(mid, v_all_prev, params_jax_pert, group.states)
++            cur_pert, chg_pert_cur, _ = checked_residual(group, v_all_cur, params_jax_pert)
++            _, chg_pert_prev, _ = checked_residual(group, v_all_prev, params_jax_pert)
+ 
+             f_pert = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(cur_pert)
+             q_pert_cur = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(chg_pert_cur)
+@@ -357,8 +259,8 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
+             params_jax_pert = jnp.array(params_perturbed, dtype=jnp.float64)
+             h_jax = jnp.asarray(h, dtype=jnp.float64)[:, None]
+ 
+-            cur_pert, chg_pert_cur, _ = osdi_residual_eval(mid, v_all_cur, params_jax_pert, group.states)
+-            _, chg_pert_prev, _ = osdi_residual_eval(mid, v_all_prev, params_jax_pert, group.states)
++            cur_pert, chg_pert_cur, _ = checked_residual(group, v_all_cur, params_jax_pert)
++            _, chg_pert_prev, _ = checked_residual(group, v_all_prev, params_jax_pert)
+ 
+             # Per-device deltas, still in pre-scatter (N_dev, num_nodes) layout.
+             dF_dp_row = (cur_pert - cur_base) / h_jax
+diff --git a/circulax/solvers/assembly.py b/circulax/solvers/assembly.py
+index 6ab0a39..2a83cbc 100644
+--- a/circulax/solvers/assembly.py
++++ b/circulax/solvers/assembly.py
+@@ -61,7 +61,9 @@ def _assemble_osdi_group(
+     except ImportError:
+         _HAS_TIER3 = False
+ 
+-    v_all = y[group.var_indices].astype(jnp.float64)
++    from circulax.osdi_topology import gather, matrix_values, physical_values
++
++    v_all = gather(group, y)
+ 
+     if residual_only and not group.use_schur_reduction:
+         if _HAS_TIER3 and group.handle is not None:
+@@ -72,7 +74,7 @@ def _assemble_osdi_group(
+             (v_all.shape[0], group.num_nodes, group.num_nodes),
+             dtype=cur.dtype,
+         )
+-        return cur, chg, j_eff_stub
++        return physical_values(group, cur), physical_values(group, chg), matrix_values(group, j_eff_stub)
+ 
+     if _HAS_TIER3 and group.handle is not None:
+         cur, cond, chg, cap, _ = osdi_eval_with_handle(group.handle, v_all, group.states)
+@@ -95,7 +97,7 @@ def _assemble_osdi_group(
+         )
+ 
+     j_eff = G + (alpha / dt) * C + group.reg_diag
+-    return cur, chg, j_eff
++    return physical_values(group, cur), physical_values(group, chg), matrix_values(group, j_eff)
+ 
+ 
+ def _schur_reduce_osdi_stamp(
+@@ -185,7 +187,9 @@ def _assemble_osdi_gc_separate(
+     except ImportError:
+         _HAS_TIER3 = False
+ 
+-    v_all = y[group.var_indices].astype(jnp.float64)
++    from circulax.osdi_topology import gather, matrix_values
++
++    v_all = gather(group, y)
+ 
+     if _HAS_TIER3 and group.handle is not None:
+         _, cond, _, cap, _ = osdi_eval_with_handle(group.handle, v_all, group.states)
+@@ -211,7 +215,7 @@ def _assemble_osdi_gc_separate(
+         g_padded = g_padded.at[:, T:, T:].set(jnp.broadcast_to(eye_I, (G.shape[0], I, I)))
+         return g_padded.reshape(-1) + group.reg_diag.reshape(-1), c_padded.reshape(-1)
+ 
+-    return (G + group.reg_diag).reshape(-1), C.reshape(-1)
++    return matrix_values(group, G + group.reg_diag), matrix_values(group, C)
+ 
+ 
+ def _is_osdi(group) -> bool:
+diff --git a/circulax/solvers/sensitivity.py b/circulax/solvers/sensitivity.py
+index 663e4d4..90fa388 100644
+--- a/circulax/solvers/sensitivity.py
++++ b/circulax/solvers/sensitivity.py
+@@ -171,7 +171,22 @@ def _compute_fd_gradients(
+     n_devices = group.params.shape[0]
+     num_nodes = group.num_nodes
+ 
+-    v_all = y_star[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
++    from circulax.osdi_topology import ReducedOsdiGroup, checked_residual, gather
++
++    v_all = gather(group, y_star)  # (N, num_nodes)
++
++    if isinstance(group, ReducedOsdiGroup):
++        if model_id_override is not None and model_id_override != group.model_id:
++            msg = "Reduced OSDI sensitivity requires the configured model registration"
++            raise ValueError(msg)
++        cur_base, _, _ = checked_residual(group, v_all, group.params)
++        gradients = {}
++        for name, col in zip(param_names, param_cols, strict=True):
++            h = eps * jnp.maximum(jnp.abs(group.params[:, col]), 1.0)
++            perturbed = group.params.at[:, col].add(h)
++            cur, _, _ = checked_residual(group, v_all, perturbed)
++            gradients[name] = -jnp.sum((cur - cur_base) / h[:, None] * lam[group.eq_indices], axis=1)
++        return gradients
+ 
+     # Base residual
+     cur_base, _, _ = osdi_residual_eval(mid, v_all, group.params, group.states)
+diff --git a/circulax/wavelength.py b/circulax/wavelength.py
+index ca045fe..c0f1e4f 100644
+--- a/circulax/wavelength.py
++++ b/circulax/wavelength.py
+@@ -129,6 +129,7 @@ def build_wavelength_bench(circuit: Any, compile_fn: Callable, selected: tuple[s
+             attach_testbench(device, sources=fixtures),
+             models,
+             is_complex=True,
++            osdi_reduction=getattr(circuit, "_osdi_reduction", True),
+             g_leak=getattr(circuit.solver, "g_leak", 1e-9),
+             rtol=circuit.rtol,
+             atol=circuit.atol,
+diff --git a/pyproject.toml b/pyproject.toml
+index e550cc7..ca4d87b 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -245,6 +245,7 @@ bench_list       = { cmd = ["python", "benchmarks/run.py", "list"],
+ bench_release    = { cmd = ["python", "benchmarks/run.py", "run", "release"],       description = "Run release benchmark suite" }
+ bench_rc         = { cmd = ["python", "benchmarks/run.py", "run", "rc"],            description = "VACASK/ngspice/Circulax RC benchmark" }
+ bench_ring       = { cmd = ["python", "benchmarks/run.py", "run", "ring"],          description = "PSP103 OSDI ring benchmark" }
++bench_c6288      = { cmd = ["python", "benchmarks/run.py", "run", "c6288"], description = "c6288 batched BOSDI stress test; set VACASK_REPO" }
+ bench_cascade    = { cmd = ["python", "benchmarks/run.py", "run", "legacy-diode-cascade"], description = "Legacy diode cascade testbench" }
+ bench_rectifier  = { cmd = ["python", "benchmarks/run.py", "run", "legacy-rectifier"],      description = "Legacy full-wave rectifier testbench" }
+ bench_lc_ladder  = { cmd = ["python", "benchmarks/run.py", "run", "legacy-lc-ladder"],      description = "Legacy LC ladder scalability testbench" }
+diff --git a/tests/netlist_io/test_library.py b/tests/netlist_io/test_library.py
+index 53ca508..62e78af 100644
+--- a/tests/netlist_io/test_library.py
++++ b/tests/netlist_io/test_library.py
+@@ -247,3 +247,20 @@ def test_positional_primitives_retain_values(tmp_path: Path) -> None:
+     assert instances[1].parameters == {"R": 2000}
+     assert instances[2].parameters["c"] == pytest.approx(3e-12)
+     assert instances[3].parameters["l"] == pytest.approx(4e-9)
++
++
++def test_spice_global_supplies_keep_top_level_nodes(tmp_path: Path) -> None:
++    card = tmp_path / "global.lib"
++    card.write_text(""".global vdd vss
++.subckt gate out
++.model rm sp_resistor r=1k
++R1 vdd mid rm
++R2 mid vss rm
++.ends
++VDD vdd 0 1.2
++VSS vss 0 0
++X1 out gate
++""")
++    resolved = Library.from_file(card).resolve()
++    resistors = [inst for inst in resolved.instances if inst.module == "sp_resistor"]
++    assert [inst.nodes for inst in resistors] == [("vdd", "X1/mid"), ("X1/mid", "vss")]
+diff --git a/tests/test_adjoint.py b/tests/test_adjoint.py
+index d5b85d6..3bd3db6 100644
+--- a/tests/test_adjoint.py
++++ b/tests/test_adjoint.py
+@@ -197,7 +197,6 @@ def test_adjoint_import() -> None:
+ # ---------------------------------------------------------------------------
+ 
+ 
+-@pytest.mark.xfail(reason="OSDI adjoint gradient incorrect — implementation bug, fix pending", strict=True)
+ def test_adjoint_dense_resistor_R(rc_osdi_circuit) -> None:
+     """Discrete adjoint ∂loss/∂R matches FD ground truth (dense solver)."""
+     from circulax.solvers.adjoint import transient_parameter_sensitivity_dense
+@@ -273,7 +272,6 @@ def test_adjoint_dense_resistor_R(rc_osdi_circuit) -> None:
+ # ---------------------------------------------------------------------------
+ 
+ 
+-@pytest.mark.xfail(reason="OSDI adjoint gradient incorrect — implementation bug, fix pending", strict=True)
+ def test_adjoint_dense_capacitor_C(rc_osdi_circuit) -> None:
+     """Discrete adjoint ∂loss/∂C matches FD ground truth (dense solver, reactive path)."""
+     from circulax.solvers.adjoint import transient_parameter_sensitivity_dense
+@@ -345,7 +343,6 @@ def test_adjoint_dense_capacitor_C(rc_osdi_circuit) -> None:
+ # ---------------------------------------------------------------------------
+ 
+ 
+-@pytest.mark.xfail(reason="OSDI adjoint gradient incorrect — implementation bug, fix pending", strict=True)
+ def test_adjoint_dense_final_state_loss(rc_osdi_circuit) -> None:
+     """Discrete adjoint works when loss_fn depends only on final state y[-1]."""
+     from circulax.solvers.adjoint import transient_parameter_sensitivity_dense
+diff --git a/tests/test_kfnetlist.py b/tests/test_kfnetlist.py
+index 6c00e5f..95bd44f 100644
+--- a/tests/test_kfnetlist.py
++++ b/tests/test_kfnetlist.py
+@@ -328,3 +328,28 @@ def test_sax_connections_reject_malformed_port_refs():
+                 "ports": {"bad": "R"},
+             }
+         )
++
++
++def test_node_mapping_reads_instance_snapshot_once() -> None:
++    """Avoid cloning a large Rust instance map for every terminal."""
++    netlist = kfnl.Netlist()
++    netlist.create_inst(name="earth", kcl="", component="ground")
++    netlist.create_inst(name="R", kcl="", component="resistor")
++    netlist.create_net(kfnl.PortRef(instance="earth", port="p1"), kfnl.PortRef(instance="R", port="p2"))
++    netlist.create_net(kfnl.PortRef(instance="R", port="p1"))
++
++    class SnapshotCounter:
++        reads = 0
++        nets = netlist.nets
++
++        @property
++        def instances(self) -> dict:
++            self.reads += 1
++            return netlist.instances
++
++    counted = SnapshotCounter()
++    mapping, size = build_net_map_kfnetlist(counted)
++    assert mapping["earth,p1"] == mapping["R,p2"] == 0
++    assert mapping["R,p1"] == 1
++    assert size == 2
++    assert counted.reads == 1
+diff --git a/tests/test_prepare_analysis.py b/tests/test_prepare_analysis.py
+index 1eaa484..c76caf3 100644
+--- a/tests/test_prepare_analysis.py
++++ b/tests/test_prepare_analysis.py
+@@ -17,7 +17,7 @@ def _forbid_solve(*_args: object, **_kwargs: object) -> None:
+ def _native_circuit(*, num_states: int = 0, complex_mode: bool = False, holomorphic: bool = True) -> Circuit:
+     """Represent a native registration factory without provisioning artifacts."""
+     indices = jnp.array([[0, 1]])
+-    group = SimpleNamespace(var_indices=indices, jac_rows=indices, jac_cols=indices, num_states=num_states, holomorphic=holomorphic)
++    group = SimpleNamespace(var_indices=indices, eq_indices=indices, jac_rows=indices, jac_cols=indices, num_states=num_states, holomorphic=holomorphic)
+     solver = SimpleNamespace(is_complex=complex_mode, solve_dc=_forbid_solve)
+     return Circuit(solver, {"native": group}, 2, {"out": 1})
+ 

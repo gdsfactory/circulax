@@ -171,7 +171,22 @@ def _compute_fd_gradients(
     n_devices = group.params.shape[0]
     num_nodes = group.num_nodes
 
-    v_all = y_star[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
+    from circulax.osdi_topology import ReducedOsdiGroup, checked_residual, gather
+
+    v_all = gather(group, y_star)  # (N, num_nodes)
+
+    if isinstance(group, ReducedOsdiGroup):
+        if model_id_override is not None and model_id_override != group.model_id:
+            msg = "Reduced OSDI sensitivity requires the configured model registration"
+            raise ValueError(msg)
+        cur_base, _, _ = checked_residual(group, v_all, group.params)
+        gradients = {}
+        for name, col in zip(param_names, param_cols, strict=True):
+            h = eps * jnp.maximum(jnp.abs(group.params[:, col]), 1.0)
+            perturbed = group.params.at[:, col].add(h)
+            cur, _, _ = checked_residual(group, v_all, perturbed)
+            gradients[name] = -jnp.sum((cur - cur_base) / h[:, None] * lam[group.eq_indices], axis=1)
+        return gradients
 
     # Base residual
     cur_base, _, _ = osdi_residual_eval(mid, v_all, group.params, group.states)

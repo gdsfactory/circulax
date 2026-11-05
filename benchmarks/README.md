@@ -18,6 +18,10 @@ The release suite is intentionally small and reproducible:
 | `mul` | 4-stage diode voltage multiplier | Nonlinear transient comparison |
 | `ring` | PSP103 ring oscillator | OSDI compact-model scaling through bosdi |
 
+The optional `c6288` stress test runs a 10,112-transistor PSP103 multiplier
+through batched BOSDI and sparse KLU. See [c6288/README.md](c6288/README.md)
+for toolchain compatibility, validation, and bounded execution.
+
 Additional OSDI smoke and accuracy cases are available as `juncap200`,
 `mosvar`, and `ring-bsim4`. Older exploratory testbenches are retained under
 `benchmarks/legacy/` and exposed through `legacy-*` runner names.

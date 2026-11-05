@@ -1,0 +1,156 @@
+{
+  "repositories": {
+    "circulax": {
+      "root": "/home/cdaunt/Documents/ChatGPT/circulax",
+      "head": "a0b94cdff90bdf1e5c63409290d8c631cb449cdb",
+      "branch": "codex/c6288-bosdi-stress",
+      "status": " M benchmarks/README.md\n M benchmarks/ring/bench_circulax.py\n M benchmarks/run.py\n M circulax/circuit.py\n M circulax/compiler.py\n M circulax/netlist.py\n M circulax/netlist_io/library.py\n M circulax/netlist_io/osdi.py\n M circulax/netlist_io/syntax.py\n M circulax/solvers/adjoint.py\n M circulax/solvers/assembly.py\n M circulax/solvers/sensitivity.py\n M pyproject.toml\n M tests/netlist_io/test_library.py\n M tests/test_kfnetlist.py\n?? benchmarks/c6288/\n?? circulax/osdi_topology.py\n?? prompts/\n?? specs/disciplines-and-tolerances.md\n?? tests/test_c6288_benchmark.py\n?? tests/test_osdi_topology.py\n",
+      "untracked_hashes": {}
+    },
+    "bosdi": {
+      "root": "/home/cdaunt/code/bosdi",
+      "head": "75b9a133446740cffc5a1c841b3585a8b162e96b",
+      "branch": "experimental",
+      "status": " M README.md\n M docs/osdi-technical-reference.md\n M src/bosdi/circulax/osdi_component.py\n M src/lib.rs\n M src/osdi_jax.py\n M src/osdi_loader.py\n M src/osdi_shim.cpp\n M tests/test_osdi_0_5.py\n M tests/test_osdi_instance_collapse.py\n?? docs/batch_topology.md\n?? docs/examples/\n?? tests/fixtures/c6288_models.inc\n",
+      "untracked_hashes": {
+        "docs/batch_topology.md": "db8404da98de2a17be8bf6abac037fe7031eacda75f48f322a43df349d200f8f",
+        "docs/examples/reduced_batch.py": "9b2d540491176399068bb359da09c43aea95250d470d41f24aafda01e1786de8",
+        "tests/fixtures/c6288_models.inc": "394b747ff7d08853af3d7bc20a7f28d922c6dd73831c2bae61519177d839e69b"
+      }
+    },
+    "vacask": {
+      "root": "/home/cdaunt/code/vacask/VACASK",
+      "head": "29d99ad2df4d8262e64ba883849c2974b3f01cce",
+      "branch": "main",
+      "status": " M .gitignore\n M CMakeLists.txt\n M benchmark/mul/vacask/prepare.py\n M benchmark/rc/vacask/prepare.py\n M benchmark/ring/ngspice/prepare.py\n M benchmark/ring/vacask/prepare.py\n?? .gitattributes\n?? benchmark/ring/ngspice/runme_15.sp\n?? benchmark/ring/ngspice/runme_21.sp\n?? benchmark/ring/ngspice/runme_27.sp\n?? benchmark/ring/ngspice/runme_3.sp\n?? benchmark/ring/ngspice/runme_31.sp\n?? benchmark/ring/ngspice/runme_33.sp\n?? benchmark/ring/vacask/runme_15.sim\n?? benchmark/ring/vacask/runme_21.sim\n?? benchmark/ring/vacask/runme_27.sim\n?? benchmark/ring/vacask/runme_3.sim\n?? benchmark/ring/vacask/runme_31.sim\n?? benchmark/ring/vacask/runme_33.sim\n?? pixi.lock\n?? pixi.toml\n",
+      "untracked_hashes": {}
+    }
+  },
+  "platform": "Linux-7.1.5-76070105-generic-x86_64-with-glibc2.39",
+  "cpu": "\t: AMD Ryzen AI 9 HX 370 w/ Radeon 890M",
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "python": "3.12.14",
+  "dependencies": "absl-py==2.5.1\nannotated-types==0.8.0\nasttokens==3.0.2\nattrs==26.1.0\nbeautifulsoup4==4.15.0\nbleach==6.4.0\nbosdi @ file:///tmp/circulax-bosdi-experimental\ncertifi==2026.7.22\ncffi==2.1.1\ncharset-normalizer==3.5.2\n-e file:///home/cdaunt/Documents/ChatGPT/circulax\ncomm==0.2.3\ncontourpy==1.4.0\ncryptography==50.0.2\ncycler==0.12.1\ndebugpy==1.8.22\ndefusedxml==0.7.1\ndiffrax==0.7.2\ndocutils==0.23\nequinox==0.13.8\nexecuting==2.3.0\nfastjsonschema==2.22.2\nfonttools==4.67.0\nid==1.6.1\nidna==3.20\niniconfig==2.3.1\nipykernel==7.4.0\nipython==9.17.1\nipython-pygments-lexers==1.1.1\njaraco-classes==3.4.0\njaraco-context==6.1.2\njaraco-functools==4.6.0\njax==0.7.2\njaxellip==0.0.1\njaxlib==0.7.2\njaxtyping==0.3.11\njedi==0.20.1\njeepney==0.9.0\njinja2==3.1.6\njsonschema==4.26.0\njsonschema-specifications==2025.9.1\njupyter-client==8.10.0\njupyter-core==5.9.1\njupyterlab-pygments==0.3.0\nkeyring==25.7.0\nkfnetlist==0.3.0\nkiwisolver==1.5.1\nklujax==0.5.2\nlark==1.3.1\nlineax==0.1.0\nmarkdown-it-py==4.2.0\nmarkupsafe==3.0.4\nmatplotlib==3.11.2\nmatplotlib-inline==0.2.2\nmdurl==0.1.2\nmistune==3.4.0\nml-dtypes==0.6.0\nmore-itertools==11.2.1\nmpmath==1.3.0\nnatsort==8.4.0\nnbclient==0.11.0\nnbconvert==7.17.2\nnbformat==5.11.1\nnest-asyncio2==1.7.4\nnetlist-parser @ git+https://github.com/cdaunt/NetlistParse.rs.git@d83031dd9b75ab8688dea134033eaa14f9107bfb#subdirectory=crates/netlist-py\nnetworkx==3.7\nnh3==0.3.7\nnumpy==2.5.4\nopt-einsum==3.4.0\noptax==0.2.8\noptimistix==0.1.0\norjson==3.13.0\npackaging==26.3\npandas==3.0.6\npandocfilters==1.5.1\nparso==0.8.7\npexpect==4.9.0\npillow==12.3.0\nplatformdirs==4.13.5\npluggy==1.7.0\nprompt-toolkit==3.0.53\npsutil==7.2.2\nptyprocess==0.7.0\npure-eval==0.2.4\npycparser==3.11\npydantic==2.14.1\npydantic-core==2.50.1\npygments==2.21.0\npyparsing==3.3.3\npytest==9.1.1\npython-dateutil==2.9.0.post0\npyyaml==6.0.3\npyzmq==27.2.0\nreadme-renderer==46.0\nreferencing==0.37.0\nrequests==2.34.2\nrequests-toolbelt==1.0.0\nrfc3986==2.0.0\nrich==15.0.0\nrpds-py==2026.9.1\nruff==0.17.1\nsax==0.18.2\nschemdraw==0.23\nscikit-rf==1.13.0\nscipy==1.18.1\nsecretstorage==3.5.0\nsix==1.17.0\nsoupsieve==4.0.1\nstack-data==0.6.3\nsympy==1.14.0\ntinycss2==1.5.1\ntornado==6.6\ntqdm==4.70.1\ntraitlets==5.16.1\ntwine==7.0.0\ntyping-extensions==4.16.0\ntyping-inspection==0.4.4\nurllib3==2.8.0\nwadler-lindig==0.1.7\nwcwidth==0.9.3\nwebencodings==0.6.1\nxarray==2026.9.0\n",
+  "build_command": "SETUPTOOLS_SCM_PRETEND_VERSION_FOR_BOSDI=0.1.9.dev0 uv pip install --python .venv/bin/python --no-deps /tmp/circulax-bosdi-experimental",
+  "experimental_source_hashes": {
+    "src/lib.rs": "961a6d39ca21edab8473acd7159d1eee35ec433121c376bfeebca3003f15326a",
+    "src/osdi_shim.cpp": "3394d94c1d44a9228f5702eb70bb1d6de74cf6ef6d281a72e490c1728ab12129",
+    "src/osdi_jax.py": "7d2bf17a363655086f0b1bfbb51f21bb468f4708f513fb906fe6f4cbee17fda9",
+    "src/osdi_loader.py": "726f7876b6ff4c0df755e999ca5328d1b7f601e37c3cef641a41948f2b1d46c0",
+    "src/bosdi/circulax/osdi_component.py": "d3f569a31435e859ecfb1b437fbf169d9f3b102fd7b8ef951449e43d16b61137",
+    "Cargo.lock": "0469c015e46d784c833daaf771c6ba9e5e6f32c0a2ee230aade74c88d86cf0fc"
+  },
+  "loaded_runtime_modules": {
+    "osdi_jax": {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/osdi_jax.py",
+      "sha256": "7d2bf17a363655086f0b1bfbb51f21bb468f4708f513fb906fe6f4cbee17fda9"
+    },
+    "osdi_loader": {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/osdi_loader.py",
+      "sha256": "726f7876b6ff4c0df755e999ca5328d1b7f601e37c3cef641a41948f2b1d46c0"
+    },
+    "osdi_shim_nb": {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/osdi_shim_nb.cpython-312-x86_64-linux-gnu.so",
+      "sha256": "ae2b7b17f7707d567e13c01c2e50a69fc6ee42af221ffe514d6d02d4e33d04c9"
+    },
+    "bosdi.circulax.osdi_component": {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/bosdi/circulax/osdi_component.py",
+      "sha256": "d3f569a31435e859ecfb1b437fbf169d9f3b102fd7b8ef951449e43d16b61137"
+    }
+  },
+  "threading_note": "Full and reduced use identical default BOSDI Rayon policy (threshold 32 devices, RAYON_NUM_THREADS unset), CPU affinity 24. Native VACASK uses --ncpu 1 --blas-ncpu 1. This is not an equal-thread-budget simulator comparison.",
+  "vacask_options_cpp_sha256": "a9bc3b939ece483d7ddfce3cae76b5a6afa5d2d03a73d6eca0eb15a5a38db949",
+  "external_worktree_diffs_preserved": true,
+  "build_toolchain": {
+    "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)\nbinary: rustc\ncommit-hash: 4a4ef493e3a1488c6e321570238084b38948f6db\ncommit-date: 2026-03-02\nhost: x86_64-unknown-linux-gnu\nrelease: 1.94.0\nLLVM version: 21.1.8",
+    "cxx": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "uv": "uv 0.11.7 (x86_64-unknown-linux-gnu)"
+  },
+  "final_circulax_status": " M benchmarks/README.md\n M benchmarks/ring/bench_circulax.py\n M benchmarks/run.py\n M circulax/circuit.py\n M circulax/compiler.py\n M circulax/netlist.py\n M circulax/netlist_io/library.py\n M circulax/netlist_io/osdi.py\n M circulax/netlist_io/syntax.py\n M circulax/solvers/adjoint.py\n M circulax/solvers/assembly.py\n M circulax/solvers/sensitivity.py\n M circulax/wavelength.py\n M pyproject.toml\n M tests/netlist_io/test_library.py\n M tests/test_adjoint.py\n M tests/test_kfnetlist.py\n M tests/test_prepare_analysis.py\n?? benchmarks/c6288/\n?? circulax/osdi_topology.py\n?? prompts/\n?? specs/disciplines-and-tolerances.md\n?? tests/test_c6288_benchmark.py\n?? tests/test_osdi_topology.py\n",
+  "final_source_hashes": {
+    "circulax/osdi_topology.py": "b50a952fe3c5a8b984ca0f6484f076d63e21035d7425cebaf7e0e4833886753e",
+    "circulax/compiler.py": "6cfe6a6ddfd40f1627cb716fbfa8c14e16e19dce562859c5b42d875125df3d97",
+    "circulax/circuit.py": "17bd287df4e4d6fa63931850c1640706dedadb093b1d7be4b660c5caa4b0729d",
+    "circulax/netlist_io/library.py": "0b5e560678900f666f8b0637d9ce6cdeb9a8c44ef1e692d30ba20a5143944807",
+    "circulax/netlist_io/osdi.py": "65c1cc3ab7dfe02c4a0c552d8b70f17e80c1fe090bc45de602edf4d73165d4ab",
+    "circulax/solvers/assembly.py": "f56f73919f04f97ae9024330fc645aadc7f61dad4de5b0d9452b1e7c5d17d980",
+    "circulax/solvers/sensitivity.py": "eb339b333a87565379becb7922e061f6cf0e52e2e5dd88fa8c2ea63985ff690a",
+    "circulax/solvers/adjoint.py": "38ea9be3c1132b056d40e6c98396eb6de0999577eb99141eda465bd1990c6277",
+    "circulax/wavelength.py": "4c938774e543f05e3d7bef8128d5ca5d1838be14ece5d06801183dd030d0d496",
+    "tests/test_osdi_topology.py": "158931e0bdd33c0ca62370238c723c9c175586b8f81ee2fead49337e36c6494e",
+    "tests/test_adjoint.py": "3fe24ab1bcb79da4107ebe3486d6c661d833a02e7e690b14afd95ec16eda3a5f",
+    "tests/test_prepare_analysis.py": "06fd877ea76649f87a2cc85965a6d49a50dbab575fc1c0e8e06df9b0f4e5538c",
+    "benchmarks/ring/bench_circulax.py": "5c51396dcf093f8def9e9e1d1cc37b0f5fb365bd73b811d98c62f549b5cbab9b",
+    "benchmarks/c6288/audit_ring_startup.py": "0170439085bff9036845832ffc793388613e12cf0603d7c106de4375aa3dcea6",
+    "benchmarks/c6288/bench_circulax.py": "ad80b345388f5648436b2df521c0cbcee85a0e6496b7985c8c5455a1bff8bb14",
+    "benchmarks/c6288/run.py": "592b853c56f9d4327a2eb8ebe647a5ac2ea62bacc7e20805b52f2e0df7276825",
+    "benchmarks/c6288/profile_stamps.py": "5a0fa52f90b83e5dd0890a3cb58929efee387cf8f4e6891b4f59efb5a42edc91",
+    "benchmarks/c6288/bench_vacask.py": "0ab3daed3215fbbe92a3a24f0770d19d5d4d1a06bef05a49745f156545d18f0d",
+    "benchmarks/c6288/write_integration_report.py": "c5bac07ce6567601cd6022e9fc54b9294c1cd0d0e3830df64a784e8038285361",
+    "benchmarks/c6288/summarize_integration.py": "b7d70478f6b1e734944a105f43e372a7c620571f20dd8abb416ae0e9df5f54b7",
+    "benchmarks/c6288/audit_source_topology.py": "2a933427cf945bb254d207b76e27306dbc469f64e4974fa6ab84f5630918a31e",
+    "benchmarks/c6288/repeat_integration.py": "abdd1461691c38de50be3d0ac20aef55ad4887ba94ec164b517e4c5278f0c794",
+    "benchmarks/c6288/plot_integration.py": "a31c34fc49eacdf44c9e5279c2b0013b26a2cab20c9bf89f7cf6d2cf9f25ba77",
+    "benchmarks/c6288/__init__.py": "baaa2481ac70f16532cba75c3c06e52d0c8c79e5fa8ade9b92b77560d0ae1634",
+    "benchmarks/c6288/final_validation.sh": "5b0ac3fee05ec5869daa4cdea95cffde086987125f368e0ecb63d09840f5d31c"
+  },
+  "final_active_runtime": {
+    "osdi_jax": {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/osdi_jax.py",
+      "sha256": "7d2bf17a363655086f0b1bfbb51f21bb468f4708f513fb906fe6f4cbee17fda9"
+    },
+    "osdi_shim_nb": {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/osdi_shim_nb.cpython-312-x86_64-linux-gnu.so",
+      "sha256": "ae2b7b17f7707d567e13c01c2e50a69fc6ee42af221ffe514d6d02d4e33d04c9"
+    },
+    "klujax": {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/klujax.py",
+      "sha256": "15eeb3ae5ee75f3cc055c9cab5fb063a46cb06df4e91b3ed73c3b989a17ee942"
+    }
+  },
+  "verification": {
+    "main_test_count": 354,
+    "released_bosdi_test_count": 22,
+    "bosdi_native_tests_passed": 53,
+    "bosdi_optional_tests_skipped": 30,
+    "c6288_full_runs": 3,
+    "c6288_reduced_runs": 3,
+    "native_runs": 6,
+    "ring_runs": 18,
+    "controlled_ring_startup_runs": 2
+  },
+  "preserved_unrelated_tracked_changes": [
+    "benchmarks/README.md",
+    "benchmarks/run.py",
+    "circulax/netlist.py",
+    "circulax/netlist_io/syntax.py",
+    "pyproject.toml",
+    "tests/netlist_io/test_library.py",
+    "tests/test_kfnetlist.py"
+  ]
+}
