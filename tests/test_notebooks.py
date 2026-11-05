@@ -1,7 +1,7 @@
 """Test execution of notebooks in the examples directory.
 
-These tests are marked ``@pytest.mark.long`` and are only run in the full
-``pytest_all`` task (not ``pytest_run``).  They also require ``papermill``
+These tests are marked ``@pytest.mark.long`` and run in the notebook CI job
+or the full ``pytest_all`` task (not ``pytest_run``). They require ``papermill``
 to be installed — if it is not, the whole module is skipped with a clear
 message rather than failing with an ImportError.
 """
@@ -43,7 +43,9 @@ def _find_notebooks(*dir_parts: str) -> Generator[Path, None, None]:
 
 
 @pytest.mark.long
-@pytest.mark.parametrize("path", sorted(_find_notebooks("examples")))
+@pytest.mark.parametrize(
+    "path", sorted(_find_notebooks("examples")), ids=lambda path: path.relative_to(TEST_DIR).as_posix()
+)
 def test_nbs(path: Path | str) -> None:
     fn = Path(path).name
     if fn in _NEEDS_OSDI and not _has_osdi:
@@ -55,5 +57,6 @@ def test_nbs(path: Path | str) -> None:
         kernel_name="circulax",
         input_path=str(path),
         output_path=None,
+        log_output=True,
     )
     papermill.execute.raise_for_execution_errors(nb, str(NBS_FAIL_DIR / fn))
