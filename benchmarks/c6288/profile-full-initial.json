@@ -1,0 +1,37 @@
+{
+  "representation": "full",
+  "unknowns": 96165,
+  "unique_coo": 1453457,
+  "raw_voltage_shape": [
+    10112,
+    13
+  ],
+  "raw_model_eval": {
+    "seconds_per_call": [
+      0.0036574902973370627,
+      0.004011022302438505,
+      0.0037032405991340054
+    ],
+    "median_s": 0.0037032405991340054,
+    "iterations_per_repeat": 10
+  },
+  "full_system_assembly_including_eval": {
+    "seconds_per_call": [
+      0.006386114298948087,
+      0.005960444899392315,
+      0.006092333700507879
+    ],
+    "median_s": 0.006092333700507879,
+    "iterations_per_repeat": 10
+  },
+  "coalesce_numeric_klu_factor_and_solve": {
+    "seconds_per_call": [
+      0.1418277524993755,
+      0.13481854379933794,
+      0.13277634730038698
+    ],
+    "median_s": 0.13481854379933794,
+    "iterations_per_repeat": 10
+  },
+  "scope": "Zero initial iterate, alpha=1.5, dt=2 ps. Native/assembly/solve measured separately after own JIT warmup; numeric solve includes COO coalescing; not a whole-transient decomposition."
+}

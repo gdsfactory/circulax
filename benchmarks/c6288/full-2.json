@@ -1,0 +1,137 @@
+{
+  "status": "ok",
+  "representation": "full",
+  "stop_s": 2e-09,
+  "step_s": 2e-12,
+  "backend": "klu_split",
+  "solver": "bdf2",
+  "jax": "0.7.2",
+  "platform": "Linux-7.1.5-76070105-generic-x86_64-with-glibc2.39",
+  "initial_conditions": "uic_zero",
+  "newton": "full",
+  "max_newton": 100,
+  "newton_rtol": 1e-06,
+  "newton_atol": 1e-08,
+  "timing_method": "dynamic_times_shared_save_callback",
+  "bosdi": "0.1.9.dev0",
+  "runtime_modules": [
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/osdi_jax.py",
+      "sha256": "7d2bf17a363655086f0b1bfbb51f21bb468f4708f513fb906fe6f4cbee17fda9"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/osdi_shim_nb.cpython-312-x86_64-linux-gnu.so",
+      "sha256": "ae2b7b17f7707d567e13c01c2e50a69fc6ee42af221ffe514d6d02d4e33d04c9"
+    }
+  ],
+  "compiler": "OpenVAF-reloaded 20260616-4-g5ed9e63a",
+  "modules": [
+    {
+      "path": "/home/cdaunt/.cache/circulax/osdi/psp103-ef7c18f42d5f8cbfcb6be7d8dee1e50184c94a93eaed69db8c9ba1bd04c442a8.osdi",
+      "sha256": "79cc7501efc52a14cc4daefae8a44ce4bd4561863e17cd7a24a4ff2d5a0e2637",
+      "abi": "0.4"
+    },
+    {
+      "path": "/home/cdaunt/.cache/circulax/osdi/resistor-3d07d5632e0536224ca410d9867c063626a667b29ed83b941f0f9d69a1594b3f.osdi",
+      "sha256": "6507c9ff29f3203884e5150b18e8bd401e7b0a0524e8c6b4271edbe6ad3c5577",
+      "abi": "0.4"
+    }
+  ],
+  "sources": [
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/ngspice/runme.sim",
+      "sha256": "a2d519799a8a7c5c5dafca5c5bb12901940ac3a7ff0456706b47e7e1caa4a17c"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/ngspice/models.inc",
+      "sha256": "c8e39ac7a08af07605be2affaac98590959ae568715365fde60971e3ac4d5d0c"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/ngspice/multiplier.inc",
+      "sha256": "98f629fc42a2e86fcb205088153946a001aceb14f99dcbe57ba30a9c0ed2f1ad"
+    }
+  ],
+  "leaf_counts": {
+    "vsource": 34,
+    "psp103va": 10112,
+    "r": 32
+  },
+  "topology_s": 6.437836046010489,
+  "configured_topology": {
+    "psp103va": {
+      "raw_width": 13,
+      "num_terminals": 4,
+      "instances": 10112,
+      "surviving_internal_slots": 20224,
+      "patterns": [
+        {
+          "representatives": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            1,
+            2,
+            0,
+            3,
+            3,
+            3,
+            3,
+            12
+          ],
+          "instances": 10112
+        }
+      ],
+      "global_coo_entries": 1708928
+    },
+    "sp_resistor": {
+      "raw_width": 2,
+      "num_terminals": 2,
+      "instances": 32,
+      "surviving_internal_slots": 0,
+      "patterns": [
+        {
+          "representatives": [
+            0,
+            1
+          ],
+          "instances": 32
+        }
+      ],
+      "global_coo_entries": 128
+    }
+  },
+  "linear_structure": {
+    "unique_coo_entries": 1453457,
+    "device_coo_entries": 1709362
+  },
+  "sys_size": 96165,
+  "setup_s": 18.068843757006107,
+  "batches": {
+    "vsource": 2,
+    "pulse_vsource": 32,
+    "psp103va": 10112,
+    "sp_resistor": 32
+  },
+  "compile_s": 3.8749627619981766,
+  "wall_s": 480.71550400397973,
+  "n_steps": 1000,
+  "solver_result": "diffrax._solution.RESULTS<>",
+  "us_per_step": 480715.50400397973,
+  "finite": true,
+  "initial_product": {
+    "expected": "0x00000000",
+    "observed": "0x00000000",
+    "valid_logic": true,
+    "invalid_bits": []
+  },
+  "final_product": {
+    "expected": "0xfffe0001",
+    "observed": "0xfffe0001",
+    "valid_logic": true,
+    "invalid_bits": []
+  },
+  "inputs_high": true,
+  "waveforms": "full-2.npz"
+}

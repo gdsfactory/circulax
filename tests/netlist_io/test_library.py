@@ -247,3 +247,20 @@ def test_positional_primitives_retain_values(tmp_path: Path) -> None:
     assert instances[1].parameters == {"R": 2000}
     assert instances[2].parameters["c"] == pytest.approx(3e-12)
     assert instances[3].parameters["l"] == pytest.approx(4e-9)
+
+
+def test_spice_global_supplies_keep_top_level_nodes(tmp_path: Path) -> None:
+    card = tmp_path / "global.lib"
+    card.write_text(""".global vdd vss
+.subckt gate out
+.model rm sp_resistor r=1k
+R1 vdd mid rm
+R2 mid vss rm
+.ends
+VDD vdd 0 1.2
+VSS vss 0 0
+X1 out gate
+""")
+    resolved = Library.from_file(card).resolve()
+    resistors = [inst for inst in resolved.instances if inst.module == "sp_resistor"]
+    assert [inst.nodes for inst in resistors] == [("vdd", "X1/mid"), ("X1/mid", "vss")]

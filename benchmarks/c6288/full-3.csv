@@ -1,0 +1,2 @@
+status,sys_size,setup_s,compile_s,wall_s,n_steps,us_per_step,solver,backend,newton,max_newton,stop_s,step_s
+ok,96165,18.0759919359989,3.6752946189953946,476.2596966890269,1000,476259.6966890269,bdf2,klu_split,full,100,2e-09,2e-12

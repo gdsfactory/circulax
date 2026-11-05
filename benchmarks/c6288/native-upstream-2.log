@@ -1,0 +1,83 @@
+This is vacask 0.3.4-100-g29d99ad-dirty.
+(c)2023-2026 EDA Lab FE Uni-Lj, Arpad Buermen
+https://codeberg.org/arpadbuermen/VACASK
+  OpenMP parallel processing
+  Cadnip foreign parsers
+
+OpenMP CPUs:        1
+OpenBLAS CPUs:      1
+
+Circuit complexity:
+  Node count:    96165
+  Unknown count: 25380
+  Devices:
+    __hierarchical__: 13 model(s), 12563 instance(s)
+      nmos: 5056 instance(s)
+      pmos: 5056 instance(s)
+      not: 32 instance(s)
+      gatedrv_test: 0 instance(s)
+      __topdef__(c6288_test): 1 instance(s)
+      nor: 2128 instance(s)
+      c6288: 1 instance(s)
+      __topdef__: 1 instance(s)
+      and: 256 instance(s)
+      drv: 32 instance(s)
+      and_test: 0 instance(s)
+      inv_test: 0 instance(s)
+      nor_test: 0 instance(s)
+    vsource: 1 model(s), 34 instance(s)
+      v: 34 instance(s)
+    psp103va: 2 model(s), 10112 instance(s)
+      psp103p: 5056 instance(s)
+      psp103n: 5056 instance(s)
+    sp_resistor: 1 model(s), 32 instance(s)
+      r: 32 instance(s)
+
+System stats:
+  Low-level instances:             10178
+  Subcircuit instances:            12563
+  Number of nodes:                 96165
+  Number of unknowns:              25380
+  Initial number of nonzeros:      158904
+  Initial sparsity:                0.00024669
+
+Clock resolution [ns]:             1
+
+Stats:
+  Parser invocations:              1
+  Parse time:                      0.0246261
+
+  Elaborations:                    1
+  Elaboration time:                0.395572
+
+  Partial elaborations:            4
+  Partial elaboration time:        9.938e-06
+
+  Eval and load calls:             3504
+  Eval and load time:              63.3692
+
+  NR solver calls:                 1031
+  NR solver iterations:            3503
+  NR solver time:                  68.9917
+
+  Bypassable instance evaluations: 35534432
+  Bypass opportunities:            10357024
+  Bypassed evaluations:            10357024
+
+  Real factorizations:             1
+  Real refactorizations:           3502
+  Real solve calls:                3503
+  Real factorization time:         0.0033367
+  Real refactorization time:       4.56308
+  Real solve time:                 0.723094
+
+  Complex factorizations:          0
+  Complex refactorizations:        0
+  Complex solve calls:             0
+  Complex factorization time:      0
+  Complex refactorization time:    0
+  Complex solve time:              0
+
+  Accepted timepoints:             1022
+  Rejected timepoints:             9
+

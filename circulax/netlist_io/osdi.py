@@ -328,6 +328,7 @@ def compile_resolved(
     analysis: str = "dc",
     state_policy: str = "reject",
     simparams: Mapping[str, float] | None = None,
+    osdi_reduction: bool = True,
 ) -> Circuit:
     """Compile original cards using the same topology builder as registrations."""
     netlist, models, _ = build_resolved(
@@ -345,6 +346,7 @@ def compile_resolved(
         models,
         backend=backend,
         is_complex=False,
+        osdi_reduction=osdi_reduction,
         g_leak=0.0,
         rtol=1e-8,
         atol=1e-12,

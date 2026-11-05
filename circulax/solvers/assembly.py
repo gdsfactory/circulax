@@ -61,7 +61,9 @@ def _assemble_osdi_group(
     except ImportError:
         _HAS_TIER3 = False
 
-    v_all = y[group.var_indices].astype(jnp.float64)
+    from circulax.osdi_topology import gather, matrix_values, physical_values
+
+    v_all = gather(group, y)
 
     if residual_only and not group.use_schur_reduction:
         if _HAS_TIER3 and group.handle is not None:
@@ -72,7 +74,7 @@ def _assemble_osdi_group(
             (v_all.shape[0], group.num_nodes, group.num_nodes),
             dtype=cur.dtype,
         )
-        return cur, chg, j_eff_stub
+        return physical_values(group, cur), physical_values(group, chg), matrix_values(group, j_eff_stub)
 
     if _HAS_TIER3 and group.handle is not None:
         cur, cond, chg, cap, _ = osdi_eval_with_handle(group.handle, v_all, group.states)
@@ -95,7 +97,7 @@ def _assemble_osdi_group(
         )
 
     j_eff = G + (alpha / dt) * C + group.reg_diag
-    return cur, chg, j_eff
+    return physical_values(group, cur), physical_values(group, chg), matrix_values(group, j_eff)
 
 
 def _schur_reduce_osdi_stamp(
@@ -185,7 +187,9 @@ def _assemble_osdi_gc_separate(
     except ImportError:
         _HAS_TIER3 = False
 
-    v_all = y[group.var_indices].astype(jnp.float64)
+    from circulax.osdi_topology import gather, matrix_values
+
+    v_all = gather(group, y)
 
     if _HAS_TIER3 and group.handle is not None:
         _, cond, _, cap, _ = osdi_eval_with_handle(group.handle, v_all, group.states)
@@ -211,7 +215,7 @@ def _assemble_osdi_gc_separate(
         g_padded = g_padded.at[:, T:, T:].set(jnp.broadcast_to(eye_I, (G.shape[0], I, I)))
         return g_padded.reshape(-1) + group.reg_diag.reshape(-1), c_padded.reshape(-1)
 
-    return (G + group.reg_diag).reshape(-1), C.reshape(-1)
+    return matrix_values(group, G + group.reg_diag), matrix_values(group, C)
 
 
 def _is_osdi(group) -> bool:

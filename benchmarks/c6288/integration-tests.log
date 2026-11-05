@@ -1,0 +1,493 @@
+........................................................................ [ 25%]
+...............................s..........................s.s........... [ 51%]
+................................................................FFFFFFFF [ 77%]
+.........ssssssssss.............................ssssssssssssssss         [100%]
+=================================== FAILURES ===================================
+_ test_preparation_selects_and_caches_native_registration_without_solving[op-dc] _
+
+analysis = 'op', expected = 'dc'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a11a4c56390>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+_ test_preparation_selects_and_caches_native_registration_without_solving[dc-dc] _
+
+analysis = 'dc', expected = 'dc'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a11a481e180>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+_ test_preparation_selects_and_caches_native_registration_without_solving[sp_wavelength-dc] _
+
+analysis = 'sp_wavelength', expected = 'dc'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a11567fa270>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+_ test_preparation_selects_and_caches_native_registration_without_solving[ac_response-ac] _
+
+analysis = 'ac_response', expected = 'ac'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a1344226ab0>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+_ test_preparation_selects_and_caches_native_registration_without_solving[small_signal-ac] _
+
+analysis = 'small_signal', expected = 'ac'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a11567fa870>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+_ test_preparation_selects_and_caches_native_registration_without_solving[sp_frequency-ac] _
+
+analysis = 'sp_frequency', expected = 'ac'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a11567fba40>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+_ test_preparation_selects_and_caches_native_registration_without_solving[tran-tran] _
+
+analysis = 'tran', expected = 'tran'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a11567faf30>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+_ test_preparation_selects_and_caches_native_registration_without_solving[hb-tran] _
+
+analysis = 'hb', expected = 'tran'
+
+    @pytest.mark.parametrize(
+        ("analysis", "expected"),
+        [
+            ("op", "dc"),
+            ("dc", "dc"),
+            ("sp_wavelength", "dc"),
+            ("ac_response", "ac"),
+            ("small_signal", "ac"),
+            ("sp_frequency", "ac"),
+            ("tran", "tran"),
+            ("hb", "tran"),
+        ],
+    )
+    def test_preparation_selects_and_caches_native_registration_without_solving(analysis: str, expected: str) -> None:
+        """Supported analysis names select immutable native registration modes."""
+        circuit = _native_circuit()
+        calls = []
+    
+        def factory(mode: str) -> Circuit:
+            """Record requested native modes and return a topology-identical variant."""
+            calls.append(mode)
+            return _native_circuit()
+    
+        circuit._analysis_factory = factory  # noqa: SLF001 -- exercise compiler-installed registration factory
+>       prepared = circuit.prepare_analysis(analysis)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prepare_analysis.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+circulax/circuit.py:189: in prepare_analysis
+    self._for_analysis("dc")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <circulax.circuit.Circuit object at 0x7a115678eba0>, analysis = 'dc'
+
+    def _for_analysis(self, analysis: str) -> Circuit:
+        """Select immutable native registrations for this analysis."""
+        if self._analysis_factory is None:
+            return self
+        if analysis not in self._analysis_variants:
+            with jax.ensure_compile_time_eval():
+                variant = self._analysis_factory(analysis)
+                if variant.sys_size != self.sys_size or variant.port_map != self.port_map:
+                    msg = "OSDI analysis changed the circuit topology"
+                    raise ValueError(msg)
+                for name, group in self.groups.items():
+                    other = variant.groups[name]
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        raise ValueError("OSDI analysis changed the configured collapse mapping")
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
+>                       if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+E                       AttributeError: 'types.SimpleNamespace' object has no attribute 'eq_indices'. Did you mean: 'var_indices'?
+
+circulax/circuit.py:120: AttributeError
+=============================== warnings summary ===============================
+tests/test_transient.py: 12 warnings
+  /home/cdaunt/Documents/ChatGPT/circulax/circulax/solvers/transient.py:33: DeprecationWarning: free_numeric is deprecated; handles are freed automatically
+    _klujax_free_numeric(handle)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[op-dc]
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[dc-dc]
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[sp_wavelength-dc]
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[ac_response-ac]
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[small_signal-ac]
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[sp_frequency-ac]
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[tran-tran]
+FAILED tests/test_prepare_analysis.py::test_preparation_selects_and_caches_native_registration_without_solving[hb-tran]
+8 failed, 243 passed, 29 skipped, 12 warnings in 93.34s (0:01:33)
