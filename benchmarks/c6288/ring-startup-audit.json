@@ -1,0 +1,28 @@
+{
+  "full": {
+    "unknowns": 290,
+    "initial_output_V": 1.2649385386979868,
+    "homotopy_max_residual_excluding_ground": 0.0029607549553289716,
+    "refinement_converged": false,
+    "refined_output_V": 1.2109480704661861,
+    "refined_max_residual_excluding_ground": 0.0069006106388864365,
+    "common_uic_success": true,
+    "common_uic_finite": true,
+    "common_uic_freq_MHz": 173.7803825060641
+  },
+  "reduced": {
+    "unknowns": 80,
+    "initial_output_V": 1.2202400853393982,
+    "homotopy_max_residual_excluding_ground": 0.0047197510778400655,
+    "refinement_converged": false,
+    "refined_output_V": 1.2095903480607992,
+    "refined_max_residual_excluding_ground": 0.003425185802654901,
+    "common_uic_success": true,
+    "common_uic_finite": true,
+    "common_uic_freq_MHz": 173.7803825047507
+  },
+  "common_uic_comparison": {
+    "max_abs_V": 1.1261827581598993e-08,
+    "rms_V": 1.6098650780189365e-09
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "scope": "Source gate topology and ordered subcircuit ports after dialect syntax/name-prefix normalization; not an independent audit of the flattened Python netlist or simulator algorithms.",
+  "normalized_lines_ngspice": 2437,
+  "normalized_lines_vacask": 2437,
+  "mismatches": []
+}

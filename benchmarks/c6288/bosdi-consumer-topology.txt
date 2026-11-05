@@ -1,0 +1,189 @@
+# Configured batch topology for reduced global assembly
+
+`OsdiBatchHandle.topology` exposes the **actual post-setup mapping for each
+instance**, for OSDI 0.4 and experimental 0.5. It reads the node map from the
+same immutable native instance snapshots used by `osdi_eval_with_handle` and
+`osdi_residual_eval_with_handle`. It does not infer topology from candidate
+pairs, parameter names, or an operating-point Jacobian.
+
+## API and lifetime
+
+```python
+from osdi_jax import osdi_setup_batch, osdi_eval_with_handle
+
+handle = osdi_setup_batch(model.id, params)  # full native parameter order
+topology = handle.topology
+```
+
+Alternatively, `descriptor.setup_batch([settings0, settings1, ...])` applies
+`OsdiModelDescriptor.make_instance` defaults and case-insensitive names, then
+returns a configured handle. Explicit descriptor `param_names` retain their
+existing positional column semantics. Both APIs run model setup followed by
+instance setup for every device, even when instances share a model card.
+
+The topology object contains:
+
+| Field | Meaning |
+| --- | --- |
+| `handle_id`, `model_id` | Identity of the exact native setup snapshot and immutable model registration |
+| `num_terminals` | External terminal count; terminals are raw slots `0:num_terminals` |
+| `raw_to_representative` | Read-only `int32[N, model.num_nodes]`, in batch order |
+| `physical_row_mask` | Boolean `[N, model.num_nodes]`; true exactly at surviving non-ground representatives |
+
+For device `d`, `raw_to_representative[d, r]` means:
+
+- `r`: slot `r` survives and needs an unknown (or an already allocated terminal net).
+- Another nonnegative raw index `s`: gather the same voltage/value as slot `s`.
+  Only `s` carries the physical equation. Slot `r` carries an equality equation.
+- `-1`: gather zero and allocate no unknown or equation. This includes both
+  nodes shorted to global ground and setup-disabled auxiliary branch variables.
+  The map does not distinguish those two physical meanings; both assemble the
+  same way. Never use `-1` directly as a NumPy/JAX gather or scatter index.
+
+Indices are **raw slot indices**, not compact local indices, global circuit
+indices, or positions in a list of candidate collapsible pairs. Representatives
+are deterministic minimum raw indices within a collapse class; ground wins
+with `-1`. Representatives map to themselves. External terminals can also be
+shorted together or grounded by setup. Internal representatives include genuine
+internal dynamics, active branch-current variables, and noise auxiliaries.
+Absence of a DC stamp is not evidence that a variable may be removed.
+
+Raw voltage, F, and Q widths remain `model.num_nodes`; G and C retain flattened
+row-major width `model.num_nodes**2`. States retain `model.num_states`. This API
+changes none of the existing evaluation signatures or shapes. A topology has
+one row per configured device. For handle evaluations tiled through `vmap`,
+repeat those topology rows in the same device-major order as the handle tiles.
+
+The model registration fixes temperature, analysis, ABI, binary, and numeric
+simulator settings. Parameters are copied into native setup snapshots. Changing
+the caller's parameter array or evaluating a handle cannot change its map.
+`handle.with_params(new_params)` creates an independent handle; obtain its
+`topology` and use that new handle for evaluation. The old handle remains valid
+for existing compiled closures. A new temperature/analysis/settings registration
+requires a newly configured handle and another topology check. Do not use a
+map from one handle with uncached evaluation of different parameters.
+
+`topology` is a host-side configuration query, outside JIT. Save its arrays
+as assembly constants. Re-reading it copies the native map again. Access after
+`handle.free()` raises; previously returned topology snapshots remain readable,
+but they cannot make a freed evaluation handle valid. Keep each handle alive
+until all compiled/asynchronous evaluations using it have finished.
+
+## Gathering and scattering
+
+First union circuit terminal nets for every setup-selected terminal-to-terminal
+or terminal-to-ground short, across **all** devices. Then assign each surviving
+internal representative its own global unknown. Each raw slot inherits its
+representative's global index. Use `-1` for ground without allocating an
+explicit ground unknown. Different instances in one batch may allocate different
+numbers of internals; their evaluation buffers still have identical widths.
+
+Let `P` gather reduced unknowns into raw buffers, with all-zero rows for ground.
+For each evaluation:
+
+1. Gather `v_raw = P y`; grounded/inactive raw slots receive literal zero.
+2. Evaluate the configured handle using the unchanged raw-size buffers.
+3. Scatter-add F and Q **only for `physical_row_mask` rows**, excluding global
+   ground rows. Physical stamps already occupy surviving raw indices.
+4. Scatter-add G and C with that same row mask, and exclude ground columns.
+   Accumulate duplicate global COO coordinates, including shared terminal nets.
+
+For a row-selection/scatter operator `S`, the reduced DAE is
+`S F(P y) + d(S Q(P y))/dt = 0`, with Jacobians `S G P` and `S C P`.
+Apply the same gather/scatter to line-search residuals, previous transient
+charges, and AC stamps `G + j*omega*C`. Charge is disabled in BOSDI's DC mode.
+
+Equality constraints are `F[r] = v[r] - v[s]`, `G[r,r] = 1`, and
+`G[r,s] = -1`, with zero charge. With repeated global indices their two columns
+land on the same coordinate, so they cancel **algebraically**. Ground constraint
+rows are `F[r] = v[r]`, `G[r,r] = 1`; they must be dropped with the ground row.
+Dropping equality rows using `physical_row_mask` avoids floating-point loss from
+adding `+1` and `-1` to small physical conductances in a sparse scatter. It also
+prevents unrelated artificial diagonal regularisation from creating a physical
+stamp on a redundant row. No additional native stamp changes are required.
+
+## Short consumer example
+
+The executable NumPy reference in [examples/reduced_batch.py](examples/reduced_batch.py)
+provides allocation, safe zero-ground gathers, and dense scatter-adds. Tests
+exercise these exact helpers. Circulax should precompute equivalent sparse COO
+masks for its JAX assembly paths.
+
+```python
+# Helpers from docs/examples/reduced_batch.py
+handle = descriptor.setup_batch([{"r": 0}, {"r": 1000}])
+topology = handle.topology
+# Example: both devices share terminal p; n is ground. Net shorts have
+# already been unioned, and terminal p has global index zero.
+raw_indices, system_size = allocate_raw_indices(topology, [[0, -1], [0, -1]], 1)
+y = np.zeros(system_size)
+v_raw = gather_voltages(y, raw_indices)
+states = np.zeros((2, descriptor.model.num_states))
+f, g, q, c, _ = osdi_eval_with_handle(handle, v_raw, states)
+F, G, Q, C = scatter_stamps(topology, raw_indices, f, g, q, c, system_size)
+```
+
+## Required Circulax changes
+
+BOSDI's existing `OsdiComponentGroup` remains backward compatible and continues
+to describe full raw-slot allocation. This change does not automatically reduce
+Circulax circuits. Its compiler and solver need to:
+
+1. Configure the final per-analysis/temperature/settings batch **before**
+   assigning OSDI internal global indices. Reuse the existing handle or call
+   `descriptor.setup_batch`; inspect that exact handle's `topology`.
+2. Union terminal shorts, omit global ground, and allocate only surviving
+   internal representatives. Keep `num_nodes` as the raw evaluation width.
+   Keep `(N, num_nodes)` raw gather indices, plus per-device physical row masks
+   and ground masks. Rebuild `port_to_node_map`/internal aliases consistently.
+3. Replace `y[group.var_indices]` with a safe gather that inserts zero for
+   ground. Build `eq_indices`, `jac_rows`, and `jac_cols` from repeated reduced
+   global indices and the row/column masks. Never scatter using negative
+   indices. Preserve duplicate COO summation.
+4. Apply these masks everywhere stamps are assembled: DC/Newton, line search,
+   transient charge history, AC/small signal, harmonic balance, and derivative
+   or adjoint paths. Apply existing `reg_diag` policy only to surviving physical
+   rows. Retain active noise/dynamic variables; do not use a resistive mask to
+   eliminate unknowns. The Schur-reduction option is a separate transformation
+   and its padded identity rows must not be mixed into this assembly scheme.
+5. On eager parameter updates, configure a new handle and compare maps (and
+   dimensions). If equal, existing reduced indices can be reused. If different,
+   rebuild allocation, sparse structure, solver factorisation and compiled
+   closures, and transfer solution/history through raw representatives. Reject
+   traced topology-changing updates or require full raw-slot allocation;
+   silently reusing reduced indices is incorrect. Existing group `with_params`
+   rebuilds the handle but assumes full allocation, so a future reduced group
+   must also implement this topology check. Direct `eqx.tree_at` parameter swaps
+   must not leave an old handle in place.
+
+For AC assembled from separate DC and AC registrations, compare their maps and
+transfer operating-point values through the raw mapping if necessary. A shared
+reduced indexing plan is valid only when the configured topologies agree.
+
+## Validation and scope
+
+`tests/test_osdi_instance_collapse.py` compares reduced residuals/Jacobians with
+the full equality-constrained formulation and solves DC, backward-Euler and AC
+series-RC/branch examples. It covers mixed batches, ground/inactive slots,
+terminal shorts, parameter updates, descriptor defaults, settings/temperature
+registrations and snapshot lifetime. Both ABI versions run with
+`BOSDI_OPENVAF_05` pointing to an experimental compiler; 0.5 also has independent
+header-fixture coverage.
+
+`tests/fixtures/c6288_models.inc` is copied from VACASK's
+`benchmark/c6288/vacask/models.inc` at commit
+`29d99ad2df4d8262e64ba883849c2974b3f01cce` (local VACASK checkout). Tests use the NMOS
+and PMOS cards with the c6288 wrapper/gate dimensions. Actual setup for each
+card gives:
+
+```text
+raw slot:       0 1 2 3 4 5 6 7 8 9 10 11 12
+representative: 0 1 2 3 4 1 2 0 3 3  3  3 12
+```
+
+Thus seven slots are eliminated and six survive: four terminals plus both
+noise auxiliaries. The count is asserted from setup output, never used to
+construct it. Reduced PSP103 F/Q/G/C match projection of full stamps for DC,
+transient and AC registrations at representative biases. This validates the
+model cards and local assembly, not a full c6288 circuit simulation or a noise
+analysis. No runtime or memory performance improvement has been measured.

@@ -1,0 +1,12 @@
+........................................................................ [ 20%]
+........................................................................ [ 40%]
+........................................................................ [ 61%]
+........................................................................ [ 81%]
+.................................................................        [100%]
+=============================== warnings summary ===============================
+tests/test_transient.py: 12 warnings
+  /home/cdaunt/Documents/ChatGPT/circulax/circulax/solvers/transient.py:33: DeprecationWarning: free_numeric is deprecated; handles are freed automatically
+    _klujax_free_numeric(handle)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+353 passed, 12 warnings in 214.34s (0:03:34)

@@ -87,6 +87,7 @@ class ResolvedCircuit:
         analysis: str = "dc",
         state_policy: str = "reject",
         simparams: Mapping[str, float] | None = None,
+        osdi_reduction: bool = True,
     ) -> Any:
         """Compile with immutable native analysis mode: dc (default), ac, or tran.
 
@@ -110,6 +111,7 @@ class ResolvedCircuit:
             analysis=analysis,
             state_policy=state_policy,
             simparams=simparams,
+            osdi_reduction=osdi_reduction,
         )
 
 

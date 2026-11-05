@@ -1,0 +1,156 @@
+{
+  "sources": [
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/Common103_macrodefs.include",
+      "sha256": "99620f84cd94b39227066b7c22459182a1c96d29034f5f3044954b53581b6d95"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/JUNCAP200_InitModel.include",
+      "sha256": "a1466a398decb846c73d5554c92cb37d53a3db2ae2847b2c14c0e9dfcd30a46a"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/JUNCAP200_macrodefs.include",
+      "sha256": "0ec51c1f167e35bbd1c0699bbc0d7748cd9307423e9ebb2bd6de51cc398a10bf"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/JUNCAP200_parlist.include",
+      "sha256": "3943c3bc09d28ccc9993141987e921f970577e2cde108f88fe55a378f0cca090"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/JUNCAP200_varlist1.include",
+      "sha256": "93c73714f3f1849d71e043ab2e2f13958bcf630677378eca17d18df9ca03a460"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/JUNCAP200_varlist2.include",
+      "sha256": "105d38ecdd13a872bb76b14063dd6a0d0e3657108657ee74e5f3f4f962e3b316"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_ChargesNQS.include",
+      "sha256": "e297466521a69804ef9a9c3d235cc06ab4a90cf504777a199734ff8f90c5ddc5"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_InitNQS.include",
+      "sha256": "e67569b8f2b4d61e0b4e81713f8033179cd5b7487fca1ed73689c518d4d5946c"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_SPCalculation.include",
+      "sha256": "5c638ffdff19f0d4b02dbf3755fab32b84495d39a8148d020a4fedbc38e282af"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_binning.include",
+      "sha256": "3ae9675ce5e087e40fe7dcdb71a76c3b1bcfdef4a5b8ba7aa3e9da13360d9981"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_binpars.include",
+      "sha256": "2b46200137c10956eb0a8e2e67bf7b9212ef8ad482f5010edc594eb999bbad1b"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_macrodefs.include",
+      "sha256": "7356bffa647a8f6db2e22c8bd2afdeaafa3d0ac27bbd6f7065f2b09b5b964a78"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_module.include",
+      "sha256": "aa94a91ab22d503c6478850775f23ba56df76c6af59d6addc3b35fa655cd825b"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/PSP103_nqs_macrodefs.include",
+      "sha256": "f82b2efe8477c70191dc7f1060734dd23e5cdef408ecdeaeed74c82be91a2599"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/juncap200.va",
+      "sha256": "44f75aead02a960d97ecf1e29dda6a18b5254a3c013a6f24b6fe3c9fb08473c4"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/psp103.va",
+      "sha256": "7d741c0d27cfd5aeb0ecf213a001aeb05314d4613a4ce708592327ffee24540b"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/psp103_nqs.va",
+      "sha256": "b72937597aba6b1dd06324cfe0a3f6d42d4379884b76b67cc82f087f2a4f9872"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/psp103v4/psp103t.va",
+      "sha256": "683638aeb1d6458d86fa2e2a513af34170915202c867be290f1666ccae851679"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/Common103_macrodefs.include",
+      "sha256": "99620f84cd94b39227066b7c22459182a1c96d29034f5f3044954b53581b6d95"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/JUNCAP200_InitModel.include",
+      "sha256": "a1466a398decb846c73d5554c92cb37d53a3db2ae2847b2c14c0e9dfcd30a46a"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/JUNCAP200_macrodefs.include",
+      "sha256": "48e9210de0e01f43ee90ced253be2cc0497fa204cdbe581ca32942fce8160ee9"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/JUNCAP200_parlist.include",
+      "sha256": "19107baabec5d3bd367bd14f916ce410a0f68f3a0ef758f4a7b54955024aea74"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/JUNCAP200_varlist1.include",
+      "sha256": "93c73714f3f1849d71e043ab2e2f13958bcf630677378eca17d18df9ca03a460"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/JUNCAP200_varlist2.include",
+      "sha256": "105d38ecdd13a872bb76b14063dd6a0d0e3657108657ee74e5f3f4f962e3b316"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_ChargesNQS.include",
+      "sha256": "2314f13c3940ccb452ee89653a40a5de2fa99cba8367e194e97d522ebb7a935f"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_InitNQS.include",
+      "sha256": "e67569b8f2b4d61e0b4e81713f8033179cd5b7487fca1ed73689c518d4d5946c"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_SPCalculation.include",
+      "sha256": "5ebaf0a8b7949503c4e5ddc8a0ec54808844b0954b87da09d4f1c5e6b2e4b8fa"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_binning.include",
+      "sha256": "86cafc16b8af8426b12886224e8b013d6106d1c5b2515f1504be5c861c0e7811"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_binpars.include",
+      "sha256": "689ecfa6cc156b9a0e54a869ec38790d804bf43b23c12a21e85a7ce6a9015aea"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_macrodefs.include",
+      "sha256": "7356bffa647a8f6db2e22c8bd2afdeaafa3d0ac27bbd6f7065f2b09b5b964a78"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_module.include",
+      "sha256": "d04ef0f77d0832ef03b8d4d1b4c9dd06b5648e81adefd8342fa1f21bdd952594"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/PSP103_nqs_macrodefs.include",
+      "sha256": "f82b2efe8477c70191dc7f1060734dd23e5cdef408ecdeaeed74c82be91a2599"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/juncap200.va",
+      "sha256": "44f75aead02a960d97ecf1e29dda6a18b5254a3c013a6f24b6fe3c9fb08473c4"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/psp103.va",
+      "sha256": "7d741c0d27cfd5aeb0ecf213a001aeb05314d4613a4ce708592327ffee24540b"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/psp103_nqs.va",
+      "sha256": "b72937597aba6b1dd06324cfe0a3f6d42d4379884b76b67cc82f087f2a4f9872"
+    },
+    {
+      "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/psp103v4/psp103t.va",
+      "sha256": "683638aeb1d6458d86fa2e2a513af34170915202c867be290f1666ccae851679"
+    },
+    {
+      "path": "/home/cdaunt/code/vacask/VACASK/devices/spice/resistor.va",
+      "sha256": "b1ee0770bcc2a4ec9de2147b4abbc639df9d3a205056c206b27717ab16d7fced"
+    }
+  ],
+  "compiler": {
+    "path": "/home/cdaunt/code/openvaf-r/OpenVAF/target/release/openvaf-r",
+    "sha256": "01fe75b33d086a59f04d5959f234ca66922b69c1afd1f73d4ff0e3f10ea3fe44"
+  }
+}

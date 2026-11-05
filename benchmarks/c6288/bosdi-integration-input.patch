@@ -1,0 +1,669 @@
+diff --git a/README.md b/README.md
+index 0ee1ed0..c05c7ac 100644
+--- a/README.md
++++ b/README.md
+@@ -182,6 +182,11 @@ preserves a fixed shape for batches whose instances have different parasitic res
+ native paths use the same mapping. Physical currents and charges are stamped into the surviving node; equality rows
+ carry no charge.
+ 
++`handle.topology` exposes each configured instance's actual raw-slot-to-survivor mapping, including ground and
++a physical-row mask for reduced global assembly. Evaluation buffer shapes stay unchanged. See the
++[configured batch topology API and Circulax consumer example](docs/batch_topology.md) for allocation, gathering,
++scattering, and parameter-update requirements.
++
+ ### Integral operators and analysis modes
+ 
+ `load_osdi_model(..., analysis="dc" | "ac" | "tran")` and `osdi_component(..., analysis=...)` select an immutable
+diff --git a/docs/osdi-technical-reference.md b/docs/osdi-technical-reference.md
+index 6f4df43..fe4b4df 100644
+--- a/docs/osdi-technical-reference.md
++++ b/docs/osdi-technical-reference.md
+@@ -48,19 +48,22 @@ validating a model before wiring it into a solver:
+ | `num_resist_jac` / `num_react_jac` | Count of Jacobian entries with the variable RESIST / REACT flag                                      |
+ | `resist_jac_pairs`                 | `List[(node_1, node_2)]` — raw OSDI indices of each resistive Jacobian entry                         |
+ | `react_jac_pairs`                  | `List[(node_1, node_2)]` — same for reactive (dQ/dV)                                                 |
+-| `collapsible_pairs`                | `List[(node_1, node_2)]` — internal nodes that collapse onto terminals when a coupling param is zero |
++| `collapsible_pairs`                | `List[(node_1, node_2)]` — candidate raw-node collapses; not per-instance setup decisions |
+ | `resistive_mask`                   | `List[bool]` of length `num_nodes` — `True` iff that unknown's row can be non-zero at DC             |
+ | `param_names`                      | Canonical alias-0 name per param, in OSDI index order                                                |
+ | `param_flags`                      | Raw `OsdiParamOpvar.flags` per param (kind/type bits)                                                |
+ | `.param_kinds()`                   | Decoded `["INST", "MODEL", "OPVAR", ...]`                                                            |
+ | `.param_types()`                   | Decoded `["REAL", "INT", "STR", ...]`                                                                |
+ 
+-Indices in `*_jac_pairs` are **raw OSDI node indices** (pre-collapse, 0..num_raw_nodes). After bosdi applies
+-`collapsible_pairs`, the resulting `num_nodes`-wide output rows are mapped through an internal `node_map` before the
++Indices in `*_jac_pairs` are **raw OSDI node indices** (pre-collapse, 0..num_raw_nodes). After instance setup selects
++active collapse flags, the resulting `num_nodes`-wide output rows are mapped through an internal `node_map` before the
+ scatter. Structural tests should assert against `resist_jac_pairs`/`react_jac_pairs`; callers that want to stamp the
+ Jacobian into their host system's matrix should use the `cond`/`cap` outputs, which already run through the collapse and
+ are shaped `num_nodes × num_nodes`.
+ 
++For actual configured per-instance mappings, use `OsdiBatchHandle.topology`, not candidate pairs.
++See [configured batch topology](batch_topology.md) for the complete reduced-assembly contract.
++
+ ## Outputs
+ 
+ Outputs are one row per *unknown* — terminals first, then internal Kirchhoff nodes and branch-current auxiliaries.
+diff --git a/src/bosdi/circulax/osdi_component.py b/src/bosdi/circulax/osdi_component.py
+index c99cd5b..309e4d5 100644
+--- a/src/bosdi/circulax/osdi_component.py
++++ b/src/bosdi/circulax/osdi_component.py
+@@ -293,6 +293,25 @@ class OsdiModelDescriptor:
+             out[self.param_names[idx]] = v
+         return out
+ 
++    def setup_batch(self, instances):
++        """Configure instance settings and return a handle with actual topology.
++
++        ``instances`` is an iterable of settings mappings in batch order.
++        Defaults and case-insensitive names follow :meth:`make_instance`.
++        Parameter columns follow this descriptor's order, as in the existing
++        compiler API (explicit ``param_names`` rename columns positionally).
++        Use the returned handle for both topology inspection and evaluation.
++        """
++        import numpy as np
++        from osdi_jax import osdi_setup_batch
++
++        settings = [self.make_instance(dict(instance)) for instance in instances]
++        params = np.asarray(
++            [[values[name] for name in self.param_names] for values in settings],
++            dtype=np.float64,
++        ).reshape(len(settings), self.model.num_params)
++        return osdi_setup_batch(self.model.id, params)
++
+     def make_instance(self, settings: dict) -> dict:
+         """Merge per-instance ``settings`` into ``default_params`` by canonical name."""
+         merged = dict(self.default_params)
+diff --git a/src/lib.rs b/src/lib.rs
+index cb9b5c6..3c59115 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1676,6 +1676,32 @@ pub extern "C" fn osdi_handle_num_nodes(handle_id: u64) -> usize {
+     model_id.map(|id| osdi_model_num_nodes(id)).unwrap_or(0)
+ }
+ 
++/// Copy the exact post-setup map used by handle evaluation, device-major.
++/// Values are raw surviving indices; -1 denotes the private ground sink.
++/// Returns the external terminal count, or -1 for an invalid handle/length.
++/// No topology is recomputed and evaluation never mutates these snapshots.
++#[no_mangle]
++pub unsafe extern "C" fn osdi_handle_topology_ffi(
++    handle_id: u64, out: *mut i32, len: usize,
++) -> i32 {
++    let handles = HANDLES.read().unwrap();
++    let Some(h) = handles.get(&handle_id) else { return -1; };
++    let registry = OSDI_REGISTRY.read().unwrap();
++    let Some(m) = registry.get(&h.model_id) else { return -1; };
++    if len != h.num_devices * m.num_all_nodes || (len > 0 && out.is_null()) {
++        return -1;
++    }
++    for device in 0..h.num_devices {
++        for node in 0..m.num_all_nodes {
++            let offset = device * m.instance_size + m.node_map_off + node * 4;
++            let slot = (h.inst_data_flat.as_ptr().add(offset) as *const i32).read_unaligned();
++            *out.add(device * m.num_all_nodes + node) =
++                if slot == m.num_all_nodes as i32 { -1 } else { slot };
++        }
++    }
++    m.num_terminals as i32
++}
++
+ /// Full-stamp batched eval reusing the handle's pre-setup state.
+ /// `num_devices` is the number of devices the CALLER wants evaluated (derived
+ /// from the voltages buffer). If it's greater than `h.num_devices`, the
+diff --git a/src/osdi_jax.py b/src/osdi_jax.py
+index 55b37f2..841b531 100644
+--- a/src/osdi_jax.py
++++ b/src/osdi_jax.py
+@@ -1,3 +1,5 @@
++from dataclasses import dataclass
++
+ import jax
+ import jax.numpy as jnp
+ import numpy as np
+@@ -309,6 +311,32 @@ jffi.register_ffi_target(
+ )
+ 
+ 
++@dataclass(frozen=True, eq=False)
++class OsdiBatchTopology:
++    """Immutable topology snapshot belonging to one configured handle.
++
++    ``raw_to_representative[d, r]`` is a raw slot index, or -1 for ground
++    (including setup-disabled auxiliary slots). Representatives map to
++    themselves. External terminals occupy ``0:num_terminals``; remaining
++    representatives are internal unknowns, including active dynamics/noise
++    auxiliaries. Only setup-selected collapses remove slots.
++
++    ``physical_row_mask`` excludes equality rows and ground rows. Apply it
++    before scattering F, Q, G, C; gather voltages through the map. Shapes of
++    all evaluation buffers stay unchanged. See docs/batch_topology.md.
++    """
++
++    handle_id: int
++    model_id: int
++    num_terminals: int
++    raw_to_representative: np.ndarray
++
++    @property
++    def physical_row_mask(self):
++        mapping = self.raw_to_representative
++        return mapping == np.arange(mapping.shape[1])
++
++
+ class OsdiBatchHandle:
+     """Opaque handle holding pre-setup (model_data, inst_data) snapshots for N
+     devices. Returned by :func:`osdi_setup_batch`. Auto-freed on garbage
+@@ -324,6 +352,32 @@ class OsdiBatchHandle:
+         self.num_params = int(num_params)
+         self._alive = True
+ 
++    @property
++    def topology(self):
++        """Read the exact native post-setup map; raises after :meth:`free`."""
++        if not self._alive:
++            raise RuntimeError("OsdiBatchHandle has been freed.")
++        mapping, devices, nodes, terminals = osdi_shim_nb.osdi_handle_topology(
++            self.handle_id
++        )
++        # Bytes-backed storage cannot be made writable by a consumer.
++        array = np.frombuffer(
++            np.asarray(mapping, dtype=np.int32).tobytes(), dtype=np.int32
++        ).reshape(devices, nodes)
++        return OsdiBatchTopology(self.handle_id, self.model_id, terminals, array)
++
++    def with_params(self, params):
++        """Configure a new independent handle and topology for updated parameters.
++
++        The original handle stays valid for existing compiled evaluations.
++        Rebuild global indexing if the new topology differs. Temperature,
++        analysis and simulator settings are fixed by the model registration;
++        changing them requires a new registration and batch.
++        """
++        if not self._alive:
++            raise RuntimeError("OsdiBatchHandle has been freed.")
++        return osdi_setup_batch(self.model_id, params)
++
+     def free(self):
+         if self._alive:
+             osdi_shim_nb.osdi_free_handle(self.handle_id)
+diff --git a/src/osdi_loader.py b/src/osdi_loader.py
+index 6bb2f6d..c053e2a 100644
+--- a/src/osdi_loader.py
++++ b/src/osdi_loader.py
+@@ -45,8 +45,8 @@ class OsdiModel:
+     num_states: int
+     osdi_version: str
+     resistive_mask: list  # len == num_nodes; True iff G[i,:] can be non-zero at DC
+-    # Raw OSDI node-index pairs (0..num_nodes, pre-collapse). Use the collapsible
+-    # pairs to compute which internal slots merge onto terminals.
++    # Raw candidate node pairs (pre-collapse); these are NOT setup decisions.
++    # Use OsdiBatchHandle.topology for the actual per-instance mapping.
+     resist_jac_pairs: list = field(default_factory=list)
+     react_jac_pairs: list = field(default_factory=list)
+     collapsible_pairs: list = field(default_factory=list)
+diff --git a/src/osdi_shim.cpp b/src/osdi_shim.cpp
+index 918ba92..fa0c47a 100644
+--- a/src/osdi_shim.cpp
++++ b/src/osdi_shim.cpp
+@@ -3,6 +3,7 @@
+ #include <vector>
+ #include <nanobind/nanobind.h>
+ #include <nanobind/stl/string.h>
++#include <nanobind/stl/vector.h>
+ #include <nanobind/stl/map.h>
+ #include <map>
+ #include "xla/ffi/api/ffi.h"
+@@ -96,6 +97,7 @@ extern "C" {
+         size_t num_params,
+         const double* params
+     );
++    int32_t osdi_handle_topology_ffi(uint64_t handle_id, int32_t* out, size_t len);
+     void osdi_free_handle_ffi(uint64_t handle_id);
+     size_t osdi_handle_num_devices(uint64_t handle_id);
+     size_t osdi_handle_num_nodes(uint64_t handle_id);
+@@ -406,6 +408,15 @@ NB_MODULE(osdi_shim_nb, m) {
+     }, nb::arg("model_id"), nb::arg("num_devices"),
+        nb::arg("num_params"), nb::arg("params_addr"));
+ 
++    m.def("osdi_handle_topology", [](uint64_t handle_id) {
++        size_t devices = osdi_handle_num_devices(handle_id);
++        size_t nodes = osdi_handle_num_nodes(handle_id);
++        std::vector<int32_t> mapping(devices * nodes);
++        int32_t terminals = osdi_handle_topology_ffi(handle_id, mapping.data(), mapping.size());
++        if (terminals < 0) throw nb::value_error("Unknown or freed OSDI batch handle");
++        return nb::make_tuple(mapping, devices, nodes, terminals);
++    }, nb::arg("handle_id"));
++
+     m.def("osdi_free_handle", [](uint64_t handle_id) {
+         osdi_free_handle_ffi(handle_id);
+     }, nb::arg("handle_id"));
+diff --git a/tests/test_osdi_0_5.py b/tests/test_osdi_0_5.py
+index bbf734a..4d2a275 100644
+--- a/tests/test_osdi_0_5.py
++++ b/tests/test_osdi_0_5.py
+@@ -123,6 +123,17 @@ def test_rc_stamp_and_voltage_gradient(binary, analysis, cached):
+         np.testing.assert_allclose(gradient, [[g, -g]])
+ 
+ 
++def test_batch_topology_identity_and_update(binary):
++    descriptor = osdi_component(str(binary), ("p", "n"), version="0.5")
++    handle = descriptor.setup_batch([{"r": 500}, {"r": 2000}])
++    np.testing.assert_array_equal(handle.topology.raw_to_representative, [[0, 1]] * 2)
++    assert handle.topology.physical_row_mask.all()
++    assert handle.topology.num_terminals == 2
++    updated = handle.with_params(np.full((2, descriptor.model.num_params), np.nan))
++    assert updated.handle_id != handle.handle_id
++    np.testing.assert_array_equal(updated.topology.raw_to_representative, [[0, 1]] * 2)
++
++
+ def test_defaults_and_variants(binary):
+     descriptor = osdi_component(str(binary), ("p", "n"), version="0.5")
+     for variant in [
+diff --git a/tests/test_osdi_instance_collapse.py b/tests/test_osdi_instance_collapse.py
+index 5a1789d..35676c4 100644
+--- a/tests/test_osdi_instance_collapse.py
++++ b/tests/test_osdi_instance_collapse.py
+@@ -1,5 +1,6 @@
+ """Native OSDI collapse must follow setup flags for each batched instance."""
+ 
++import os
+ import shutil
+ import subprocess
+ 
+@@ -16,9 +17,21 @@ from osdi_jax import (
+ )
+ 
+ 
++@pytest.fixture(scope="module", params=["0.4", "0.5"])
++def abi(request):
++    compiler = (
++        shutil.which("openvaf-r")
++        if request.param == "0.4"
++        else os.environ.get("BOSDI_OPENVAF_05")
++    )
++    if compiler is None:
++        pytest.skip("Compiler missing; set BOSDI_OPENVAF_05 for experimental 0.5")
++    return request.param, compiler
++
++
+ @pytest.fixture(scope="module")
+-def series_rc(tmp_path_factory):
+-    compiler = shutil.which("openvaf-r")
++def series_rc(tmp_path_factory, abi):
++    version, compiler = abi
+     if compiler is None:
+         pytest.skip("openvaf-r is not installed")
+     root = tmp_path_factory.mktemp("instance-collapse")
+@@ -40,7 +53,7 @@ endmodule
+     subprocess.run(
+         [compiler, str(source), "-o", str(target)], check=True, capture_output=True
+     )
+-    return load_osdi_model(str(target))
++    return load_osdi_model(str(target), version=version)
+ 
+ 
+ @pytest.mark.parametrize("cached", [False, True])
+@@ -98,8 +111,8 @@ def test_short_voltage_buffer_is_rejected(series_rc, cached):
+ 
+ 
+ @pytest.fixture(scope="module")
+-def conditional_branch(tmp_path_factory):
+-    compiler = shutil.which("openvaf-r")
++def conditional_branch(tmp_path_factory, abi):
++    _, compiler = abi
+     if compiler is None:
+         pytest.skip("openvaf-r is not installed")
+     root = tmp_path_factory.mktemp("ground-collapse")
+@@ -126,11 +139,11 @@ endmodule
+ 
+ @pytest.mark.parametrize("cached", [False, True])
+ @pytest.mark.parametrize("analysis", ["dc", "ac", "tran"])
+-def test_inactive_branch_collapses_to_ground(conditional_branch, cached, analysis):
++def test_inactive_branch_collapses_to_ground(conditional_branch, cached, analysis, abi):
+     """Ground a disabled flow unknown; retain and solve the enabled branch."""
+     from osdi_jax import osdi_residual_eval
+ 
+-    model = load_osdi_model(str(conditional_branch), analysis=analysis)
++    model = load_osdi_model(str(conditional_branch), version=abi[0], analysis=analysis)
+     assert any(
+         second == -1 or second == 2**32 - 1 for _, second in model.collapsible_pairs
+     )
+@@ -165,3 +178,337 @@ def test_inactive_branch_collapses_to_ground(conditional_branch, cached, analysi
+         matrix[0, 0] = matrix[1, 1] = 1
+         solution = np.linalg.solve(matrix, [1, 0, 0, 0])
+         np.testing.assert_allclose(g[index, 0] @ solution, expected_current, atol=1e-14)
++
++
++@pytest.fixture(scope="module")
++def reduced_assembly():
++    import importlib.util
++    from pathlib import Path
++
++    path = Path(__file__).parents[1] / "docs/examples/reduced_batch.py"
++    spec = importlib.util.spec_from_file_location("reduced_batch", path)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++@pytest.mark.parametrize("analysis", ["dc", "tran", "ac"])
++@pytest.mark.parametrize("ground_branch", [False, True])
++def test_reduced_stamps_and_solutions(
++    series_rc, conditional_branch, reduced_assembly, analysis, ground_branch
++):
++    """Full equality-constrained DAE and reduced DC/BE/AC solve agree."""
++    model = load_osdi_model(
++        str(conditional_branch) if ground_branch else series_rc.path,
++        version=series_rc.osdi_version,
++        analysis=analysis,
++    )
++    params = np.full((2, model.num_params), np.nan)
++    name = "enabled" if ground_branch else "r"
++    params[:, model.param_names.index(name)] = [0, 1 if ground_branch else 1000]
++    handle = osdi_setup_batch(model.id, params)
++    topology = handle.topology
++    mapping = topology.raw_to_representative
++    assert mapping.shape == (2, model.num_nodes)
++    assert topology.num_terminals == model.num_pins
++    assert not topology.physical_row_mask[0].all()
++    assert topology.physical_row_mask[1].all()
++    if ground_branch:
++        assert mapping[0, -1] == -1
++    else:
++        assert mapping[0, 2] == 0  # zero series resistance shorts internal to p
++    assert np.all(mapping[1] == np.arange(model.num_nodes))
++    for row in mapping:
++        for rep in row[row >= 0]:
++            assert row[rep] == rep
++    # Deliberately share terminal 0 between devices and omit global ground.
++    indices, size = reduced_assembly.allocate_raw_indices(topology, [[0, -1]] * 2, 1)
++    y = np.linspace(0.2, 0.8, size)
++    v = reduced_assembly.gather_voltages(y, indices)
++    states = np.zeros((2, model.num_states))
++    f, g, q, c, _ = osdi_eval_with_handle(handle, v, states)
++    f, g, q, c = map(np.asarray, (f, g, q, c))
++    stamps = reduced_assembly.scatter_stamps(topology, indices, f, g, q, c, size)
++    fr, gr, qr, cr = stamps
++    n = model.num_nodes
++    # Compare S F(P y), S J P against full formulation P.T F, P.T J P.
++    # Constraint Jacobians cancel exactly under tied column indices.
++    projection = np.zeros((2 * n, size))
++    for d, row in enumerate(indices):
++        for r, idx in enumerate(row):
++            if idx >= 0:
++                projection[d * n + r, idx] = 1
++    full_g = np.zeros((2 * n, 2 * n))
++    full_c = full_g.copy()
++    for d in range(2):
++        sl = slice(d * n, (d + 1) * n)
++        full_g[sl, sl] = g[d].reshape(n, n)
++        full_c[sl, sl] = c[d].reshape(n, n)
++    for reduced, full in [(fr, f.ravel()), (qr, q.ravel())]:
++        np.testing.assert_allclose(reduced, projection.T @ full, atol=1e-15)
++    for reduced, full in [(gr, full_g), (cr, full_c)]:
++        np.testing.assert_allclose(
++            reduced, projection.T @ full @ projection, atol=1e-15
++        )
++    # Numerical derivatives of reduced physical residual/charge.
++    for j in range(size):
++        delta = np.zeros(size)
++        delta[j] = 1e-6
++
++        def evaluate(y):
++            v = reduced_assembly.gather_voltages(y, indices)
++            ff, gg, qq, cc, _ = osdi_eval_with_handle(handle, v, states)
++            return reduced_assembly.scatter_stamps(
++                topology, indices, ff, gg, qq, cc, size
++            )
++
++        plus, minus = evaluate(y + delta), evaluate(y - delta)
++        np.testing.assert_allclose((plus[0] - minus[0]) / 2e-6, gr[:, j], atol=1e-12)
++        np.testing.assert_allclose((plus[2] - minus[2]) / 2e-6, cr[:, j], atol=1e-21)
++    # Solve DC, backward Euler with nonzero previous charge, or AC.
++    alpha = {"dc": 0, "tran": 1e9, "ac": 2j * np.pi * 1e9}[analysis]
++    reduced_matrix = (gr + alpha * cr).copy()
++    reduced_rhs = alpha * qr
++    reduced_matrix[0] = 0
++    reduced_matrix[0, 0] = 1
++    reduced_rhs = reduced_rhs.copy()
++    reduced_rhs[0] = 1
++    reduced_solution = np.linalg.solve(reduced_matrix, reduced_rhs)
++    for d in range(2):
++        full_matrix = (g[d] + alpha * c[d]).reshape(n, n).copy()
++        rhs = alpha * q[d].copy()
++        full_matrix[:2] = 0
++        full_matrix[0, 0] = full_matrix[1, 1] = 1
++        rhs[:2] = [1, 0]
++        solution = np.linalg.solve(full_matrix, rhs)
++        gathered = reduced_assembly.gather_voltages(reduced_solution, indices)[d]
++        np.testing.assert_allclose(solution, gathered, rtol=1e-12, atol=1e-14)
++
++
++def test_topology_lifetime_and_updates(series_rc):
++    import jax
++    import osdi_shim_nb
++
++    model = series_rc
++    params = np.full((1, model.num_params), np.nan)
++    handle = osdi_setup_batch(model.id, params)
++    old = handle.topology
++    assert old.handle_id == handle.handle_id and old.model_id == model.id
++    with pytest.raises(ValueError):
++        old.raw_to_representative[0, 0] = 99
++    with pytest.raises(ValueError):
++        old.raw_to_representative.setflags(write=True)
++    params[:, model.param_names.index("r")] = 1000
++    updated = handle.with_params(params)
++    assert updated.handle_id != handle.handle_id
++    assert not np.array_equal(
++        old.raw_to_representative, updated.topology.raw_to_representative
++    )
++    np.testing.assert_array_equal(
++        old.raw_to_representative, handle.topology.raw_to_representative
++    )
++    # Updating caller params never changes either immutable native snapshot.
++    params[:] = 0
++    assert updated.topology.physical_row_mask.all()
++    states = np.zeros((1, model.num_states))
++    voltage = np.ones((1, model.num_nodes))
++    evaluate = jax.jit(lambda v: osdi_eval_with_handle(handle, v, states))
++    evaluate(voltage)[0].block_until_ready()
++    np.testing.assert_array_equal(
++        old.raw_to_representative, handle.topology.raw_to_representative
++    )
++    handle.free()
++    with pytest.raises(RuntimeError, match="freed"):
++        _ = handle.topology
++    with pytest.raises(RuntimeError, match="freed"):
++        handle.with_params(params)
++    with pytest.raises(ValueError, match="freed"):
++        osdi_shim_nb.osdi_handle_topology(handle.handle_id)
++    assert old.raw_to_representative.shape == (1, model.num_nodes)
++
++
++def test_descriptor_setup_batch_defaults_and_names(series_rc):
++    from bosdi.circulax import osdi_component
++
++    descriptor = osdi_component(
++        series_rc.path,
++        ("p", "n"),
++        version=series_rc.osdi_version,
++        default_params={"r": 1000},
++    )
++    handle = descriptor.setup_batch([{}, {"R": 0}])
++    assert handle.num_params == descriptor.model.num_params
++    assert handle.topology.physical_row_mask[0].all()
++    assert not handle.topology.physical_row_mask[1].all()
++    assert descriptor.with_analysis("dc").setup_batch([{}]).model_id != handle.model_id
++
++    # Legacy names rename the complete native parameter vector positionally.
++    names = tuple(f"column{i}" for i in range(series_rc.num_params))
++    resistance_name = names[series_rc.param_names.index("r")]
++    renamed = osdi_component(
++        series_rc.path,
++        ("p", "n"),
++        param_names=names,
++        version=series_rc.osdi_version,
++        default_params={resistance_name: 1000},
++    )
++    np.testing.assert_array_equal(
++        renamed.setup_batch([{}, {resistance_name: 0}]).topology.raw_to_representative,
++        handle.topology.raw_to_representative,
++    )
++
++
++def test_topology_uses_registration_temperature_and_settings(tmp_path):
++    compiler = shutil.which("openvaf-r")
++    if compiler is None:
++        pytest.skip("openvaf-r is not installed")
++    source = tmp_path / "configured_collapse.va"
++    source.write_text("""`include "disciplines.vams"
++module configured_collapse(p, n);
++  inout p, n;
++  electrical p, n, mid;
++  parameter real r = 0;
++  analog begin
++    if (r > 0)
++      I(p, mid) <+ V(p, mid)/r * $temperature/300 * $simparam("scale", 1);
++    else V(p, mid) <+ 0;
++    I(mid, n) <+ V(mid, n)/1000;
++  end
++endmodule
++""")
++    binary = tmp_path / "configured_collapse.osdi"
++    subprocess.run(
++        [compiler, str(source), "-o", str(binary)], check=True, capture_output=True
++    )
++    from bosdi.circulax import osdi_component
++
++    handles = []
++    for temperature, settings in [(280, {}), (330, {}), (280, {"scale": 2})]:
++        descriptor = osdi_component(
++            str(binary), ("p", "n"), temperature=temperature, simparams=settings
++        )
++        handle = descriptor.setup_batch([{}, {"r": 1000}])
++        handles.append(handle)
++        mapping = handle.topology.raw_to_representative
++        assert not handle.topology.physical_row_mask[0].all()
++        assert handle.topology.physical_row_mask[1].all()
++        voltages = np.array([[1.0, 0.0, 1.0], [1.0, 0.0, 0.0]])
++        assert mapping[0, 2] == 0
++        f = osdi_eval_with_handle(handle, voltages, np.empty((2, 0)))[0]
++        np.testing.assert_allclose(
++            f[:, 0], [0.001, temperature / 300 / 1000 * settings.get("scale", 1)]
++        )
++    assert len({h.model_id for h in handles}) == 3
++    # Re-read after configuring the other registrations: no shared mutable map.
++    assert not handles[0].topology.physical_row_mask.all()
++
++
++@pytest.mark.parametrize("analysis", ["dc", "tran", "ac"])
++def test_c6288_psp103_cards(analysis, reduced_assembly):
++    """Actual setup removes seven parasitic slots and retains both noise slots."""
++    import re
++    from pathlib import Path
++    from bosdi.circulax import osdi_component
++
++    binary = Path(__file__).parent / "compiled_osdi/psp103v4_psp103.osdi"
++    if not binary.exists():
++        pytest.skip("PSP103 binary not compiled")
++    cards = (Path(__file__).parent / "fixtures/c6288_models.inc").read_text()
++    blocks = re.findall(r"model\s+\w+\s+psp103va\s*\(([^)]*)\)", cards, re.S)
++    assert len(blocks) == 2
++    all_maps = []
++    for d, block in enumerate(blocks):
++        settings = {
++            k: float(v) for k, v in re.findall(r"(\w+)\s*=\s*([+-]?[\d.eE+-]+)", block)
++        }
++        # c6288's NMOS/PMOS wrappers and gate instance dimensions.
++        w, length, ld = (0.5e-6 if d == 0 else 1e-6), 0.2e-6, 0.5e-6
++        settings.update(
++            w=w, l=length, ad=w * ld, **{"as": w * ld}, pd=2 * (w + ld), ps=2 * (w + ld)
++        )
++        descriptor = osdi_component(
++            str(binary),
++            ("d", "g", "s", "b"),
++            default_params=settings,
++            analysis=analysis,
++        )
++        handle = descriptor.setup_batch([{}])
++        topology = handle.topology
++        mapping = topology.raw_to_representative
++        # Count is measured from setup, never used to construct the mapping.
++        assert descriptor.model.num_nodes == 13
++        assert np.count_nonzero(~topology.physical_row_mask) == 7
++        assert np.count_nonzero(topology.physical_row_mask[:, 4:]) == 2
++        all_maps.append(mapping.copy())
++        indices, size = reduced_assembly.allocate_raw_indices(
++            topology, [[0, 1, -1, -1]], 2
++        )
++        y = np.zeros(size)
++        y[:2] = [1.0, 0.8] if d == 0 else [-1.0, -0.8]
++        v = reduced_assembly.gather_voltages(y, indices)
++        states = np.zeros((1, descriptor.model.num_states))
++        full = osdi_eval_with_handle(handle, v, states)
++        f, g, q, c = map(np.asarray, full[:4])
++        reduced = reduced_assembly.scatter_stamps(topology, indices, f, g, q, c, size)
++        assert all(np.isfinite(stamp).all() for stamp in reduced)
++        n = descriptor.model.num_nodes
++        projection = np.zeros((n, size))
++        for raw, idx in enumerate(indices[0]):
++            if idx >= 0:
++                projection[raw, idx] = 1
++        for result, raw, matrix in zip(
++            reduced, [f, g, q, c], [False, True, False, True]
++        ):
++            expected = (
++                projection.T @ raw.reshape(n, n) @ projection
++                if matrix
++                else projection.T @ raw.ravel()
++            )
++            np.testing.assert_allclose(result, expected, rtol=1e-10, atol=1e-15)
++    np.testing.assert_array_equal(all_maps[0], all_maps[1])
++
++
++def test_external_terminal_aliases_and_ground(tmp_path, abi, reduced_assembly):
++    """Terminal collapses require global net unions before unknown allocation."""
++    version, compiler = abi
++    source = tmp_path / "terminal_shorts.va"
++    source.write_text("""`include "disciplines.vams"
++module terminal_shorts(p, n);
++  inout p, n;
++  electrical p, n;
++  parameter integer mode = 0;
++  analog begin
++    if (mode == 1) V(p, n) <+ 0;
++    else I(p, n) <+ V(p, n)/1000;
++    if (mode == 2) V(p) <+ 0;
++  end
++endmodule
++""")
++    binary = tmp_path / "terminal_shorts.osdi"
++    subprocess.run(
++        [compiler, str(source), "-o", str(binary)], check=True, capture_output=True
++    )
++    from bosdi.circulax import osdi_component
++
++    descriptor = osdi_component(str(binary), ("p", "n"), version=version)
++    handle = descriptor.setup_batch([{"mode": 0}, {"mode": 1}, {"mode": 2}])
++    mapping = handle.topology.raw_to_representative
++    np.testing.assert_array_equal(mapping[:, :2], [[0, 1], [0, 0], [-1, 1]])
++    with pytest.raises(ValueError, match="Union"):
++        reduced_assembly.allocate_raw_indices(handle.topology, [[0, 1]] * 3, 2)
++    indices, size = reduced_assembly.allocate_raw_indices(
++        handle.topology, [[0, 1], [0, 0], [-1, 1]], 2
++    )
++    np.testing.assert_array_equal(indices[:, :2], [[0, 1], [0, 0], [-1, 1]])
++    assert size == 2  # all extra flow slots were disabled by setup
++
++
++@pytest.mark.parametrize("count", [0, 65])
++def test_empty_and_parallel_mixed_topology(series_rc, count):
++    params = np.full((count, series_rc.num_params), np.nan)
++    params[:, series_rc.param_names.index("r")] = np.arange(count) % 2 * 1000
++    handle = osdi_setup_batch(series_rc.id, params)
++    mapping = handle.topology.raw_to_representative
++    assert mapping.shape == (count, series_rc.num_nodes)
++    for d, row in enumerate(mapping):
++        np.testing.assert_array_equal(row, [0, 1, 2] if d % 2 else [0, 1, 0])

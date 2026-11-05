@@ -197,7 +197,6 @@ def test_adjoint_import() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="OSDI adjoint gradient incorrect — implementation bug, fix pending", strict=True)
 def test_adjoint_dense_resistor_R(rc_osdi_circuit) -> None:
     """Discrete adjoint ∂loss/∂R matches FD ground truth (dense solver)."""
     from circulax.solvers.adjoint import transient_parameter_sensitivity_dense
@@ -273,7 +272,6 @@ def test_adjoint_dense_resistor_R(rc_osdi_circuit) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="OSDI adjoint gradient incorrect — implementation bug, fix pending", strict=True)
 def test_adjoint_dense_capacitor_C(rc_osdi_circuit) -> None:
     """Discrete adjoint ∂loss/∂C matches FD ground truth (dense solver, reactive path)."""
     from circulax.solvers.adjoint import transient_parameter_sensitivity_dense
@@ -345,7 +343,6 @@ def test_adjoint_dense_capacitor_C(rc_osdi_circuit) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="OSDI adjoint gradient incorrect — implementation bug, fix pending", strict=True)
 def test_adjoint_dense_final_state_loss(rc_osdi_circuit) -> None:
     """Discrete adjoint works when loss_fn depends only on final state y[-1]."""
     from circulax.solvers.adjoint import transient_parameter_sensitivity_dense

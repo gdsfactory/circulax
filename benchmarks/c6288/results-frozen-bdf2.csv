@@ -1,0 +1,2 @@
+status,sys_size,setup_s,compile_s,wall_s,n_steps,us_per_step,solver,backend,newton,max_newton,stop_s,step_s
+warmup_failed,96165,16.462971686996752,1.6328291640093084,,,,bdf2,klu_split,frozen,50,2e-09,2e-12

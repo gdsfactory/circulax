@@ -109,23 +109,7 @@ def _build_jq_total(
     y: jax.Array,
     sys_size: int,
 ) -> jax.Array:
-    """Build the total capacitance matrix C (= dQ/dy) in dense form.
-
-    For non-OSDI groups uses ``assemble_gc_real`` which returns G and C
-    separately.  For OSDI groups, ``assemble_gc_real`` returns C=0 because the
-    OSDI assembly does not separate G and C.  We patch this by directly calling
-    ``osdi_eval`` to get the ``cap`` tensor and scatter it using the group's
-    COO indices.
-
-    Returns the unscaled C matrix (multiply by 1/dt at call site).
-    """
-    try:
-        from bosdi.circulax import OsdiComponentGroup
-
-        _has_osdi = True
-    except ImportError:
-        _has_osdi = False
-
+    """Build dQ/dy using the same physical row selection as forward assembly."""
     C = jnp.zeros((sys_size, sys_size), dtype=jnp.float64)
 
     all_rows_list, all_cols_list = [], []
@@ -136,43 +120,9 @@ def _build_jq_total(
     static_rows = jnp.concatenate(all_rows_list)
     static_cols = jnp.concatenate(all_cols_list)
 
-    # Non-OSDI contribution from assemble_gc_real
+    # Includes OSDI capacitance with reduced COO selection.
     _, c_vals_all = assemble_gc_real(y, component_groups)
     C = C.at[static_rows, static_cols].add(c_vals_all)
-
-    # OSDI contribution: add cap (not included in assemble_gc_real's c_vals)
-    if _has_osdi:
-        for k in sorted(component_groups.keys()):
-            g = component_groups[k]
-            if not isinstance(g, OsdiComponentGroup):
-                continue
-            # Get cap from OSDI eval
-            try:
-                from osdi_jax import osdi_eval, osdi_eval_with_handle
-
-                _has_handle = True
-            except ImportError:
-                from osdi_jax import osdi_eval
-
-                _has_handle = False
-
-            v_all = y[g.var_indices].astype(jnp.float64)
-            try:
-                if _has_handle and g.handle is not None:
-                    from osdi_jax import osdi_eval_with_handle
-
-                    _, _, _, cap, _ = osdi_eval_with_handle(g.handle, v_all, g.states)
-                else:
-                    _, _, _, cap, _ = osdi_eval(g.model_id, v_all, g.params, g.states)
-            except Exception:  # noqa: BLE001,S112
-                continue
-
-            cap = cap.reshape(-1, g.num_nodes, g.num_nodes)
-            # Schur reduction if needed (simplification: skip for now, use full cap)
-            # Scatter into global C
-            rows = jnp.array(g.jac_rows).reshape(-1)
-            cols = jnp.array(g.jac_cols).reshape(-1)
-            C = C.at[rows, cols].add(cap.reshape(-1))
 
     return C
 
@@ -197,14 +147,6 @@ def _jq_matvec_klu(
     """Compute (J_q/dt)^T · v using sparse matvec, including OSDI cap."""
     sys_size = v.shape[0]
 
-    try:
-        from bosdi.circulax import OsdiComponentGroup
-
-        _has_osdi = True
-    except ImportError:
-        _has_osdi = False
-
-    # Non-OSDI contribution
     _, c_vals_all = assemble_gc_real(y, component_groups)
 
     all_rows_list, all_cols_list = [], []
@@ -215,40 +157,13 @@ def _jq_matvec_klu(
     static_rows = jnp.concatenate(all_rows_list)
     static_cols = jnp.concatenate(all_cols_list)
 
-    # sparse C^T · v for non-OSDI (c_vals_all already has OSDI = 0)
+    # Includes the selected native capacitance entries.
     result = jax.ops.segment_sum(c_vals_all * v[static_rows], static_cols, num_segments=sys_size)
-
-    # OSDI contributions: add cap contributions directly
-    if _has_osdi:
-        for k in sorted(component_groups.keys()):
-            g = component_groups[k]
-            if not isinstance(g, OsdiComponentGroup):
-                continue
-            try:
-                from osdi_jax import osdi_eval
-
-                try:
-                    from osdi_jax import osdi_eval_with_handle
-
-                    if g.handle is not None:
-                        _, _, _, cap, _ = osdi_eval_with_handle(g.handle, y[g.var_indices].astype(jnp.float64), g.states)
-                    else:
-                        _, _, _, cap, _ = osdi_eval(g.model_id, y[g.var_indices].astype(jnp.float64), g.params, g.states)
-                except ImportError:
-                    _, _, _, cap, _ = osdi_eval(g.model_id, y[g.var_indices].astype(jnp.float64), g.params, g.states)
-            except Exception:  # noqa: BLE001,S112
-                continue
-
-            rows = jnp.array(g.jac_rows).reshape(-1)
-            cols = jnp.array(g.jac_cols).reshape(-1)
-            cap_flat = cap.reshape(-1)
-            # C^T · v: result[cols] += cap_flat * v[rows]
-            result = result + jax.ops.segment_sum(cap_flat * v[rows], cols, num_segments=sys_size)
 
     return result / dt
 
 
-def _compute_transient_fd_gradients(  # noqa: PLR0915
+def _compute_transient_fd_gradients(
     group: Any,
     y_cur: jax.Array,
     y_prev: jax.Array,
@@ -292,28 +207,15 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
             ``n_params × n_devices`` to ``n_params``.
 
     """
-    from osdi_jax import osdi_residual_eval
+    from circulax.osdi_topology import checked_residual, gather
 
-    try:
-        from osdi_jax import osdi_residual_eval_with_handle
-
-        _has_handle = True
-    except ImportError:
-        _has_handle = False
-
-    mid = group.model_id
     params_np = np.array(jax.device_get(group.params))  # (N, num_params)
 
-    v_all_cur = y_cur[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
-    v_all_prev = y_prev[group.var_indices].astype(jnp.float64)  # (N, num_nodes)
+    v_all_cur = gather(group, y_cur)  # (N, num_nodes)
+    v_all_prev = gather(group, y_prev)  # (N, num_nodes)
 
-    # Base F(y[k]) and Q(y[k]) and Q(y[k-1])
-    if _has_handle and group.handle is not None:
-        cur_base, chg_base_cur, _ = osdi_residual_eval_with_handle(group.handle, v_all_cur, group.states)
-        _, chg_base_prev, _ = osdi_residual_eval_with_handle(group.handle, v_all_prev, group.states)
-    else:
-        cur_base, chg_base_cur, _ = osdi_residual_eval(mid, v_all_cur, group.params, group.states)
-        _, chg_base_prev, _ = osdi_residual_eval(mid, v_all_prev, group.params, group.states)
+    cur_base, chg_base_cur, _ = checked_residual(group, v_all_cur, group.params)
+    _, chg_base_prev, _ = checked_residual(group, v_all_prev, group.params)
 
     f_base = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(cur_base)
     q_base_cur = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(chg_base_cur)
@@ -329,8 +231,8 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
             params_perturbed[:, pcol] = p_val + h
             params_jax_pert = jnp.array(params_perturbed, dtype=jnp.float64)
 
-            cur_pert, chg_pert_cur, _ = osdi_residual_eval(mid, v_all_cur, params_jax_pert, group.states)
-            _, chg_pert_prev, _ = osdi_residual_eval(mid, v_all_prev, params_jax_pert, group.states)
+            cur_pert, chg_pert_cur, _ = checked_residual(group, v_all_cur, params_jax_pert)
+            _, chg_pert_prev, _ = checked_residual(group, v_all_prev, params_jax_pert)
 
             f_pert = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(cur_pert)
             q_pert_cur = jnp.zeros(sys_size, dtype=jnp.float64).at[group.eq_indices].add(chg_pert_cur)
@@ -357,8 +259,8 @@ def _compute_transient_fd_gradients(  # noqa: PLR0915
             params_jax_pert = jnp.array(params_perturbed, dtype=jnp.float64)
             h_jax = jnp.asarray(h, dtype=jnp.float64)[:, None]
 
-            cur_pert, chg_pert_cur, _ = osdi_residual_eval(mid, v_all_cur, params_jax_pert, group.states)
-            _, chg_pert_prev, _ = osdi_residual_eval(mid, v_all_prev, params_jax_pert, group.states)
+            cur_pert, chg_pert_cur, _ = checked_residual(group, v_all_cur, params_jax_pert)
+            _, chg_pert_prev, _ = checked_residual(group, v_all_prev, params_jax_pert)
 
             # Per-device deltas, still in pre-scatter (N_dev, num_nodes) layout.
             dF_dp_row = (cur_pert - cur_base) / h_jax

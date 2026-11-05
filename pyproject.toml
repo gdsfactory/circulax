@@ -245,6 +245,7 @@ bench_list       = { cmd = ["python", "benchmarks/run.py", "list"],             
 bench_release    = { cmd = ["python", "benchmarks/run.py", "run", "release"],       description = "Run release benchmark suite" }
 bench_rc         = { cmd = ["python", "benchmarks/run.py", "run", "rc"],            description = "VACASK/ngspice/Circulax RC benchmark" }
 bench_ring       = { cmd = ["python", "benchmarks/run.py", "run", "ring"],          description = "PSP103 OSDI ring benchmark" }
+bench_c6288      = { cmd = ["python", "benchmarks/run.py", "run", "c6288"], description = "c6288 batched BOSDI stress test; set VACASK_REPO" }
 bench_cascade    = { cmd = ["python", "benchmarks/run.py", "run", "legacy-diode-cascade"], description = "Legacy diode cascade testbench" }
 bench_rectifier  = { cmd = ["python", "benchmarks/run.py", "run", "legacy-rectifier"],      description = "Legacy full-wave rectifier testbench" }
 bench_lc_ladder  = { cmd = ["python", "benchmarks/run.py", "run", "legacy-lc-ladder"],      description = "Legacy LC ladder scalability testbench" }

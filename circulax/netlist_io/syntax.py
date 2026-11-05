@@ -39,8 +39,7 @@ def parameters(node: Any) -> dict[str, Any]:
 
 
 def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
-    """Parse original UTF-8 or legacy Latin-1 model cards and includes.
-    """
+    """Parse original UTF-8 or legacy Latin-1 model cards and includes."""
     try:
         import netlist_parser
     except ModuleNotFoundError as exc:
@@ -80,5 +79,5 @@ def parse_file(path: Path, dialect: str = "ngspice") -> list[Statement]:
     if errors or incomplete(root):
         msg = f"{path}: NetlistParse rejected syntax; spans={errors}; source={text[:100]!r}"
         raise NetlistError(msg)
-    aliases = {"Parameters": "ParamStatement", "Instance": "SubcktCall", "Include": "IncludeStatement"}
+    aliases = {"Parameters": "ParamStatement", "Instance": "SubcktCall", "Include": "IncludeStatement", "GlobalStatement": "Global"}
     return [Statement(aliases.get(n.kind, n.kind), n, path) for n in children(root) if n.kind not in {"Title", "Notation"}]
