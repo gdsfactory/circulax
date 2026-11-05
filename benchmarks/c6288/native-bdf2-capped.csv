@@ -1,0 +1,4 @@
+run,mode,cpus,status,process_wall_s,nr_solver_s,accepted_timepoints,saved_timepoints
+1,bdf2-capped,1,ok,89.51466894100304,88.5406,1524,1525
+2,bdf2-capped,1,ok,89.85889616698842,88.9342,1524,1525
+3,bdf2-capped,1,ok,89.69291695501306,88.7499,1524,1525

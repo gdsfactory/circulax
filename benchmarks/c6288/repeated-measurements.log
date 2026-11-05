@@ -1,0 +1,51 @@
+Start: full-1.json
+Exit 0: full-1.json
+Resume: reduced-1.json
+Start: full-2.json
+Exit 0: full-2.json
+Start: reduced-2.json
+Exit 0: reduced-2.json
+Start: full-3.json
+Exit 0: full-3.json
+Start: reduced-3.json
+Exit 0: reduced-3.json
+Start: native-upstream.json
+Exit 0: native-upstream.json
+Start: native-bdf2-capped.json
+Exit 0: native-bdf2-capped.json
+Start: ring-3-full-1.json
+Exit 0: ring-3-full-1.json
+Start: ring-3-reduced-1.json
+Exit 0: ring-3-reduced-1.json
+Start: ring-3-full-2.json
+Exit 0: ring-3-full-2.json
+Start: ring-3-reduced-2.json
+Exit 0: ring-3-reduced-2.json
+Start: ring-3-full-3.json
+Exit 0: ring-3-full-3.json
+Start: ring-3-reduced-3.json
+Exit 0: ring-3-reduced-3.json
+Start: ring-9-full-1.json
+Exit 0: ring-9-full-1.json
+Start: ring-9-reduced-1.json
+Exit 0: ring-9-reduced-1.json
+Start: ring-9-full-2.json
+Exit 0: ring-9-full-2.json
+Start: ring-9-reduced-2.json
+Exit 0: ring-9-reduced-2.json
+Start: ring-9-full-3.json
+Exit 0: ring-9-full-3.json
+Start: ring-9-reduced-3.json
+Exit 0: ring-9-reduced-3.json
+Start: ring-15-full-1.json
+Exit 0: ring-15-full-1.json
+Start: ring-15-reduced-1.json
+Exit 0: ring-15-reduced-1.json
+Start: ring-15-full-2.json
+Exit 0: ring-15-full-2.json
+Start: ring-15-reduced-2.json
+Exit 0: ring-15-reduced-2.json
+Start: ring-15-full-3.json
+Exit 0: ring-15-full-3.json
+Start: ring-15-reduced-3.json
+Exit 0: ring-15-reduced-3.json

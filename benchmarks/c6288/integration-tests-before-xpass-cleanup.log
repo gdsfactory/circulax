@@ -1,0 +1,41 @@
+........................................................................ [ 20%]
+.....................s..........................s.s..................... [ 40%]
+........................................................................ [ 61%]
+................................................FFF..................... [ 81%]
+.................................................................        [100%]
+=================================== FAILURES ===================================
+________________________ test_adjoint_dense_resistor_R _________________________
+[XPASS(strict)] OSDI adjoint gradient incorrect — implementation bug, fix pending
+----------------------------- Captured stdout call -----------------------------
+
+[R gradient (dense)]
+  Adjoint: 1.071332e-02
+  FD:      1.063712e-02
+  RelErr:  7.1634e-03
+________________________ test_adjoint_dense_capacitor_C ________________________
+[XPASS(strict)] OSDI adjoint gradient incorrect — implementation bug, fix pending
+----------------------------- Captured stdout call -----------------------------
+
+[C gradient (dense, reactive)]
+  Adjoint: -2.330565e+10
+  FD:      -2.338187e+10
+  RelErr:  3.2598e-03
+_____________________ test_adjoint_dense_final_state_loss ______________________
+[XPASS(strict)] OSDI adjoint gradient incorrect — implementation bug, fix pending
+----------------------------- Captured stdout call -----------------------------
+
+[R gradient (final-state loss)]
+  Adjoint: 7.187418e-05
+  FD:      7.098250e-05
+  RelErr:  1.2562e-02
+=============================== warnings summary ===============================
+tests/test_transient.py: 12 warnings
+  /home/cdaunt/Documents/ChatGPT/circulax/circulax/solvers/transient.py:33: DeprecationWarning: free_numeric is deprecated; handles are freed automatically
+    _klujax_free_numeric(handle)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/netlist_io/test_library_model.py:233: set CIRCULAX_TEST_OSDI_RESISTOR to a compatible sp_resistor binary
+SKIPPED [1] tests/netlist_io/test_osdi_compilation.py:14: set VACASK_MODULE_PATH for native OSDI compilation tests
+SKIPPED [1] tests/netlist_io/test_osdi_compilation.py:42: set VACASK_MODULE_PATH for native OSDI compilation tests
+3 failed, 347 passed, 3 skipped, 12 warnings in 219.75s (0:03:39)

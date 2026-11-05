@@ -1,0 +1,223 @@
+/home/cdaunt/.config/matplotlib is not a writable directory
+Matplotlib created a temporary cache directory at /tmp/matplotlib-jg3lpwi3 because there was an issue with the default path (/home/cdaunt/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_exp': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_exp-fbd40605c9b640a69361f9dc0377904d8d9e82ebf9a15e930810be9ded1808f5-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_multiply': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_multiply-4966ee90b316224d43fb0d9637b367f207b8b0623667a1ba0c49b9a0bdc01492-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-b67beb87ba207efca123568c72a48102e83890e35948fd8e378f53f57a5da18e-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-8ee92bea6c7292ee8230d88c46a3995bb22fa88244cda0c44622c61c656496f3-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-c57b0c926a078775bc35397f6977d9014802526323ad66919ebfd0766c5ca1ca-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_concatenate': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_concatenate-f7edc59b4262f299b351642421c92d9b4d5b36cc6281bbd04e614e9448172b13-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-eff2484db487aa5178ae31ac56e620fbeaa251ec00fa21054957ea2337d8208b-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_concatenate': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_concatenate-4dbc4b6fe882062ed88ddd50a5bd432b2dc56041b83bc5ad55de4c216381c1ad-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_s_to_y': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_s_to_y-99a4755c696af91eaf20c5691a606a8fc6e4d9d39ff5f1ec0c7b567f0368f667-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-709e6d4f8508e440b49bd51fe2e3e415ad6f614782e82ce7789782202d5977bd-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_dynamic_slice-0e12ef03470c30ffc974d397e0f400949243782a7e19bcb90a20ef029e53b836-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_squeeze': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_squeeze-172509f09dea5737b14dad68961f045e92a6baf5ab8c2d7d8023c4649e7c007b-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_true_divide': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_true_divide-dfe14ada6a85213f5adebff170e23e8cdf8ae84be5a516a771b8db18fb947e31-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-ac964a59f027c0c3860f4077309dcc14d59be1e87e2a6d19889ba48db56de2f2-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_dynamic_slice-043c8614854fafaa67cdefb0ddb7b3e8669910e52a09278b24871bbaa51d31ca-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_subtract': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_subtract-b8956c6b57430c404411366390ea1aec222f8ac999171e99b67ae2f46aadb7af-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_iota': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_iota-f0f0832dd3a1c6827dbbc7a7d71d1c59d88374894759b97ed2ec644ac06fc204-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_greater_equal': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_greater_equal-4fd513e0954d41dcb8d853b2394bf1c9ca86584e86304137c1d2d804e1bc74e8-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-a602fdd2b0b62c820af3cbfdcf8b0d6d30a2005e26cf5e095dc1572ee6a22e8b-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_bitwise_not': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_bitwise_not-4b7207d9bf6fff849009acdb4e7f9d1f366c8e36680a8d1134f3280cf74578d4-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_bitwise_and': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_bitwise_and-ac40a0a478623c35f6b2e6bba671d8df5b4088e10badad199e663deb19d019a0-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-4c4edb51ac5564b3d1c18e7272f333ee91a71de583d89c97bf41c1e4b20a6bbd-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__diag': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__diag-23ae274da601fee744c0da50f5df60bceed5378a1f6827f6b3db88c8990deebc-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-682665ca59ac1bc8439feeb0782dc9654694de3914c33abe5e22e18d007292de-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-9326415a0a52d869ba9b2b204404626838d7057bd7e5aa7ef62c6231b8de5999-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_reshape': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_reshape-c4ddefc8124adfeee3b7417c32ee672e6e6fb461c6045439e06b037609cebbfc-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-f412f20d8aed5cb4d3b38a4c226b9ffe1d9b43ce85c7a92b1f6972c3e879de23-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-a32eed5c40ecf6dcde0e794b6bfdd1008bd792be71b2d2152b18b61d110e77b0-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_less': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_less-bea02a6a3bc6c8d94683aeef2ee878219dceb9aeb8d1094451b5da8b677478d0-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_add-6cf7749a400550eb5a917e35ac1ac4a8b04cbf0d3881322e6d8ca5fa5871be9d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_select_n': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_select_n-720071094390f6de74e54d144efa8e2b4d8e28daa7b3490a42adc31c05ba9cdc-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__broadcast_arrays': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__broadcast_arrays-8906f6e62c260f5b0db2947e3042551a6a02ba8ecef6501f566d938e31cd5b8e-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-01049c50049d410252e9d3b320a9dd628d41483ebfd3d8a74e50bd376f6484f5-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-7e3486ee8274c0151f707f6ef624421b86888675a64d75c5913fb08fb3f5c8c4-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_gather': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_gather-4c04e23d02c773a7f22ad295d97776c6417fb6b67952861ea0113ccfc9a9628f-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-c0e2e99541d067eec0682a709af3a9aa2a9ae781884dd16f774f96d3235a5106-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_less': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_less-6250abb2e8a42d32d80d392bb1ea9a112712f08af681e406c1694dfbc6c50261-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_add-41de1b35449e9aabb5b8be1928a025c950719935e79bb86526fd84913f5fc447-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_select_n': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_select_n-41f03fe741f47d44b63041dd4b03f3e8368e770b13bea54c5b044af2bfa5cb39-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__broadcast_arrays': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__broadcast_arrays-d526384766444efc0ed795fe4874c9b7a040d34fabe46f2b7e1dee9c8182f558-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-1b9a1f94bcbc1e6233a6cf14f744a72057cfc967e4ff4ae96b906f8cbd251a42-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-ae1a594bbb77143b92da35cfe709298dbed53eb8aca0021e03c03b754b37be62-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_gather': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_gather-2c0dfd54ed1d7921fb2e8d5e1346b6967dce79ae4ca227bc6ce396b6994a55e6-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-2585b5a25a439280e50e7a52cccf31df6878fe0fb9f9ce971e5e2486b4ad5218-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_ffi_call': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_ffi_call-b50db4c3a9b102edc0ac211cbfb3ed94a0a34a5acca8d73214c3c19172b067c6-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-256504ee2097cdb0a4498605f41dec8420bc98eec4bba3d6e329dae60daddbb9-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-9bb131e0f16a45e8ab2b0c33d4417e99c776481d985e56226d093260e6e934f2-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_scan': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_scan-808046b346f493b2fac76675c8728552e32802d594eb7a60bde4c26ede24b0b8-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_scan': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_scan-f5e007b72cb54390a4dd0988422727d19d5008019570b3fd1674af607bc50eeb-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_less': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_less-4d9814b2cb464f9307e291e174f6a4ec5d60f875db90ffc8bcd22c6f8b3a7bb2-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_add-7f81d861f21b10bdf2b46eb9c8bc673c4b2fef48fdb008b500d6744523c0a7db-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_select_n': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_select_n-02963d51d58b7021d379a94553943783d8b84aaefb7cc7be669c4dd626530c82-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__broadcast_arrays': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__broadcast_arrays-0e84fc9888bcc7cfb3040b911637784fdc694eb746333060f2cd2c75216d7caf-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_gather': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_gather-eff44cae58775d9d5f670de06e2c8949c70a38345349ac5a01c7b16f334f7404-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-645534836a206961bc70609b36fefae8549cc201239672add7a8ae96895c6904-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_true_divide': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_true_divide-83d9a63df5dd24cf0e82d4cf17876a6999c81fa2fa461321d73e2d4b168ff163-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_subtract': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_subtract-9897b024e8d45610672570f5835ab5a46f0af3871f39b029f3b0d9361436da0d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_multiply': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_multiply-6605985712e79b637f83a0ece3c07c957c9f201a7525386dd5a67b1b875b34a1-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_sigmoid': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_sigmoid-866a780f642c4d610c4f7fa79fc2de544c7efcf772c36e7c9873872034820103-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_dynamic_slice-1749e3c90ff00b3415f21bc3175e9389ab0b3df257bae0a741afa38ff3fa4833-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_squeeze': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_squeeze-dd24c225192d95c9b9931fa3513a045760891a7133fa117700ee7804ae30c68c-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_subtract': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_subtract-0a8258854d7775581882eb5db69e15980182742cd907cacac0aae1cff8c4bb95-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_subtract': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_subtract-9dfeac7cb1223f58487c9acb02767ae32b4474af8f1f169039f34e80c6054679-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_negative': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_negative-136fce508e38c8a664d90b65dfe641317748682fc48abc12a0fe326ccf331f70-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-58d8dc7ef4fdfad19974768d68a2a98ae2823edc7073c8cf802d5a0ac253efa2-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_concatenate': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_concatenate-c83bc61e4631a61d6513900b749adf223df6ee837945f955f738e6f00cfab63f-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-8a69b049a2e5d551ab3f4c1cbe445546abdbc2739f68a4bfca1201ecc0b89ea4-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-5e0f81f43525197b7d68463c2989a0b18a6d5269c160701dcce7afaa83a0321d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__squeeze': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__squeeze-2f011ebe43e2063a88d7c0ee31ec2046fcd65d3405e432835446ef01f0bab466-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_scatter-add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_scatter-add-d8b9a905ba50ff88a866a4d4aef6ac3178c351c226a1d3bf9ebfb607f6620e48-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_equal': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_equal-8c88c935ad9e17f0818f4114fce8141cfe1c1db7ab34b29bc32bf5e10833df20-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_less': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_less-18b5d1d2a030695927342a30c3f4cd7b94f99987341c5610d47d7c7c8b4c9906-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_add-02beb2906a0d0e65bee4415e8af15c7206ca07b5f324e9c778936241a3db981d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_select_n': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_select_n-1f8cc7ce7817f58ea0920d05a6d580d5ee9079b0288dc706fd13c699f37b39d1-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__broadcast_arrays': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__broadcast_arrays-4cf09c3312506128e9d9703d0f171245f9aec195adb8cc4a8ab30d86f956251b-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_gather': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_gather-d92600149549a4e1978cdbc8230802e0765705a6ad1cd9c7359b6f9515d3ccc3-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-6ac0db196f7ae46f281090e0e350f6c05a8ee0502a84ab7838b3ce843be77539-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__where': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__where-7c0ad16e95c994ffd36c45968d44278489275e4527dafe12bf690d15f9f3c212-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-9e33de44d35a56080110f6c87d2ffda972f81c32cfd3db93d90a5225c143b847-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-e7f22757aef3616dfed92b2205ccaec5b6c1a33fc50ba74b65491984ebd9519d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_ffi_call': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_ffi_call-1af2ce3bfeeddaa6339e9372cb4bd0804081983e1107143ccb55d3b67e99c289-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-727f852836767ca0700983bb6911ae2ba88359ac59b8ff8d6b68aec4cfc6a608-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__where': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__where-e62d7e4f3dbe13b5a6f7843010fabe3bfd7e5c2ece0d075e85792b2e167f1312-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_reshape': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_reshape-ef1a1cfeafaf013e20811c47804cc77d8f542d77d6304f21a56c41ba3a43227e-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_gather': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_gather-07a4f720169975278abeaf5dbba21f9e10eb2c49e7f768b216445551bd050295-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-1a9a7804b7135461c75522dbaa3e9ad809bfbbce7ac5dc37a28f33a397fa7936-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__squeeze': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__squeeze-bdcf0989f67ef26f80047753d7337d1454da197d44c98fb21b7197f2914cad37-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_scatter-add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_scatter-add-01fda912b7e52e3cce5f09cbd771ad61cc43fbc33c654da82f72307f7827706d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_gather': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_gather-e260ae19cbbcd05e5d7896e1953ee78cf0cebe4036ca5dadb3f5c47120980f9b-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-f98641b7c2b3143a1c1d6048326e0150715b647ab3761c46225e21299c5509a8-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_less': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_less-69f47d4437c7504296d51c6a598f559d93fab1acdb3c1b45e70b3248053fec03-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_add-394d621347cebdf44d49cf08de60da79463e8079441702083e00d394781fc27d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_select_n': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_select_n-f9dd2d50d6eb3406ed29b062d23d154fcef3e90a871f0a5f7ad0ee54a2c179ee-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__broadcast_arrays': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__broadcast_arrays-f834b7daff871fcaa7884338ed22704a2bc223bdbe76f7ad0b9c3e07bbbf6462-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_gather': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_gather-1c4df738c1d2efe75636c57cd65b8f65247a72d9484031892f7d687ba6fb1638-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-0be33255a694b10141980a235ef74ffc34f846bd579a999f9fd72f6e9cc48dce-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_dynamic_slice-233975051cb84dbd5166daf758162d352179827d1fa451694c48c0e3af71d986-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_add-dfcf30e7cedbe6024fc65e1d3261364b5a1ee888fff1bf7331fd362056134d9a-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_true_divide': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_true_divide-c1143897c1cedcd7088387ecd9dada7686717fe4e0f6bf5f3073bc5b2ef6300c-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_concatenate': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_concatenate-b5b6fe81b4060923e0860282c9e8f0e0ef76010a136af99440d152fd35c4f50b-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_convert_element_type': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_convert_element_type-ff4030e5fc2961f37d52ae5edb9b6a28997ff2d52f153866da0116e2604cb10e-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_broadcast_in_dim-8495801b5da4ccc4c99529c3610cc0786f4316d8816630cb7472df23e5186212-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__squeeze': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__squeeze-c7f875d936c6de551014e31e12cef66da7f113ce807fed74adbebd98507fdd03-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_scatter-add': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_scatter-add-9fc2bc7f746bab553426ef59c65d6041244feda968246d3953da65c915b0220d-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_less_equal': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_less_equal-6f24468faa29a637dbb6d797d698b503af4979b39974cd0d480a80f0eb88c26a-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__where': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__where-c095abe2c2c29f550e7ec1db0795b3dd69bb0844be6082839c2ee008d21d52b5-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_dynamic_slice-0654796c3cb9c3837d1c4ce96e85ed7144734fc5422eb8071273076344ce57e6-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_dynamic_slice-19063dbc452faab9e3a00c16a1bfc87927a9c3c937fb4b31bd80e8d33e472c10-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit_abs': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit_abs-871948d388e25e2b569ed779b39cb00bb9b9eba0cb3960e4840a417a9626ff6e-cache'
+  warnings.warn(
+/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:850: UserWarning: Error writing persistent compilation cache entry for 'jit__reduce_max': OSError: [Errno 30] Read-only file system: '/home/cdaunt/.cache/jax/circulax_ring/jit__reduce_max-58f0987ea5ee8f7268773ddc668d3dadff4de63e4ea8642e6096c501442b6c47-cache'
+  warnings.warn(
+{"dc_initialization": "unchecked_source_and_gmin_homotopy", "dc_initial_output_V": 0.6605858018323811, "dc_max_residual_excluding_ground": 2.8189256484623115e-18, "status": "ok", "n_stages": 3, "variant": "osdi", "backend": "klu_split", "wall_s": 1.9379864889779128, "compile_s": 1.066822166001657, "dc_s": 0.5926286419853568, "n_steps": 20000, "us_per_step": 96.89932444889564, "sys_size": 20, "freq_MHz": 913.49243458575, "model": {"path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/compiled/psp103v4_psp103.osdi", "sha256": "b4ecc3288226503d7546e959a1ccbadfcf7a87994290819410900a297a278a95"}, "fixture_sha256": "f3bff04d6ed10c5a53689e605d60ead1d2e7520919a5f729947a18df4661cc28", "model_cards": {"path": "/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/models.inc", "sha256": "394b747ff7d08853af3d7bc20a7f28d922c6dd73831c2bae61519177d839e69b"}, "representation": "reduced"}

@@ -97,6 +97,7 @@ class Circuit:
         self._source_netlist = _source_netlist
         self._source_models = _source_models
         self._is_pure_sax = _is_pure_sax
+        self._osdi_reduction = True
         self._simparams_factory = None
         self._analysis_factory = None
         self._analysis_variants = {}
@@ -114,7 +115,10 @@ class Circuit:
                     raise ValueError(msg)
                 for name, group in self.groups.items():
                     other = variant.groups[name]
-                    for field in ("var_indices", "jac_rows", "jac_cols"):
+                    if getattr(group, "representatives", None) != getattr(other, "representatives", None):
+                        msg = "OSDI analysis changed the configured collapse mapping"
+                        raise ValueError(msg)
+                    for field in ("var_indices", "eq_indices", "jac_rows", "jac_cols"):
                         if not bool(jnp.array_equal(getattr(group, field), getattr(other, field))):
                             msg = "OSDI analysis changed the circuit scatter layout"
                             raise ValueError(msg)
@@ -1024,6 +1028,7 @@ def compile_circuit(
     max_steps: int = 100,
     params_map: dict[str, dict[str, str]] | None = None,
     simparams: Mapping[str, float] | None = None,
+    osdi_reduction: bool = True,
 ) -> Circuit:
     """Compile a netlist into a callable :class:`Circuit`.
 
@@ -1049,6 +1054,8 @@ def compile_circuit(
         rtol: Relative tolerance for the Newton solver.
         atol: Absolute tolerance for the Newton solver.
         max_steps: Max Newton iterations.
+        osdi_reduction: Allocate surviving OSDI nodes from configured batch metadata.
+            Set False for the full representation or traced topology-dependent parameters.
         simparams: Numeric settings queried by native Verilog-A $simparam calls.
             Applied to every OSDI descriptor, overriding its simulator defaults;
             retained across DC/AC/transient and device parameter updates. These
@@ -1088,7 +1095,7 @@ def compile_circuit(
         source_netlist = net_dict
         source_models = {k: v for k, v in models_map.items() if not isinstance(v, Circuit)}
 
-    groups, sys_size, port_map = compile_netlist(net_dict, models_map, params_map=params_map)
+    groups, sys_size, port_map = compile_netlist(net_dict, models_map, params_map=params_map, osdi_reduction=osdi_reduction)
     if is_complex == "auto":
         is_complex = _infer_is_complex(groups)
     elif not isinstance(is_complex, bool):
@@ -1110,6 +1117,7 @@ def compile_circuit(
         _source_models=source_models,
         _is_pure_sax=is_pure_sax,
     )
+    circuit._osdi_reduction = osdi_reduction  # noqa: SLF001 -- retain source recompilation policy
     recompile = partial(
         compile_circuit,
         net_dict,
@@ -1120,6 +1128,7 @@ def compile_circuit(
         atol=atol,
         max_steps=max_steps,
         params_map=params_map,
+        osdi_reduction=osdi_reduction,
     )
     _configure_native_variants(circuit, models_map, recompile)
     return circuit

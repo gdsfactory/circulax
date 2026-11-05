@@ -66,12 +66,15 @@ def build_net_map_kfnetlist(nl: kfnl.Netlist) -> tuple[dict[str, int], int]:
     """
     port_to_idx: dict[str, int] = {}
     current_idx = 1
+    # kfnetlist materializes a new Python mapping on every property access.
+    # Read it once, rather than cloning all instance settings for each pin.
+    instances = nl.instances
 
     for net in nl.nets:
         is_ground = any(
             (
                 isinstance(m, kfnl.PortRef)
-                and (m.instance == "GND" or (m.instance in nl.instances and nl.instances[m.instance].component == "ground"))
+                and (m.instance == "GND" or (m.instance in instances and instances[m.instance].component == "ground"))
             )
             or (isinstance(m, kfnl.NetlistPort) and "GND" in m.name)
             for m in net

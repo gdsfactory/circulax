@@ -17,7 +17,7 @@ def _forbid_solve(*_args: object, **_kwargs: object) -> None:
 def _native_circuit(*, num_states: int = 0, complex_mode: bool = False, holomorphic: bool = True) -> Circuit:
     """Represent a native registration factory without provisioning artifacts."""
     indices = jnp.array([[0, 1]])
-    group = SimpleNamespace(var_indices=indices, jac_rows=indices, jac_cols=indices, num_states=num_states, holomorphic=holomorphic)
+    group = SimpleNamespace(var_indices=indices, eq_indices=indices, jac_rows=indices, jac_cols=indices, num_states=num_states, holomorphic=holomorphic)
     solver = SimpleNamespace(is_complex=complex_mode, solve_dc=_forbid_solve)
     return Circuit(solver, {"native": group}, 2, {"out": 1})
 

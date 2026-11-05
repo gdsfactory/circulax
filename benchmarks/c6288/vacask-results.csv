@@ -1,0 +1,4 @@
+run,mode,cpus,status,process_wall_s,nr_solver_s,accepted_timepoints,saved_timepoints
+1,upstream,1,ok,64.21975090599153,63.4205,1022,1023
+2,upstream,1,ok,64.42077764999704,63.6284,1022,1023
+3,upstream,1,ok,63.63001974701183,62.7544,1022,1023
