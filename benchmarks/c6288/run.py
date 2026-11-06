@@ -29,7 +29,7 @@ def main() -> int:  # noqa: PLR0915 -- command-line orchestration
     parser.add_argument("--resistor-osdi", type=Path)
     parser.add_argument("--backend", choices=("klu_split", "klu_split_linear"), default="klu_split")
     parser.add_argument("--solver", choices=("bdf2", "trap", "euler"), default="bdf2")
-    parser.add_argument("--newton", choices=("full", "frozen"), default="full")
+    parser.add_argument("--newton", choices=("full", "full-refactor", "frozen"), default="full")
     parser.add_argument("--max-newton", type=int, default=100)
     parser.add_argument("--stop", type=float, default=2e-9)
     parser.add_argument("--step", type=float, default=2e-12)
@@ -40,6 +40,8 @@ def main() -> int:  # noqa: PLR0915 -- command-line orchestration
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.newton == "full-refactor" and args.backend != "klu_split":
+        parser.error("--newton full-refactor requires --backend klu_split")
     if args.vacask_root is None:
         parser.error("supply --vacask-root or set VACASK_REPO")
     args.vacask_root = args.vacask_root.resolve()

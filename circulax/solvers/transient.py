@@ -19,18 +19,21 @@ except ImportError:
     _klujax_free_numeric = None
 
 
-def free_numeric(handle, dependency=None):  # noqa: ANN001, ANN201, ARG001
+def free_numeric(handle, dependency=None):  # noqa: ANN001, ANN201
     """Dispatch free to the correct backend based on handle type.
 
     ``klujax.KLUHandleManager`` exposes ``.close()``, which calls the backend's FFI free
     function.  Duck-typing is used so handles are freed correctly without ``isinstance``
     checks against concrete backend types.
+
+    ``dependency`` must contain every result computed from a raw (traced) handle. klujax
+    orders the free after it; releases that free raw handles require it.
     """
     if hasattr(handle, "close"):
         handle.close()
         return
     if _klujax_free_numeric is not None:
-        _klujax_free_numeric(handle)
+        _klujax_free_numeric(handle, dependency)
 
 
 from circulax.solvers.assembly import (
@@ -241,7 +244,7 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
             throw=False,
         )
 
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -327,7 +330,7 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             throw=False,
         )
 
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -532,7 +535,7 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -604,7 +607,7 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -807,7 +810,7 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
         q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         Y3, r3 = _run_stage(Y2, q_hist_3)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, Y3)
 
         y_next = Y3
         y_error = Y3 - y_pred
@@ -894,7 +897,7 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
         q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         Y3, r3 = _run_stage(Y2, q_hist_3, t1)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, Y3)
 
         y_next = Y3
         y_error = Y3 - y_pred
@@ -1104,7 +1107,7 @@ class TrapFactorizedTransientSolver(FactorizedTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -1187,7 +1190,7 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
