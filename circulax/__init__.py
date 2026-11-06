@@ -19,6 +19,9 @@ from circulax.netlist import (
     sax_to_kfnetlist,
 )
 from circulax.s_transforms import fdomain_component, fdomain_model, sax_component
+from circulax.small_signal import QuadratureDrive as QuadratureDrive
+from circulax.small_signal import SmallSignalModel as SmallSignalModel
+from circulax.small_signal import SmallSignalResponse as SmallSignalResponse
 from circulax.solvers import analyze_circuit, setup_ac_sweep, setup_harmonic_balance, setup_transient
 from circulax.testbench import attach_testbench
 from circulax.utils import apply_global_params, update_group_params, update_params_dict

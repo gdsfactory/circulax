@@ -173,7 +173,8 @@ jobs:
           if-no-files-found: warn
 
   test_long:
-    # Slow tests (notebook execution) run on PRs to main and on push to main.
+    # The matrix already runs fast tests. Keep notebook kernels separate from
+    # that process and its accumulated JAX compilation caches.
     # Only on Linux / py313 — papermill notebook execution is not tested on Windows/macOS.
     name: "test_long / ubuntu-latest / py313"
     runs-on: ubuntu-latest
@@ -204,7 +205,20 @@ jobs:
       - name: Compile OSDI test fixtures
         run: pixi run -e py313 compile_osdi
 
-      - name: Run all tests including @pytest.mark.long (notebooks)
+      - name: Install notebook kernel
+        run: pixi run -e py313 install_ipkernel
+
+      - name: Run notebook tests
         env:
           JAX_PLATFORMS: cpu
-        run: pixi run -e py313 pytest_all
+        run: |
+          # Keep resource evidence in the live log if the runner shuts down.
+          while true; do
+            date -u
+            free -m
+            ps -eo pid,ppid,rss,pcpu,comm --sort=-rss | sed -n '1,8p'
+            sleep 30
+          done &
+          monitor_pid=$!
+          trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
+          /usr/bin/time -v pixi run -e py313 pytest tests/test_notebooks.py -m long -vv --durations=25 --log-cli-level=INFO

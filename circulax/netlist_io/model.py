@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,10 +63,7 @@ class LibraryModel:
         state_policy: str = "reject",
         simparams: Mapping[str, float] | None = None,
     ) -> None:
-        """Declare schematic-to-library mappings and native provisioning.
-
-        @tags circulax-simulation
-        """
+        """Declare schematic-to-library mappings and native provisioning."""
         self.library = library
         self.subcircuit = subcircuit
         self.defaults = dict(defaults or {})
@@ -106,19 +101,13 @@ class LibraryModel:
         include_paths: tuple[Path, ...] = (),
         **options: Any,
     ) -> LibraryModel:
-        """Register lazily; parse the selected corner only when instantiated.
-
-        @tags circulax-simulation
-        """
+        """Register lazily; parse the selected corner only when instantiated."""
         model = cls(None, subcircuit, **options)
         model._source = (Path(path), section, tuple(sections), dialect, temperature_c, include_paths)
         return model
 
     def _select_library(self, values: dict[str, Any]) -> Library:
-        """Resolve and cache the explicitly selected corner and temperature.
-
-        @tags circulax-simulation
-        """
+        """Resolve and cache the explicitly selected corner and temperature."""
         library = self.library
         if self._source is not None:
             path, section, sections, dialect, temperature_c, include_paths = self._source
@@ -180,49 +169,12 @@ class LibraryModel:
             self._libraries[key] = library
         return library
 
-    def inspection_identity(self, settings: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        """Return deterministic read-only provenance and resolved topology.
+    def source_digests(self, settings: Mapping[str, Any] | None = None) -> list[dict[str, str]]:
+        """Return ``path``/``sha256`` records for the sources behind the selected corner.
 
-        Source/include contents and available native artifact bytes contribute
-        to the fingerprint. Native artifacts are not loaded or ABI-validated;
-        this identity does not establish backend readiness.
+        Covers the parsed cards and their includes. Nothing native is loaded or provisioned.
         """
-        resolved = self.resolve(settings)
-        library = self._select_library({**self.defaults, **(settings or {})})
-        artifacts = {Path(path).resolve() for path in self.options["osdi_modules"]}
-        artifacts.update(Path(path).resolve() for _, path in resolved.loads)
-        artifacts.update(Path(path).resolve() for path, _ in self._modules.get(library.revision, {}).values())
-        native: list[dict[str, Any]] = []
-        for path in sorted(artifacts, key=str):
-            record: dict[str, Any] = {"path": str(path)}
-            if path.is_file():
-                record["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
-            else:
-                record["missing"] = True
-            native.append(record)
-        identity = {
-            "sources": library.inspection_sources(),
-            "native_artifacts": native,
-            "resolved": {
-                "ports": dict(resolved.ports),
-                "temperature_c": resolved.temperature_c,
-                "corner": {**self.defaults, **(settings or {})}.get(
-                    "corner", self._source[1] if self._source is not None else None
-                ),
-                "instances": [
-                    {
-                        "name": instance.name,
-                        "module": instance.module,
-                        "nodes": list(instance.nodes),
-                        "parameters": dict(instance.parameters),
-                    }
-                    for instance in resolved.instances
-                ],
-                "loads": [{"name": name, "path": str(path)} for name, path in resolved.loads],
-            },
-        }
-        identity["fingerprint"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        return identity
+        return self._select_library({**self.defaults, **(settings or {})}).source_digests()
 
     def resolve(self, settings: Mapping[str, Any] | None = None) -> ResolvedCircuit:
         """Evaluate settings and cards without building or provisioning models.
@@ -231,8 +183,6 @@ class LibraryModel:
         using the same corner, unit and expression bindings as execution.
         Source files may be parsed and cached; no native model, compiler or
         simulator is loaded or executed by this operation.
-
-        @tags circulax-simulation
         """
         values = {**self.defaults, **(settings or {})}
         library = self._select_library(values)

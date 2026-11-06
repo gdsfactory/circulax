@@ -181,3 +181,216 @@ repairs, or enforces a model.
 coefficient correction. It rechecks the requested fitting accuracy after the
 correction. Sampled enforcement is not a global passivity certificate; see
 [Rational-model passivity](rational_model_enforcement.md).
+
+## Transmission lines from RF mode data
+
+For a uniform line, use frequency-dependent mode-solver attenuation, phase
+index and characteristic impedance directly:
+
+```python
+from circulax.components import mode_transmission_line
+
+line = mode_transmission_line(
+    frequencies,                    # Hz
+    attenuation_db_per_m=loss,       # scalar, array, or loss(f_hz) callable
+    n_eff=rf_phase_index,            # scalar, array, or n_eff(f_hz) callable
+    impedance=characteristic_z,      # ohms; may be complex and vary with frequency
+)
+section = line(length=200e-6, n_sections=2)
+```
+
+The conversion uses `gamma = ln(10)/20 * loss + 1j*2*pi*f*n_eff/c`, followed by
+`Zprime=gamma*Z` and `Yprime=gamma/Z`. The same passive RLC fitting, fit error
+reporting and section-count controls described below apply. Inputs must be
+mutually consistent physical mode data; separate arbitrary loss and phase
+curves do not automatically admit this passive, causal realization. The
+factory rejects invalid inputs and fits exceeding the requested tolerance.
+
+`n_eff` is the real RF **phase index**. Group index is
+`n_group = n_eff + f*dn_eff/df`; velocity matching compares the **loaded RF phase
+index** at each modulation frequency with the optical group index. If mode-solver data already includes the
+PN junction's distributed R/C, do not add those elements again in the circuit.
+If the mode data excludes the junctions, add them and verify the resulting
+loaded propagation, as in the traveling-wave MZM tutorial.
+
+DC is optional. When included, impedance must be real there. Attenuation must
+be nonnegative and the real part of impedance positive. The restricted Foster
+family also requires the converted per-metre RLGC values to be nonnegative.
+Frequency interpolation and extrapolation of external data are the caller's
+responsibility; a callable is evaluated once on the provided fitting grid.
+
+## Transmission lines from frequency-dependent RLGC
+
+`rlgc_transmission_line` fits RLGC per metre once, then generates passive,
+causal RLC ladders at different lengths. Series impedance and shunt admittance
+are fitted independently, allowing frequency-dependent characteristic impedance.
+
+```python
+from circulax.components import rlgc_transmission_line
+
+line = rlgc_transmission_line(
+    frequencies,  # Hz, strictly increasing; DC may be included
+    R=r_per_m,    # ohm/m
+    L=l_per_m,    # H/m
+    G=g_per_m,    # S/m
+    C=c_per_m,    # F/m
+    n_poles=12,
+    tolerance=0.01,
+)
+section = line(length=200e-6, n_sections=2)
+# Register the Circuit in a parent circuit's models_map:
+models = {"line": section}
+```
+
+Each RLGC input can be a real nonnegative scalar or an array matching the
+frequency grid. `section` has single-ended `p1`/`p2` ports and midpoint ports
+`tap_0`, `tap_1`, etc. for junction loading, all relative to common ground.
+It includes no source or termination. `line.netlist(...)` returns the primitive
+RLC netlist instead of compiling it.
+
+The fits approximate each per-metre response with
+`constant + s*linear + sum(w*s/(s+p))`, with nonnegative coefficients and positive
+rates `p`. Positive resistors, inductors and capacitors realize this response;
+no S-parameter-to-state-space conversion is involved. The baseline propagation
+is represented by the linear L/C terms, rather than a rational fit to a long
+phase rotation. Optional `poles=` supplies positive rates in rad/s.
+
+`line.series` and `line.shunt` expose `constant`, `linear`, `weights`, `poles`,
+`evaluate(frequencies)`, `normalized_rmse`, and `maximum_relative_error`.
+The fit uses relative error with a floor of 1% of the response's maximum
+magnitude. It raises `ValueError` if either weighted relative RMS error exceeds
+`tolerance`. These errors describe the impedance/admittance fits, not the final
+line's S-parameter error.
+
+This Foster branch family supports useful loss and dispersion models, including
+finite-band skin-effect approximations, but cannot represent every passive
+response. The generated circuit is passive and causal by construction; this
+is not a causality certificate for the supplied data. Validate the line response
+over the required band and increase `n_sections` until the spatial approximation
+converges. Accuracy outside the fitted band is not guaranteed.
+
+## Reduced uniform lines from RLGC
+
+For a compact two-port without internal taps, use the reduced component factory:
+
+```python
+from circulax.components import reduced_rlgc_transmission_line
+
+line = reduced_rlgc_transmission_line(
+    frequencies, R=r_per_m, L=l_per_m, G=g_per_m, C=c_per_m,
+    length=2e-3, z0=50.0,
+)
+models = {"line": line}  # Connect line,p1 and line,p2 in the parent circuit.
+```
+
+Inputs are real nonnegative per-metre scalars, sampled arrays or functions of
+frequency in Hz. The factory evaluates the exact uniform distributed line and
+fits its S-parameters using the existing vector-fitting API. It does not assume
+constant characteristic impedance. Length is fixed when fitting; refit after
+changing it. There are no internal taps or junction loads.
+
+The default enforces sampled passivity. Stable proper poles and nonnegative
+optional port delays make the returned realization causal. Held-out accuracy,
+S/Y pole stability and wider-grid passivity checks must pass before a circuit
+is returned. Invalid data or an inadequate fit raises `ValueError`. Arbitrary
+input RLGC curves are not thereby certified causal, and sampled passivity is
+not a global certificate. Accuracy outside the fitted band is not guaranteed.
+
+To inspect or save a fit without compiling it:
+
+```python
+from circulax.fitting import fit_rlgc, rlgc_sparameters, circuit_from_coefficients
+
+coefficients = fit_rlgc(frequencies, R=r_per_m, L=l_per_m, G=g_per_m,
+                        C=c_per_m, length=2e-3)
+reference = rlgc_sparameters(frequencies, R=r_per_m, L=l_per_m, G=g_per_m,
+                            C=c_per_m, length=2e-3)
+print(coefficients.metadata["validation"])
+coefficients.save("line.npz")
+line = circuit_from_coefficients(coefficients)
+```
+
+At least six frequency samples are required; every fifth interior sample is
+reserved for validation. `options=ModelFitOptions(...)` controls fit order,
+error limits and optional native propagation-delay separation. Reciprocity
+is required; disabling enforcement still requires sampled passivity to pass.
+Explicit port delays must be physically consistent with reflections. A purely
+rational finite-band approximation does not preserve an exact hard wavefront.
+
+## Long uniform lines: characteristic admittance and exact delay
+
+An S-parameter fit has to follow the line's phase rotation, so a line many
+wavelengths long needs many poles. `characteristic_rlgc_transmission_line`
+removes the delay instead (method of characteristics). With port currents
+flowing into the line,
+
+$$
+Y_cV_1-I_1=H\,(Y_cV_2+I_2),\qquad Y_cV_2-I_2=H\,(Y_cV_1+I_1),
+$$
+
+$$
+Y_c=\sqrt{Y/Z},\qquad H=e^{-\gamma L}=e^{-s\tau}\,H_\mathrm{min}(s).
+$$
+
+The delay $\tau$ is realized exactly. Only the smooth $Y_c$ and
+$H_\mathrm{min}$ are fitted. Reflections at mismatched ends need no special
+treatment: unlike port delays on S, this de-embeds the propagation rather than
+the S-parameters.
+
+```python
+from circulax.components import characteristic_rlgc_transmission_line
+from circulax.fitting import fit_rlgc_characteristic
+
+frequencies = np.r_[0.0, np.geomspace(1e5, 250e9, 500)]  # must include DC
+line = characteristic_rlgc_transmission_line(
+    frequencies, R=r_per_m, L=l_per_m, G=g_per_m, C=c_per_m, length=5e-3,
+)
+model = fit_rlgc_characteristic(frequencies, R=r_per_m, L=l_per_m, G=g_per_m,
+                                C=c_per_m, length=5e-3)
+print(model.delay, model.metadata)  # order, S error, passivity diagnostics
+line = model.circuit()
+```
+
+Both fits use the same order, increased from 4 until every check passes:
+
+- maximum S error against the exact, unfloored line on all samples is within
+  `tolerance`;
+- the poles are stable;
+- on a grid from DC to ten times the band, S has singular values at most one,
+  $\mathrm{Re}\,Y_c\ge0$ and $|H_\mathrm{min}|\le1$.
+
+Otherwise it raises `ValueError`.
+
+The default delay is 0.98 times the phase delay at the highest frequency. This
+leaves the minimum-phase part, such as skin-effect internal inductance, to
+$H_\mathrm{min}$.
+
+**DC.** With $G=0$, $Y_c(0)=0$ and $H(0)=1$, so the DC resistance is a 0/0
+limit. Arbitrarily small fit errors then make it wrong.
+
+- The fit floors $G$ at $2\pi f_\mathrm{low}C$ and $R$ at $2\pi f_\mathrm{low}L$,
+  where $f_\mathrm{low}$ is the lowest nonzero frequency. This puts the floor's
+  corner inside the grid.
+- It also pins the fitted values at DC exactly.
+- A floor below the first grid frequency, such as $G=10^{-9}$ S/m, leaves the
+  transition unfitted and does not work.
+- If the floors alone would exceed `tolerance`, the error message gives the
+  lowest frequency required.
+
+The realization uses one small component per real pole or conjugate pair,
+which keeps the Jacobian sparse. It works in real and complex circuits for DC,
+AC, harmonic balance and transient analysis. On a 5 mm thin-film lithium niobate electrode fitted to
+250 GHz (the line of the [TFLN traveling-wave MZM example](examples/tfln_traveling_wave_mzm.md)), it needs 16 + 16 poles,
+against 67 for the S-parameter fit. A 56-bit transient runs in 0.4 s (real) instead of about 15 s,
+and is closer to the exact response. The first fit in a session takes about 10 s,
+almost all of it JIT compilation of the vector fit for each order tried. Later
+fits, for example a length sweep, reuse the compiled orders and take about 0.5 s.
+
+Sampled passivity is not a global certificate, and causality of the input data
+is not certified. There are no internal taps.
+
+Choose `rlgc_transmission_line` for a passive RLC ladder with distributed loads;
+choose `reduced_rlgc_transmission_line` for a compact fixed-length two-port,
+and `characteristic_rlgc_transmission_line` when that two-port is electrically long.
+The [standalone RLGC example](examples/rlgc_transmission_line.md) compares the
+reduced line against the original dispersive RLGC data and runs a native pulse.

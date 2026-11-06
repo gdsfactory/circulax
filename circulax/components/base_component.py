@@ -317,8 +317,8 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
     """Compile a physics function into a :class:`CircuitComponent` subclass.
 
     Inspects ``fn``'s signature, validates it against the declared ``ports``
-    and ``states``, performs a dry-run with default values to catch errors
-    early, then builds two closures:
+    and ``states``, checks argument binding without evaluating physics, then
+    builds two closures:
 
     - ``_fast_physics`` — a static function ``(vars_vec, params, t)`` suitable
       for ``jax.vmap`` / ``jax.jacfwd``, used by the solver.
@@ -352,8 +352,9 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
     Raises:
         TypeError: If the function signature does not start with the required
             reserved arguments, if any parameter lacks a default value, if a
-            non-source component declares a ``t`` parameter, or if the dry-run
-            raises an exception.
+            non-source component declares a ``t`` parameter, or if the arguments
+            cannot be bound to the function signature. Physics-body errors
+            propagate when the component is evaluated.
         ValueError: If ``port_aliases`` references a canonical name that is
             not in ``ports``.
 
@@ -407,28 +408,10 @@ def _build_component(  # noqa: C901, PLR0912, PLR0915
 
     n_ports = len(ports)
     full_keys = ports + states
-    _dummy_signals = Signals([0.0] * len(full_keys), full_keys)
-    _dummy_legacy_signals = Signals([0.0] * len(ports), ports)
-    _dummy_states = States([0.0] * len(states), states)
-    _defaults = {p.name: p.default for p in param_specs}
-
-    # Dry-run validates ordinary arguments. ``init`` is registered only after
-    # class construction, so setup-backed components receive a placeholder.
-    _dry_positional = [_dummy_legacy_signals, _dummy_states] if legacy_states else [_dummy_signals]
-    if uses_time:
-        _dry_positional.append(0.0)
-    if has_init_arg:
-        _dry_positional.append({})
-    try:
-        fn(*_dry_positional, **_defaults)
-    except Exception as exc:
-        # Bodies that index into init with concrete keys will fail the
-        # placeholder dry-run; that's expected and harmless. Suppress only
-        # KeyError/IndexError/AttributeError, which are the typical "init
-        # was the empty placeholder" failure modes — anything else is a
-        # real signature bug.
-        if not (has_init_arg and isinstance(exc, (KeyError, IndexError, AttributeError, TypeError))):
-            raise TypeError(f"Dry-run failed: {exc}") from exc
+    # Keep structural validation at definition time without running numerical
+    # physics, compiling JAX primitives, or inventing placeholder setup data.
+    # Body errors belong to evaluation with the caller's actual parameters.
+    sig.bind(*([None] * (len(reserved) + has_init_arg)), **{p.name: p.default for p in param_specs})
 
     _param_names = tuple(p.name for p in param_specs)
     _user_fn = fn

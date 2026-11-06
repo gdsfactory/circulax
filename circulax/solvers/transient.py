@@ -1,5 +1,6 @@
 """Transient solvers to be used with Diffrax."""
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -18,18 +19,21 @@ except ImportError:
     _klujax_free_numeric = None
 
 
-def free_numeric(handle, dependency=None):  # noqa: ANN001, ANN201, ARG001
+def free_numeric(handle, dependency=None):  # noqa: ANN001, ANN201
     """Dispatch free to the correct backend based on handle type.
 
     ``klujax.KLUHandleManager`` exposes ``.close()``, which calls the backend's FFI free
     function.  Duck-typing is used so handles are freed correctly without ``isinstance``
     checks against concrete backend types.
+
+    ``dependency`` must contain every result computed from a raw (traced) handle. klujax
+    orders the free after it; releases that free raw handles require it.
     """
     if hasattr(handle, "close"):
         handle.close()
         return
     if _klujax_free_numeric is not None:
-        _klujax_free_numeric(handle)
+        _klujax_free_numeric(handle, dependency)
 
 
 from circulax.solvers.assembly import (
@@ -240,7 +244,7 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
             throw=False,
         )
 
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -326,7 +330,7 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             throw=False,
         )
 
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -531,7 +535,7 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -603,7 +607,7 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -639,7 +643,9 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
 # History terms:
 #   Q_hist_1 = Q(y_n)
 #   Q_hist_2 = Q(y_n) + (a21/γ) · (Q(Y1) - Q(y_n))
-#   Q_hist_3 = Q(y_n) + (b1/γ)  · (Q(Y1) - Q(y_n)) + (b2/γ) · (Q(Y2) - Q(y_n))
+#   Q_hist_3 = Q(y_n) + (b1/γ)  · (Q(Y1) - Q(y_n)) + (b2/γ) · (Q(Y2) - Q_hist_2)
+# Each charge increment must subtract its own stage history:
+#   K_i = (Q(Y_i) - Q_hist_i) / (γh) = -F(Y_i).
 
 _SDIRK3_G = 0.4358665215084589  # A-stable root of 6γ³ - 18γ² + 9γ - 1 = 0
 _SDIRK3_INV_G = 1.0 / _SDIRK3_G  # alpha = 1/γ for assembly (step size = γh)
@@ -714,7 +720,7 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
         Y2, r2 = _run_stage(Y1, q_hist_2, t_s2)
         Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
         q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
-        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         # Stage 3 — t_s3 = t1 (c3 = 1), y_{n+1} = Y3
         Y3, r3 = _run_stage(Y2, q_hist_3, t1)
@@ -801,10 +807,10 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
         Y2, r2 = _run_stage(Y1, q_hist_2)
         Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
         q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
-        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         Y3, r3 = _run_stage(Y2, q_hist_3)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, Y3)
 
         y_next = Y3
         y_error = Y3 - y_pred
@@ -888,10 +894,10 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
         Y2, r2 = _run_stage(Y1, q_hist_2, t_s2)
         Y2_c = Y2[:num_vars] + 1j * Y2[num_vars:] if is_complex else Y2
         q_Y2 = _compute_history(component_groups, Y2_c, t_s2, num_vars)
-        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_n)
+        q_hist_3 = q_n + (_SDIRK3_B1 / _SDIRK3_G) * (q_Y1 - q_n) + (_SDIRK3_B2 / _SDIRK3_G) * (q_Y2 - q_hist_2)
 
         Y3, r3 = _run_stage(Y2, q_hist_3, t1)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, Y3)
 
         y_next = Y3
         y_error = Y3 - y_pred
@@ -1101,7 +1107,7 @@ class TrapFactorizedTransientSolver(FactorizedTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -1184,7 +1190,7 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
 
         fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
         sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
-        free_numeric(numeric_handle)
+        free_numeric(numeric_handle, sol.value)
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -1200,6 +1206,45 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
             None,
         )
         return y_next, y_error, {"y0": y0, "y1": y_next}, new_state, result
+
+
+def _zero_vector_field(t, y, args):
+    return jnp.zeros_like(y)
+
+
+_DEFAULT_TRANSIENT_TERM = diffrax.ODETerm(_zero_vector_field)
+
+
+def _delay_history_capacity(max_delay, dt0, controller, capacity=None) -> int:
+    """Choose a static ring capacity without changing step-size control.
+
+    Only direct built-in controllers have a known lower-step contract. Wrappers
+    can insert arbitrarily many shorter steps, so they retain the checked
+    fallback. The three spare slots cover startup, interpolation brackets and
+    the final interval clipped below the controller's minimum step.
+    """
+    if capacity is not None:
+        return capacity
+    if type(controller) is ConstantStepSize:
+        minimum, name = dt0, "dt0"
+    elif type(controller) is diffrax.PIDController:
+        minimum, name = controller.dtmin, "PIDController.dtmin"
+    else:
+        return 1024
+    if minimum is None:
+        return 1024
+    try:
+        minimum = float(minimum)
+    except (jax.errors.ConcretizationTypeError, TypeError):
+        return 1024
+    if not math.isfinite(minimum) or minimum <= 0:
+        msg = f"{name} must be finite and positive to infer delay history capacity."
+        raise ValueError(msg)
+    try:
+        horizon = float(max_delay)
+    except (jax.errors.ConcretizationTypeError, TypeError):
+        return 1024
+    return max(2, math.ceil(horizon / minimum) + 3)
 
 
 def setup_transient(
@@ -1222,6 +1267,16 @@ def setup_transient(
         Callable[..., Any]: A function that executes the transient analysis.
         This returned function accepts the following arguments:
 
+            history_capacity (int, optional): Static accepted-sample capacity
+                for delayed circuits. Concrete constant-step runs infer
+                ceil(max_delay / dt0) + 3. Direct PIDController calls with a
+                concrete, finite, positive dtmin infer ceil(max_delay / dtmin)
+                + 3. Other adaptive, wrapped or traced runs use 1024.
+                Capacity includes the initial sample and interpolation brackets.
+                An explicit runtime error prevents eviction of required history;
+                controllers without an inferred lower bound may need a larger
+                capacity. Sizing does not change dtmin or force_dtmin. Saved
+                output and reverse-mode checkpoints have separate memory costs.
             t0 (float): The start time of the simulation.
             t1 (float): The end time of the simulation.
             dt0 (float): The initial time step for the solver.
@@ -1292,7 +1347,7 @@ def setup_transient(
         **kwargs: Any,
     ) -> diffrax.Solution:
         """Executes the transient simulation for the pre-configured circuit."""
-        term = kwargs.pop("term", diffrax.ODETerm(lambda t, y, args: jnp.zeros_like(y)))
+        term = kwargs.pop("term", _DEFAULT_TRANSIENT_TERM)
         solver = kwargs.pop("solver", tsolver)
         from circulax.solvers.source_settings import waveform_groups
 
@@ -1300,6 +1355,15 @@ def setup_transient(
         args = kwargs.pop("args", (analysis_groups, sys_size))
         stepsize_controller = kwargs.pop("stepsize_controller", ConstantStepSize())
         checkpoints = kwargs.pop("checkpoints", None)
+        history_capacity = kwargs.pop("history_capacity", None)
+        max_delay = jnp.asarray(0.0)
+        if has_delay:
+            from circulax.solvers.assembly import _group_tau
+
+            for group in args[0].values():
+                if getattr(group, "has_delay", False):
+                    max_delay = jnp.maximum(max_delay, jnp.max(_group_tau(group, group.params)))
+            history_capacity = _delay_history_capacity(max_delay, dt0, stepsize_controller, history_capacity)
 
         sol = circuit_diffeqsolve(
             terms=term,
@@ -1315,6 +1379,8 @@ def setup_transient(
             stepsize_controller=stepsize_controller,
             checkpoints=checkpoints,
             record_history=has_delay,
+            history_capacity=1024 if history_capacity is None else history_capacity,
+            max_delay=max_delay,
         )
 
         return sol

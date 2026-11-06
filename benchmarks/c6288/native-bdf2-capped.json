@@ -1,0 +1,265 @@
+{
+  "mode": "bdf2-capped",
+  "runs": [
+    {
+      "simulator": "vacask",
+      "mode": "bdf2-capped",
+      "cpus": 1,
+      "stepping": "adaptive_bdf2_maxstep_2ps",
+      "tolerances": {
+        "reltol": 0.001,
+        "abstol_A": 1e-12,
+        "vntol_V": 1e-06,
+        "chgtol_C": 1e-15,
+        "fluxtol_Wb": 1e-14,
+        "tran_lteratio": 1.5,
+        "source": "lib/options.cpp defaults plus upstream runme.sim"
+      },
+      "blas_cpus": 1,
+      "stop_s": 2e-09,
+      "initial_step_s": 2e-12,
+      "initial_conditions": "uic_zero",
+      "modules": [
+        {
+          "path": "/home/cdaunt/.cache/circulax/osdi/psp103-ef7c18f42d5f8cbfcb6be7d8dee1e50184c94a93eaed69db8c9ba1bd04c442a8.osdi",
+          "sha256": "79cc7501efc52a14cc4daefae8a44ce4bd4561863e17cd7a24a4ff2d5a0e2637",
+          "abi": "0.4"
+        },
+        {
+          "path": "/home/cdaunt/.cache/circulax/osdi/resistor-3d07d5632e0536224ca410d9867c063626a667b29ed83b941f0f9d69a1594b3f.osdi",
+          "sha256": "6507c9ff29f3203884e5150b18e8bd401e7b0a0524e8c6b4271edbe6ad3c5577",
+          "abi": "0.4"
+        }
+      ],
+      "status": "ok",
+      "run": 1,
+      "binary": "/home/cdaunt/code/vacask/VACASK/build/simulator/vacask",
+      "binary_sha256": "edd93149d192baa519a91a78413037c5de6f9675bfe43d62bcc5e0916160e986",
+      "sources": [
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/runme.sim",
+          "sha256": "e28e4c868927deb7ff0bde049b59b5ab2d18d5a05d03a34a5869539d3dacecce"
+        },
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/models.inc",
+          "sha256": "394b747ff7d08853af3d7bc20a7f28d922c6dd73831c2bae61519177d839e69b"
+        },
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/multiplier.inc",
+          "sha256": "73a692eb1573475cdc9c0aa494d1b88713ded45c519ed288212a3e2cbf52c74a"
+        }
+      ],
+      "process_wall_s": 89.51466894100304,
+      "exit_code": 0,
+      "version": "This is vacask 0.3.4-100-g29d99ad-dirty.",
+      "nr_solver_s": 88.5406,
+      "nr_iterations": 4639,
+      "accepted_timepoints": 1524,
+      "rejected_timepoints": 1,
+      "unknowns": 25380,
+      "eval_and_load_s": 81.4008,
+      "initial_nonzeros": 158904,
+      "eval_and_load_calls": 4640,
+      "real_factorizations": 1,
+      "real_refactorizations": 4638,
+      "real_solve_calls": 4639,
+      "real_factorization_s": 0.00391225,
+      "real_refactorization_s": 5.7693,
+      "real_solve_s": 0.910395,
+      "bypassed_evaluations": 15449312,
+      "saved_timepoints": 1525,
+      "final_time_s": 2e-09,
+      "finite": true,
+      "final_product": {
+        "expected": "0xfffe0001",
+        "observed": "0xfffe0001",
+        "valid_logic": true,
+        "invalid_bits": []
+      },
+      "inputs_high": true,
+      "waveform_difference": {
+        "max_abs_v": 1.2344157040469013,
+        "rms_v": 0.07585825607913049,
+        "final_max_abs_v": 7.334177993057394e-08,
+        "comparison": "VACASK linearly interpolated at Circulax saved times"
+      },
+      "circulax_transient_over_vacask_process": 0.6538653109424459
+    },
+    {
+      "simulator": "vacask",
+      "mode": "bdf2-capped",
+      "cpus": 1,
+      "stepping": "adaptive_bdf2_maxstep_2ps",
+      "tolerances": {
+        "reltol": 0.001,
+        "abstol_A": 1e-12,
+        "vntol_V": 1e-06,
+        "chgtol_C": 1e-15,
+        "fluxtol_Wb": 1e-14,
+        "tran_lteratio": 1.5,
+        "source": "lib/options.cpp defaults plus upstream runme.sim"
+      },
+      "blas_cpus": 1,
+      "stop_s": 2e-09,
+      "initial_step_s": 2e-12,
+      "initial_conditions": "uic_zero",
+      "modules": [
+        {
+          "path": "/home/cdaunt/.cache/circulax/osdi/psp103-ef7c18f42d5f8cbfcb6be7d8dee1e50184c94a93eaed69db8c9ba1bd04c442a8.osdi",
+          "sha256": "79cc7501efc52a14cc4daefae8a44ce4bd4561863e17cd7a24a4ff2d5a0e2637",
+          "abi": "0.4"
+        },
+        {
+          "path": "/home/cdaunt/.cache/circulax/osdi/resistor-3d07d5632e0536224ca410d9867c063626a667b29ed83b941f0f9d69a1594b3f.osdi",
+          "sha256": "6507c9ff29f3203884e5150b18e8bd401e7b0a0524e8c6b4271edbe6ad3c5577",
+          "abi": "0.4"
+        }
+      ],
+      "status": "ok",
+      "run": 2,
+      "binary": "/home/cdaunt/code/vacask/VACASK/build/simulator/vacask",
+      "binary_sha256": "edd93149d192baa519a91a78413037c5de6f9675bfe43d62bcc5e0916160e986",
+      "sources": [
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/runme.sim",
+          "sha256": "e28e4c868927deb7ff0bde049b59b5ab2d18d5a05d03a34a5869539d3dacecce"
+        },
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/models.inc",
+          "sha256": "394b747ff7d08853af3d7bc20a7f28d922c6dd73831c2bae61519177d839e69b"
+        },
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/multiplier.inc",
+          "sha256": "73a692eb1573475cdc9c0aa494d1b88713ded45c519ed288212a3e2cbf52c74a"
+        }
+      ],
+      "process_wall_s": 89.85889616698842,
+      "exit_code": 0,
+      "version": "This is vacask 0.3.4-100-g29d99ad-dirty.",
+      "nr_solver_s": 88.9342,
+      "nr_iterations": 4639,
+      "accepted_timepoints": 1524,
+      "rejected_timepoints": 1,
+      "unknowns": 25380,
+      "eval_and_load_s": 81.4842,
+      "initial_nonzeros": 158904,
+      "eval_and_load_calls": 4640,
+      "real_factorizations": 1,
+      "real_refactorizations": 4638,
+      "real_solve_calls": 4639,
+      "real_factorization_s": 0.00328783,
+      "real_refactorization_s": 6.03983,
+      "real_solve_s": 0.944524,
+      "bypassed_evaluations": 15449312,
+      "saved_timepoints": 1525,
+      "final_time_s": 2e-09,
+      "finite": true,
+      "final_product": {
+        "expected": "0xfffe0001",
+        "observed": "0xfffe0001",
+        "valid_logic": true,
+        "invalid_bits": []
+      },
+      "inputs_high": true,
+      "waveform_difference": {
+        "max_abs_v": 1.2344157040469013,
+        "rms_v": 0.07585825607913049,
+        "final_max_abs_v": 7.334177993057394e-08,
+        "comparison": "VACASK linearly interpolated at Circulax saved times"
+      },
+      "circulax_transient_over_vacask_process": 0.651360514514327
+    },
+    {
+      "simulator": "vacask",
+      "mode": "bdf2-capped",
+      "cpus": 1,
+      "stepping": "adaptive_bdf2_maxstep_2ps",
+      "tolerances": {
+        "reltol": 0.001,
+        "abstol_A": 1e-12,
+        "vntol_V": 1e-06,
+        "chgtol_C": 1e-15,
+        "fluxtol_Wb": 1e-14,
+        "tran_lteratio": 1.5,
+        "source": "lib/options.cpp defaults plus upstream runme.sim"
+      },
+      "blas_cpus": 1,
+      "stop_s": 2e-09,
+      "initial_step_s": 2e-12,
+      "initial_conditions": "uic_zero",
+      "modules": [
+        {
+          "path": "/home/cdaunt/.cache/circulax/osdi/psp103-ef7c18f42d5f8cbfcb6be7d8dee1e50184c94a93eaed69db8c9ba1bd04c442a8.osdi",
+          "sha256": "79cc7501efc52a14cc4daefae8a44ce4bd4561863e17cd7a24a4ff2d5a0e2637",
+          "abi": "0.4"
+        },
+        {
+          "path": "/home/cdaunt/.cache/circulax/osdi/resistor-3d07d5632e0536224ca410d9867c063626a667b29ed83b941f0f9d69a1594b3f.osdi",
+          "sha256": "6507c9ff29f3203884e5150b18e8bd401e7b0a0524e8c6b4271edbe6ad3c5577",
+          "abi": "0.4"
+        }
+      ],
+      "status": "ok",
+      "run": 3,
+      "binary": "/home/cdaunt/code/vacask/VACASK/build/simulator/vacask",
+      "binary_sha256": "edd93149d192baa519a91a78413037c5de6f9675bfe43d62bcc5e0916160e986",
+      "sources": [
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/runme.sim",
+          "sha256": "e28e4c868927deb7ff0bde049b59b5ab2d18d5a05d03a34a5869539d3dacecce"
+        },
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/models.inc",
+          "sha256": "394b747ff7d08853af3d7bc20a7f28d922c6dd73831c2bae61519177d839e69b"
+        },
+        {
+          "path": "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/multiplier.inc",
+          "sha256": "73a692eb1573475cdc9c0aa494d1b88713ded45c519ed288212a3e2cbf52c74a"
+        }
+      ],
+      "process_wall_s": 89.69291695501306,
+      "exit_code": 0,
+      "version": "This is vacask 0.3.4-100-g29d99ad-dirty.",
+      "nr_solver_s": 88.7499,
+      "nr_iterations": 4639,
+      "accepted_timepoints": 1524,
+      "rejected_timepoints": 1,
+      "unknowns": 25380,
+      "eval_and_load_s": 81.5116,
+      "initial_nonzeros": 158904,
+      "eval_and_load_calls": 4640,
+      "real_factorizations": 1,
+      "real_refactorizations": 4638,
+      "real_solve_calls": 4639,
+      "real_factorization_s": 0.00332587,
+      "real_refactorization_s": 5.84302,
+      "real_solve_s": 0.934204,
+      "bypassed_evaluations": 15449312,
+      "saved_timepoints": 1525,
+      "final_time_s": 2e-09,
+      "finite": true,
+      "final_product": {
+        "expected": "0xfffe0001",
+        "observed": "0xfffe0001",
+        "valid_logic": true,
+        "invalid_bits": []
+      },
+      "inputs_high": true,
+      "waveform_difference": {
+        "max_abs_v": 1.2344157040469013,
+        "rms_v": 0.07585825607913049,
+        "final_max_abs_v": 7.334177993057394e-08,
+        "comparison": "VACASK linearly interpolated at Circulax saved times"
+      },
+      "circulax_transient_over_vacask_process": 0.6525658750776943
+    }
+  ],
+  "circulax_transient_s": 58.53053684101906,
+  "circulax_setup_s": 19.059229424980003,
+  "circulax_compile_s": 1.2634078839910217,
+  "median_process_wall_s": 89.69291695501306,
+  "median_nr_solver_s": 88.7499,
+  "circulax_transient_over_vacask_process": 0.6525658750776943,
+  "timing_comparison": "Circulax timed transient / VACASK whole process; Circulax setup and JIT excluded",
+  "circulax_measured_total_s": 78.85317414999008
+}

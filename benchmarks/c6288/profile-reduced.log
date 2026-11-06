@@ -1,0 +1,509 @@
+/home/cdaunt/.config/matplotlib is not a writable directory
+Matplotlib created a temporary cache directory at /tmp/matplotlib-etjnja7f because there was an issue with the default path (/home/cdaunt/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+WARNING:2026-11-05 16:37:43,261:jax._src.dispatch:206: Finished tracing + transforming exp for pjit in 0.000401735 sec
+WARNING:2026-11-05 16:37:43,270:jax._src.interpreters.pxla:1939: Compiling jit(exp) with global shapes and types (ShapedArray(complex128[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:37:43,280:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(exp) in 0.010067701 sec
+WARNING:2026-11-05 16:37:43,311:jax._src.dispatch:206: Finished XLA compilation of jit(exp) in 0.030464888 sec
+WARNING:2026-11-05 16:37:43,313:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000567913 sec
+WARNING:2026-11-05 16:37:43,314:jax._src.interpreters.pxla:1939: Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(complex128[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:37:43,318:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(multiply) in 0.004062891 sec
+WARNING:2026-11-05 16:37:43,334:jax._src.dispatch:206: Finished XLA compilation of jit(multiply) in 0.015359879 sec
+WARNING:2026-11-05 16:37:43,335:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000229597 sec
+WARNING:2026-11-05 16:37:43,335:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(complex128[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:37:43,338:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002240419 sec
+WARNING:2026-11-05 16:37:43,344:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.006110191 sec
+WARNING:2026-11-05 16:37:43,346:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000294685 sec
+WARNING:2026-11-05 16:37:43,346:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(complex128[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:37:43,349:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002561092 sec
+WARNING:2026-11-05 16:37:43,355:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.006389618 sec
+WARNING:2026-11-05 16:37:43,357:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000265598 sec
+WARNING:2026-11-05 16:37:43,357:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(complex128[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:37:43,360:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002624273 sec
+WARNING:2026-11-05 16:37:43,366:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.006074667 sec
+WARNING:2026-11-05 16:37:43,367:jax._src.dispatch:206: Finished tracing + transforming concatenate for pjit in 0.000276566 sec
+WARNING:2026-11-05 16:37:43,368:jax._src.interpreters.pxla:1939: Compiling jit(concatenate) with global shapes and types (ShapedArray(complex128[1]), ShapedArray(complex128[1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:37:43,371:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(concatenate) in 0.002698660 sec
+WARNING:2026-11-05 16:37:43,381:jax._src.dispatch:206: Finished XLA compilation of jit(concatenate) in 0.009916067 sec
+WARNING:2026-11-05 16:37:43,382:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000272036 sec
+WARNING:2026-11-05 16:37:43,382:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(complex128[2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:37:43,385:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002198458 sec
+WARNING:2026-11-05 16:37:43,390:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.005471468 sec
+WARNING:2026-11-05 16:37:43,391:jax._src.dispatch:206: Finished tracing + transforming concatenate for pjit in 0.000223398 sec
+WARNING:2026-11-05 16:37:43,392:jax._src.interpreters.pxla:1939: Compiling jit(concatenate) with global shapes and types (ShapedArray(complex128[1,2]), ShapedArray(complex128[1,2])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:37:43,394:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(concatenate) in 0.002177000 sec
+WARNING:2026-11-05 16:37:43,404:jax._src.dispatch:206: Finished XLA compilation of jit(concatenate) in 0.009621859 sec
+WARNING:2026-11-05 16:37:43,406:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000502586 sec
+WARNING:2026-11-05 16:37:43,407:jax._src.dispatch:206: Finished tracing + transforming equal for pjit in 0.000252247 sec
+WARNING:2026-11-05 16:37:43,408:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000302076 sec
+WARNING:2026-11-05 16:37:43,408:jax._src.dispatch:206: Finished tracing + transforming conjugate for pjit in 0.000211954 sec
+WARNING:2026-11-05 16:37:43,409:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000323296 sec
+WARNING:2026-11-05 16:37:43,410:jax._src.dispatch:206: Finished tracing + transforming subtract for pjit in 0.000209093 sec
+WARNING:2026-11-05 16:37:43,410:jax._src.dispatch:206: Finished tracing + transforming subtract for pjit in 0.000293493 sec
+WARNING:2026-11-05 16:37:43,411:jax._src.dispatch:206: Finished tracing + transforming negative for pjit in 0.000169754 sec
+WARNING:2026-11-05 16:37:43,412:jax._src.dispatch:206: Finished tracing + transforming true_divide for pjit in 0.000293255 sec
+WARNING:2026-11-05 16:37:43,413:jax._src.dispatch:206: Finished tracing + transforming s_to_y for pjit in 0.007908344 sec
+WARNING:2026-11-05 16:37:43,413:jax._src.interpreters.pxla:1939: Compiling jit(s_to_y) with global shapes and types (ShapedArray(complex128[2,2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:37:43,416:jax._src.dispatch:206: Finished tracing + transforming negative for pjit in 0.000108004 sec
+WARNING:2026-11-05 16:37:43,420:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(s_to_y) in 0.007087708 sec
+WARNING:2026-11-05 16:37:43,477:jax._src.dispatch:206: Finished XLA compilation of jit(s_to_y) in 0.056337595 sec
+WARNING:2026-11-05 16:38:02,528:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000308514 sec
+WARNING:2026-11-05 16:38:02,529:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[10112,783]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,532:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.003414154 sec
+WARNING:2026-11-05 16:38:02,542:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.009209871 sec
+WARNING:2026-11-05 16:38:02,665:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000321865 sec
+WARNING:2026-11-05 16:38:02,666:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[32,28]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,670:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.003840208 sec
+WARNING:2026-11-05 16:38:02,679:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.009265900 sec
+WARNING:2026-11-05 16:38:02,707:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000234842 sec
+WARNING:2026-11-05 16:38:02,707:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,710:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002898932 sec
+WARNING:2026-11-05 16:38:02,716:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.006143570 sec
+WARNING:2026-11-05 16:38:02,717:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000216007 sec
+WARNING:2026-11-05 16:38:02,718:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[], weak_type=True),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,722:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.004055262 sec
+WARNING:2026-11-05 16:38:02,728:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.005822897 sec
+WARNING:2026-11-05 16:38:02,729:jax._src.dispatch:206: Finished tracing + transforming concatenate for pjit in 0.000197887 sec
+WARNING:2026-11-05 16:38:02,729:jax._src.interpreters.pxla:1939: Compiling jit(concatenate) with global shapes and types (ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:02,731:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(concatenate) in 0.002125978 sec
+WARNING:2026-11-05 16:38:02,741:jax._src.dispatch:206: Finished XLA compilation of jit(concatenate) in 0.009481430 sec
+WARNING:2026-11-05 16:38:02,743:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000207901 sec
+WARNING:2026-11-05 16:38:02,743:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,745:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.001965761 sec
+WARNING:2026-11-05 16:38:02,750:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.004576445 sec
+WARNING:2026-11-05 16:38:02,751:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000195026 sec
+WARNING:2026-11-05 16:38:02,751:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,753:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.001993895 sec
+WARNING:2026-11-05 16:38:02,763:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.009395361 sec
+WARNING:2026-11-05 16:38:02,764:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000077724 sec
+WARNING:2026-11-05 16:38:02,764:jax._src.dispatch:206: Finished tracing + transforming _where for pjit in 0.000634193 sec
+WARNING:2026-11-05 16:38:02,764:jax._src.interpreters.pxla:1939: Compiling jit(_where) with global shapes and types (ShapedArray(bool[]), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:02,767:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(_where) in 0.002200365 sec
+WARNING:2026-11-05 16:38:02,776:jax._src.dispatch:206: Finished XLA compilation of jit(_where) in 0.009180546 sec
+WARNING:2026-11-05 16:38:02,778:jax._src.dispatch:206: Finished tracing + transforming dynamic_slice for pjit in 0.000244617 sec
+WARNING:2026-11-05 16:38:02,778:jax._src.interpreters.pxla:1939: Compiling jit(dynamic_slice) with global shapes and types (ShapedArray(float64[3]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:02,780:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(dynamic_slice) in 0.002335310 sec
+WARNING:2026-11-05 16:38:02,790:jax._src.dispatch:206: Finished XLA compilation of jit(dynamic_slice) in 0.009556770 sec
+WARNING:2026-11-05 16:38:02,792:jax._src.dispatch:206: Finished tracing + transforming squeeze for pjit in 0.000207424 sec
+WARNING:2026-11-05 16:38:02,792:jax._src.interpreters.pxla:1939: Compiling jit(squeeze) with global shapes and types (ShapedArray(float64[1]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,794:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(squeeze) in 0.002128839 sec
+WARNING:2026-11-05 16:38:02,799:jax._src.dispatch:206: Finished XLA compilation of jit(squeeze) in 0.004948854 sec
+WARNING:2026-11-05 16:38:02,800:jax._src.dispatch:206: Finished tracing + transforming subtract for pjit in 0.000205755 sec
+WARNING:2026-11-05 16:38:02,801:jax._src.interpreters.pxla:1939: Compiling jit(subtract) with global shapes and types (ShapedArray(float64[]), ShapedArray(float64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:02,803:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(subtract) in 0.002027512 sec
+WARNING:2026-11-05 16:38:02,812:jax._src.dispatch:206: Finished XLA compilation of jit(subtract) in 0.008707285 sec
+WARNING:2026-11-05 16:38:02,812:jax._src.dispatch:206: Finished tracing + transforming subtract for pjit in 0.000267267 sec
+WARNING:2026-11-05 16:38:02,813:jax._src.interpreters.pxla:1939: Compiling jit(subtract) with global shapes and types (ShapedArray(float64[]), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:02,815:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(subtract) in 0.002242804 sec
+WARNING:2026-11-05 16:38:02,824:jax._src.dispatch:206: Finished XLA compilation of jit(subtract) in 0.008258820 sec
+WARNING:2026-11-05 16:38:02,825:jax._src.dispatch:206: Finished tracing + transforming negative for pjit in 0.000336647 sec
+WARNING:2026-11-05 16:38:02,825:jax._src.interpreters.pxla:1939: Compiling jit(negative) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,828:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(negative) in 0.002476454 sec
+WARNING:2026-11-05 16:38:02,838:jax._src.dispatch:206: Finished XLA compilation of jit(negative) in 0.010256529 sec
+WARNING:2026-11-05 16:38:02,841:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000267029 sec
+WARNING:2026-11-05 16:38:02,841:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int32[2,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,844:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002306938 sec
+WARNING:2026-11-05 16:38:02,850:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.006012917 sec
+WARNING:2026-11-05 16:38:02,852:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000262499 sec
+WARNING:2026-11-05 16:38:02,852:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[2,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,859:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.006575584 sec
+WARNING:2026-11-05 16:38:02,879:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.019505501 sec
+WARNING:2026-11-05 16:38:02,880:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000249624 sec
+WARNING:2026-11-05 16:38:02,881:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[2,3,1]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,883:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002567768 sec
+WARNING:2026-11-05 16:38:02,905:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.021602392 sec
+WARNING:2026-11-05 16:38:02,907:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000286102 sec
+WARNING:2026-11-05 16:38:02,907:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[2,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,911:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002981424 sec
+WARNING:2026-11-05 16:38:02,938:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.026927710 sec
+WARNING:2026-11-05 16:38:02,946:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.006875277 sec
+WARNING:2026-11-05 16:38:02,949:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[2,1,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:02,955:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.006499529 sec
+WARNING:2026-11-05 16:38:02,981:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.025328636 sec
+WARNING:2026-11-05 16:38:02,986:jax._src.dispatch:206: Finished tracing + transforming concatenate for pjit in 0.000356913 sec
+WARNING:2026-11-05 16:38:02,987:jax._src.interpreters.pxla:1939: Compiling jit(concatenate) with global shapes and types (ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True), ShapedArray(float64[1], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:02,990:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(concatenate) in 0.003220797 sec
+WARNING:2026-11-05 16:38:03,003:jax._src.dispatch:206: Finished XLA compilation of jit(concatenate) in 0.013050318 sec
+WARNING:2026-11-05 16:38:03,005:jax._src.dispatch:206: Finished tracing + transforming concatenate for pjit in 0.000348568 sec
+WARNING:2026-11-05 16:38:03,005:jax._src.interpreters.pxla:1939: Compiling jit(concatenate) with global shapes and types (ShapedArray(float64[16], weak_type=True), ShapedArray(float64[16], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,008:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(concatenate) in 0.002964735 sec
+WARNING:2026-11-05 16:38:03,019:jax._src.dispatch:206: Finished XLA compilation of jit(concatenate) in 0.010779142 sec
+WARNING:2026-11-05 16:38:03,029:jax._src.dispatch:206: Finished tracing + transforming remainder for pjit in 0.000561237 sec
+WARNING:2026-11-05 16:38:03,029:jax._src.interpreters.pxla:1939: Compiling jit(remainder) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,034:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(remainder) in 0.004375458 sec
+WARNING:2026-11-05 16:38:03,056:jax._src.dispatch:206: Finished XLA compilation of jit(remainder) in 0.021543503 sec
+WARNING:2026-11-05 16:38:03,057:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000287533 sec
+WARNING:2026-11-05 16:38:03,058:jax._src.interpreters.pxla:1939: Compiling jit(multiply) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,060:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(multiply) in 0.002466202 sec
+WARNING:2026-11-05 16:38:03,072:jax._src.dispatch:206: Finished XLA compilation of jit(multiply) in 0.011023760 sec
+WARNING:2026-11-05 16:38:03,073:jax._src.dispatch:206: Finished tracing + transforming true_divide for pjit in 0.000315905 sec
+WARNING:2026-11-05 16:38:03,073:jax._src.interpreters.pxla:1939: Compiling jit(true_divide) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,077:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(true_divide) in 0.003022194 sec
+WARNING:2026-11-05 16:38:03,089:jax._src.dispatch:206: Finished XLA compilation of jit(true_divide) in 0.012166262 sec
+WARNING:2026-11-05 16:38:03,091:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000277758 sec
+WARNING:2026-11-05 16:38:03,091:jax._src.interpreters.pxla:1939: Compiling jit(add) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,094:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(add) in 0.003106356 sec
+WARNING:2026-11-05 16:38:03,108:jax._src.dispatch:206: Finished XLA compilation of jit(add) in 0.012894869 sec
+WARNING:2026-11-05 16:38:03,109:jax._src.dispatch:206: Finished tracing + transforming subtract for pjit in 0.000313759 sec
+WARNING:2026-11-05 16:38:03,109:jax._src.interpreters.pxla:1939: Compiling jit(subtract) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,113:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(subtract) in 0.003101110 sec
+WARNING:2026-11-05 16:38:03,123:jax._src.dispatch:206: Finished XLA compilation of jit(subtract) in 0.010296106 sec
+WARNING:2026-11-05 16:38:03,125:jax._src.dispatch:206: Finished tracing + transforming less for pjit in 0.000252485 sec
+WARNING:2026-11-05 16:38:03,125:jax._src.interpreters.pxla:1939: Compiling jit(less) with global shapes and types (ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,128:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(less) in 0.002830267 sec
+WARNING:2026-11-05 16:38:03,138:jax._src.dispatch:206: Finished XLA compilation of jit(less) in 0.009618759 sec
+WARNING:2026-11-05 16:38:03,139:jax._src.dispatch:206: Finished tracing + transforming _where for pjit in 0.000379324 sec
+WARNING:2026-11-05 16:38:03,139:jax._src.interpreters.pxla:1939: Compiling jit(_where) with global shapes and types (ShapedArray(bool[], weak_type=True), ShapedArray(float64[], weak_type=True), ShapedArray(float64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,142:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(_where) in 0.002109289 sec
+WARNING:2026-11-05 16:38:03,152:jax._src.dispatch:206: Finished XLA compilation of jit(_where) in 0.010215759 sec
+WARNING:2026-11-05 16:38:03,163:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000190496 sec
+WARNING:2026-11-05 16:38:03,164:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int32[32,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,166:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.001992464 sec
+WARNING:2026-11-05 16:38:03,173:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.007269382 sec
+WARNING:2026-11-05 16:38:03,175:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000453949 sec
+WARNING:2026-11-05 16:38:03,176:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,178:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002660751 sec
+WARNING:2026-11-05 16:38:03,199:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.020441055 sec
+WARNING:2026-11-05 16:38:03,200:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000256777 sec
+WARNING:2026-11-05 16:38:03,201:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,3,1]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,203:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002363682 sec
+WARNING:2026-11-05 16:38:03,224:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.020036936 sec
+WARNING:2026-11-05 16:38:03,225:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000217438 sec
+WARNING:2026-11-05 16:38:03,225:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,228:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002333641 sec
+WARNING:2026-11-05 16:38:03,245:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.017119408 sec
+WARNING:2026-11-05 16:38:03,246:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000386238 sec
+WARNING:2026-11-05 16:38:03,247:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,1,3]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,249:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002357483 sec
+WARNING:2026-11-05 16:38:03,267:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.017819166 sec
+WARNING:2026-11-05 16:38:03,269:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000227928 sec
+WARNING:2026-11-05 16:38:03,269:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,272:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002538681 sec
+WARNING:2026-11-05 16:38:03,279:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.006714582 sec
+WARNING:2026-11-05 16:38:03,280:jax._src.dispatch:206: Finished tracing + transforming iota for pjit in 0.000257969 sec
+WARNING:2026-11-05 16:38:03,281:jax._src.interpreters.pxla:1939: Compiling jit(iota) with global shapes and types (). Argument mapping: ().
+WARNING:2026-11-05 16:38:03,284:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(iota) in 0.002973318 sec
+WARNING:2026-11-05 16:38:03,295:jax._src.dispatch:206: Finished XLA compilation of jit(iota) in 0.011434078 sec
+WARNING:2026-11-05 16:38:03,297:jax._src.dispatch:206: Finished tracing + transforming greater_equal for pjit in 0.000627756 sec
+WARNING:2026-11-05 16:38:03,297:jax._src.interpreters.pxla:1939: Compiling jit(greater_equal) with global shapes and types (ShapedArray(int64[13]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,301:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(greater_equal) in 0.003632545 sec
+WARNING:2026-11-05 16:38:03,320:jax._src.dispatch:206: Finished XLA compilation of jit(greater_equal) in 0.018707514 sec
+WARNING:2026-11-05 16:38:03,322:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000231028 sec
+WARNING:2026-11-05 16:38:03,322:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(bool[13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,325:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002824306 sec
+WARNING:2026-11-05 16:38:03,333:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.007218361 sec
+WARNING:2026-11-05 16:38:03,334:jax._src.dispatch:206: Finished tracing + transforming bitwise_not for pjit in 0.000218391 sec
+WARNING:2026-11-05 16:38:03,334:jax._src.interpreters.pxla:1939: Compiling jit(bitwise_not) with global shapes and types (ShapedArray(bool[13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,337:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(bitwise_not) in 0.002652884 sec
+WARNING:2026-11-05 16:38:03,349:jax._src.dispatch:206: Finished XLA compilation of jit(bitwise_not) in 0.011989594 sec
+WARNING:2026-11-05 16:38:03,350:jax._src.dispatch:206: Finished tracing + transforming bitwise_and for pjit in 0.000456572 sec
+WARNING:2026-11-05 16:38:03,351:jax._src.interpreters.pxla:1939: Compiling jit(bitwise_and) with global shapes and types (ShapedArray(bool[13]), ShapedArray(bool[13])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:03,354:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(bitwise_and) in 0.003147364 sec
+WARNING:2026-11-05 16:38:03,365:jax._src.dispatch:206: Finished XLA compilation of jit(bitwise_and) in 0.010718346 sec
+WARNING:2026-11-05 16:38:03,366:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000191689 sec
+WARNING:2026-11-05 16:38:03,366:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(bool[13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,370:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.003476858 sec
+WARNING:2026-11-05 16:38:03,384:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.013061762 sec
+WARNING:2026-11-05 16:38:03,386:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000424623 sec
+WARNING:2026-11-05 16:38:03,387:jax._src.dispatch:206: Finished tracing + transforming equal for pjit in 0.000192642 sec
+WARNING:2026-11-05 16:38:03,388:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000341892 sec
+WARNING:2026-11-05 16:38:03,388:jax._src.dispatch:206: Finished tracing + transforming _where for pjit in 0.000867844 sec
+WARNING:2026-11-05 16:38:03,388:jax._src.dispatch:206: Finished tracing + transforming _diag for pjit in 0.003185034 sec
+WARNING:2026-11-05 16:38:03,388:jax._src.interpreters.pxla:1939: Compiling jit(_diag) with global shapes and types (ShapedArray(float64[13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:03,393:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(_diag) in 0.004864693 sec
+WARNING:2026-11-05 16:38:03,420:jax._src.dispatch:206: Finished XLA compilation of jit(_diag) in 0.026127100 sec
+WARNING:2026-11-05 16:38:04,465:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000375509 sec
+WARNING:2026-11-05 16:38:04,465:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[10112,13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,468:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002779722 sec
+WARNING:2026-11-05 16:38:04,490:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.021600246 sec
+WARNING:2026-11-05 16:38:04,492:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000370026 sec
+WARNING:2026-11-05 16:38:04,492:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[10112,13,1]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,496:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.003323793 sec
+WARNING:2026-11-05 16:38:04,521:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.025190353 sec
+WARNING:2026-11-05 16:38:04,523:jax._src.dispatch:206: Finished tracing + transforming reshape for pjit in 0.000252962 sec
+WARNING:2026-11-05 16:38:04,524:jax._src.interpreters.pxla:1939: Compiling jit(reshape) with global shapes and types (ShapedArray(int32[10112,13,13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,527:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(reshape) in 0.002771378 sec
+WARNING:2026-11-05 16:38:04,532:jax._src.dispatch:206: Finished XLA compilation of jit(reshape) in 0.005118370 sec
+WARNING:2026-11-05 16:38:04,534:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000282288 sec
+WARNING:2026-11-05 16:38:04,534:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[10112,13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,536:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002305746 sec
+WARNING:2026-11-05 16:38:04,557:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.020519972 sec
+WARNING:2026-11-05 16:38:04,558:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000263214 sec
+WARNING:2026-11-05 16:38:04,559:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[10112,1,13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,562:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002674103 sec
+WARNING:2026-11-05 16:38:04,589:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.027642250 sec
+WARNING:2026-11-05 16:38:04,593:jax._src.dispatch:206: Finished tracing + transforming less for pjit in 0.001581669 sec
+WARNING:2026-11-05 16:38:04,593:jax._src.interpreters.pxla:1939: Compiling jit(less) with global shapes and types (ShapedArray(int64[788736]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:04,596:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(less) in 0.002709627 sec
+WARNING:2026-11-05 16:38:04,624:jax._src.dispatch:206: Finished XLA compilation of jit(less) in 0.027433157 sec
+WARNING:2026-11-05 16:38:04,625:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000244141 sec
+WARNING:2026-11-05 16:38:04,626:jax._src.interpreters.pxla:1939: Compiling jit(add) with global shapes and types (ShapedArray(int64[788736]), ShapedArray(int64[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:04,629:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(add) in 0.002813816 sec
+WARNING:2026-11-05 16:38:04,653:jax._src.dispatch:206: Finished XLA compilation of jit(add) in 0.024025917 sec
+WARNING:2026-11-05 16:38:04,654:jax._src.dispatch:206: Finished tracing + transforming select_n for pjit in 0.000315428 sec
+WARNING:2026-11-05 16:38:04,655:jax._src.interpreters.pxla:1939: Compiling jit(select_n) with global shapes and types (ShapedArray(bool[788736]), ShapedArray(int64[788736]), ShapedArray(int64[788736])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:04,658:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(select_n) in 0.003345966 sec
+WARNING:2026-11-05 16:38:04,676:jax._src.dispatch:206: Finished XLA compilation of jit(select_n) in 0.016967058 sec
+WARNING:2026-11-05 16:38:04,677:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000130653 sec
+WARNING:2026-11-05 16:38:04,677:jax._src.interpreters.pxla:1939: Compiling jit(_broadcast_arrays) with global shapes and types (ShapedArray(int64[788736]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,679:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(_broadcast_arrays) in 0.002089262 sec
+WARNING:2026-11-05 16:38:04,685:jax._src.dispatch:206: Finished XLA compilation of jit(_broadcast_arrays) in 0.005249739 sec
+WARNING:2026-11-05 16:38:04,686:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000212431 sec
+WARNING:2026-11-05 16:38:04,687:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int64[788736]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,689:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002738953 sec
+WARNING:2026-11-05 16:38:04,706:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.016057730 sec
+WARNING:2026-11-05 16:38:04,707:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000277519 sec
+WARNING:2026-11-05 16:38:04,708:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[788736]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,711:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002771854 sec
+WARNING:2026-11-05 16:38:04,717:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.006258011 sec
+WARNING:2026-11-05 16:38:04,719:jax._src.dispatch:206: Finished tracing + transforming gather for pjit in 0.000259161 sec
+WARNING:2026-11-05 16:38:04,719:jax._src.interpreters.pxla:1939: Compiling jit(gather) with global shapes and types (ShapedArray(int32[1708928]), ShapedArray(int32[788736,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:04,722:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(gather) in 0.002382040 sec
+WARNING:2026-11-05 16:38:04,751:jax._src.dispatch:206: Finished XLA compilation of jit(gather) in 0.028416157 sec
+WARNING:2026-11-05 16:38:04,752:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000225067 sec
+WARNING:2026-11-05 16:38:04,752:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[788736]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,755:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002200365 sec
+WARNING:2026-11-05 16:38:04,761:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.006009579 sec
+WARNING:2026-11-05 16:38:04,801:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000240088 sec
+WARNING:2026-11-05 16:38:04,802:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,804:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002487659 sec
+WARNING:2026-11-05 16:38:04,810:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.005266666 sec
+WARNING:2026-11-05 16:38:04,811:jax._src.dispatch:206: Finished tracing + transforming iota for pjit in 0.000198841 sec
+WARNING:2026-11-05 16:38:04,811:jax._src.interpreters.pxla:1939: Compiling jit(iota) with global shapes and types (). Argument mapping: ().
+WARNING:2026-11-05 16:38:04,813:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(iota) in 0.001972675 sec
+WARNING:2026-11-05 16:38:04,822:jax._src.dispatch:206: Finished XLA compilation of jit(iota) in 0.008818626 sec
+WARNING:2026-11-05 16:38:04,824:jax._src.dispatch:206: Finished tracing + transforming greater_equal for pjit in 0.000335455 sec
+WARNING:2026-11-05 16:38:04,825:jax._src.interpreters.pxla:1939: Compiling jit(greater_equal) with global shapes and types (ShapedArray(int64[2]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:04,828:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(greater_equal) in 0.002743006 sec
+WARNING:2026-11-05 16:38:04,843:jax._src.dispatch:206: Finished XLA compilation of jit(greater_equal) in 0.015161753 sec
+WARNING:2026-11-05 16:38:04,844:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000189066 sec
+WARNING:2026-11-05 16:38:04,845:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(bool[2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,847:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.001966000 sec
+WARNING:2026-11-05 16:38:04,851:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.004538059 sec
+WARNING:2026-11-05 16:38:04,852:jax._src.dispatch:206: Finished tracing + transforming bitwise_not for pjit in 0.000181913 sec
+WARNING:2026-11-05 16:38:04,852:jax._src.interpreters.pxla:1939: Compiling jit(bitwise_not) with global shapes and types (ShapedArray(bool[2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,854:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(bitwise_not) in 0.001985788 sec
+WARNING:2026-11-05 16:38:04,864:jax._src.dispatch:206: Finished XLA compilation of jit(bitwise_not) in 0.009482622 sec
+WARNING:2026-11-05 16:38:04,865:jax._src.dispatch:206: Finished tracing + transforming bitwise_and for pjit in 0.000286102 sec
+WARNING:2026-11-05 16:38:04,866:jax._src.interpreters.pxla:1939: Compiling jit(bitwise_and) with global shapes and types (ShapedArray(bool[2]), ShapedArray(bool[2])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:04,868:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(bitwise_and) in 0.002370834 sec
+WARNING:2026-11-05 16:38:04,878:jax._src.dispatch:206: Finished XLA compilation of jit(bitwise_and) in 0.009592772 sec
+WARNING:2026-11-05 16:38:04,879:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000195742 sec
+WARNING:2026-11-05 16:38:04,879:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(bool[2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,881:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002205372 sec
+WARNING:2026-11-05 16:38:04,891:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.009075642 sec
+WARNING:2026-11-05 16:38:04,893:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000305891 sec
+WARNING:2026-11-05 16:38:04,893:jax._src.dispatch:206: Finished tracing + transforming _where for pjit in 0.000650167 sec
+WARNING:2026-11-05 16:38:04,893:jax._src.dispatch:206: Finished tracing + transforming _diag for pjit in 0.001614094 sec
+WARNING:2026-11-05 16:38:04,893:jax._src.interpreters.pxla:1939: Compiling jit(_diag) with global shapes and types (ShapedArray(float64[2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,897:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(_diag) in 0.003633499 sec
+WARNING:2026-11-05 16:38:04,915:jax._src.dispatch:206: Finished XLA compilation of jit(_diag) in 0.017171860 sec
+WARNING:2026-11-05 16:38:04,916:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000228643 sec
+WARNING:2026-11-05 16:38:04,917:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,919:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002393723 sec
+WARNING:2026-11-05 16:38:04,939:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.019783974 sec
+WARNING:2026-11-05 16:38:04,941:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000326633 sec
+WARNING:2026-11-05 16:38:04,941:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,2,1]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,945:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.003742695 sec
+WARNING:2026-11-05 16:38:04,967:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.020775557 sec
+WARNING:2026-11-05 16:38:04,968:jax._src.dispatch:206: Finished tracing + transforming reshape for pjit in 0.000231743 sec
+WARNING:2026-11-05 16:38:04,968:jax._src.interpreters.pxla:1939: Compiling jit(reshape) with global shapes and types (ShapedArray(int32[32,2,2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,971:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(reshape) in 0.002562523 sec
+WARNING:2026-11-05 16:38:04,976:jax._src.dispatch:206: Finished XLA compilation of jit(reshape) in 0.005188704 sec
+WARNING:2026-11-05 16:38:04,978:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000223875 sec
+WARNING:2026-11-05 16:38:04,978:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:04,980:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002383947 sec
+WARNING:2026-11-05 16:38:04,997:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.016085148 sec
+WARNING:2026-11-05 16:38:04,998:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000394583 sec
+WARNING:2026-11-05 16:38:04,998:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(int32[32,1,2]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,001:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002735615 sec
+WARNING:2026-11-05 16:38:05,019:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.016867638 sec
+WARNING:2026-11-05 16:38:05,143:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000273466 sec
+WARNING:2026-11-05 16:38:05,143:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int32[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,146:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002450705 sec
+WARNING:2026-11-05 16:38:05,153:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.007364035 sec
+WARNING:2026-11-05 16:38:05,155:jax._src.dispatch:206: Finished tracing + transforming ffi_call for pjit in 0.000249386 sec
+WARNING:2026-11-05 16:38:05,156:jax._src.interpreters.pxla:1939: Compiling jit(ffi_call) with global shapes and types (ShapedArray(int32[216753]), ShapedArray(int32[216753]), ShapedArray(int32[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,159:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(ffi_call) in 0.002809525 sec
+WARNING:2026-11-05 16:38:05,165:jax._src.dispatch:206: Finished XLA compilation of jit(ffi_call) in 0.005804062 sec
+WARNING:2026-11-05 16:38:05,171:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000216722 sec
+WARNING:2026-11-05 16:38:05,171:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int32[216753]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,174:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002314329 sec
+WARNING:2026-11-05 16:38:05,179:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.005302429 sec
+WARNING:2026-11-05 16:38:05,181:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000219822 sec
+WARNING:2026-11-05 16:38:05,181:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int64[814552]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,183:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.001896620 sec
+WARNING:2026-11-05 16:38:05,189:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.005332947 sec
+WARNING:2026-11-05 16:38:05,190:jax._src.dispatch:206: Finished tracing + transforming convert_element_type for pjit in 0.000224113 sec
+WARNING:2026-11-05 16:38:05,191:jax._src.interpreters.pxla:1939: Compiling jit(convert_element_type) with global shapes and types (ShapedArray(int32[1]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,193:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(convert_element_type) in 0.002074242 sec
+WARNING:2026-11-05 16:38:05,198:jax._src.dispatch:206: Finished XLA compilation of jit(convert_element_type) in 0.004814625 sec
+WARNING:2026-11-05 16:38:05,199:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000214338 sec
+WARNING:2026-11-05 16:38:05,200:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,202:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002228975 sec
+WARNING:2026-11-05 16:38:05,215:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.012865067 sec
+WARNING:2026-11-05 16:38:05,216:jax._src.dispatch:206: Finished tracing + transforming equal for pjit in 0.000405312 sec
+WARNING:2026-11-05 16:38:05,217:jax._src.interpreters.pxla:1939: Compiling jit(equal) with global shapes and types (ShapedArray(int32[10112,13]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,219:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(equal) in 0.002609968 sec
+WARNING:2026-11-05 16:38:05,241:jax._src.dispatch:206: Finished XLA compilation of jit(equal) in 0.020958424 sec
+WARNING:2026-11-05 16:38:05,242:jax._src.dispatch:206: Finished tracing + transforming less for pjit in 0.000315428 sec
+WARNING:2026-11-05 16:38:05,243:jax._src.interpreters.pxla:1939: Compiling jit(less) with global shapes and types (ShapedArray(int32[10112,13]), ShapedArray(int64[], weak_type=True)). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,245:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(less) in 0.002664328 sec
+WARNING:2026-11-05 16:38:05,266:jax._src.dispatch:206: Finished XLA compilation of jit(less) in 0.020033360 sec
+WARNING:2026-11-05 16:38:05,267:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000368595 sec
+WARNING:2026-11-05 16:38:05,267:jax._src.interpreters.pxla:1939: Compiling jit(add) with global shapes and types (ShapedArray(int32[10112,13]), ShapedArray(int32[])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,270:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(add) in 0.002595901 sec
+WARNING:2026-11-05 16:38:05,290:jax._src.dispatch:206: Finished XLA compilation of jit(add) in 0.019482613 sec
+WARNING:2026-11-05 16:38:05,291:jax._src.dispatch:206: Finished tracing + transforming select_n for pjit in 0.000200987 sec
+WARNING:2026-11-05 16:38:05,291:jax._src.interpreters.pxla:1939: Compiling jit(select_n) with global shapes and types (ShapedArray(bool[10112,13]), ShapedArray(int32[10112,13]), ShapedArray(int32[10112,13])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,294:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(select_n) in 0.002419949 sec
+WARNING:2026-11-05 16:38:05,312:jax._src.dispatch:206: Finished XLA compilation of jit(select_n) in 0.017517090 sec
+WARNING:2026-11-05 16:38:05,313:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000093937 sec
+WARNING:2026-11-05 16:38:05,313:jax._src.interpreters.pxla:1939: Compiling jit(_broadcast_arrays) with global shapes and types (ShapedArray(int32[10112,13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,315:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(_broadcast_arrays) in 0.001964569 sec
+WARNING:2026-11-05 16:38:05,320:jax._src.dispatch:206: Finished XLA compilation of jit(_broadcast_arrays) in 0.004597664 sec
+WARNING:2026-11-05 16:38:05,321:jax._src.dispatch:206: Finished tracing + transforming gather for pjit in 0.000225067 sec
+WARNING:2026-11-05 16:38:05,322:jax._src.interpreters.pxla:1939: Compiling jit(gather) with global shapes and types (ShapedArray(float64[25381]), ShapedArray(int32[10112,13,1])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,325:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(gather) in 0.002353668 sec
+WARNING:2026-11-05 16:38:05,354:jax._src.dispatch:206: Finished XLA compilation of jit(gather) in 0.029207706 sec
+WARNING:2026-11-05 16:38:05,356:jax._src.dispatch:206: Finished tracing + transforming broadcast_in_dim for pjit in 0.000231028 sec
+WARNING:2026-11-05 16:38:05,356:jax._src.interpreters.pxla:1939: Compiling jit(broadcast_in_dim) with global shapes and types (ShapedArray(float64[10112,13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,358:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(broadcast_in_dim) in 0.002155066 sec
+WARNING:2026-11-05 16:38:05,364:jax._src.dispatch:206: Finished XLA compilation of jit(broadcast_in_dim) in 0.005413055 sec
+WARNING:2026-11-05 16:38:05,365:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000258207 sec
+WARNING:2026-11-05 16:38:05,366:jax._src.dispatch:206: Finished tracing + transforming _where for pjit in 0.000748396 sec
+WARNING:2026-11-05 16:38:05,366:jax._src.interpreters.pxla:1939: Compiling jit(_where) with global shapes and types (ShapedArray(bool[10112,13]), ShapedArray(float64[], weak_type=True), ShapedArray(float64[10112,13])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,369:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(_where) in 0.002660751 sec
+WARNING:2026-11-05 16:38:05,397:jax._src.dispatch:206: Finished XLA compilation of jit(_where) in 0.027808428 sec
+WARNING:2026-11-05 16:38:05,399:jax._src.dispatch:206: Finished tracing + transforming equal for pjit in 0.000189304 sec
+WARNING:2026-11-05 16:38:05,400:jax._src.dispatch:206: Finished tracing + transforming isnan for pjit in 0.000110388 sec
+WARNING:2026-11-05 16:38:05,400:jax._src.dispatch:206: Finished tracing + transforming bitwise_and for pjit in 0.000207424 sec
+WARNING:2026-11-05 16:38:05,400:jax._src.dispatch:206: Finished tracing + transforming bitwise_or for pjit in 0.000130653 sec
+WARNING:2026-11-05 16:38:05,401:jax._src.dispatch:206: Finished tracing + transforming _reduce_all for pjit in 0.000260830 sec
+WARNING:2026-11-05 16:38:05,401:jax._src.dispatch:206: Finished tracing + transforming bitwise_not for pjit in 0.000095129 sec
+WARNING:2026-11-05 16:38:05,412:jax._src.dispatch:206: Finished tracing + transforming <lambda> for pjit in 0.000113726 sec
+WARNING:2026-11-05 16:38:05,414:jax._src.dispatch:206: Finished tracing + transforming branched_error_if_impl for pjit in 0.012430668 sec
+WARNING:2026-11-05 16:38:05,416:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000166178 sec
+WARNING:2026-11-05 16:38:05,416:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000135183 sec
+WARNING:2026-11-05 16:38:05,417:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000225306 sec
+WARNING:2026-11-05 16:38:05,417:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000118017 sec
+WARNING:2026-11-05 16:38:05,417:jax._src.dispatch:206: Finished tracing + transforming _where for pjit in 0.000385046 sec
+WARNING:2026-11-05 16:38:05,419:jax._src.dispatch:206: Finished tracing + transforming _squeeze for pjit in 0.000056982 sec
+WARNING:2026-11-05 16:38:05,420:jax._src.dispatch:206: Finished tracing + transforming less for pjit in 0.000214100 sec
+WARNING:2026-11-05 16:38:05,421:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000046253 sec
+WARNING:2026-11-05 16:38:05,421:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000124454 sec
+WARNING:2026-11-05 16:38:05,422:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000317812 sec
+WARNING:2026-11-05 16:38:05,423:jax._src.dispatch:206: Finished tracing + transforming equal for pjit in 0.000123262 sec
+WARNING:2026-11-05 16:38:05,424:jax._src.dispatch:206: Finished tracing + transforming greater_equal for pjit in 0.000188828 sec
+WARNING:2026-11-05 16:38:05,443:jax._src.dispatch:206: Finished tracing + transforming _squeeze for pjit in 0.000059366 sec
+WARNING:2026-11-05 16:38:05,445:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.001368046 sec
+WARNING:2026-11-05 16:38:05,446:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000151157 sec
+WARNING:2026-11-05 16:38:05,446:jax._src.dispatch:206: Finished tracing + transforming less for pjit in 0.000189781 sec
+WARNING:2026-11-05 16:38:05,447:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000046253 sec
+WARNING:2026-11-05 16:38:05,448:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000156641 sec
+WARNING:2026-11-05 16:38:05,448:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000119209 sec
+WARNING:2026-11-05 16:38:05,449:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000337362 sec
+WARNING:2026-11-05 16:38:05,449:jax._src.dispatch:206: Finished tracing + transforming _squeeze for pjit in 0.000046492 sec
+WARNING:2026-11-05 16:38:05,450:jax._src.dispatch:206: Finished tracing + transforming less for pjit in 0.000166178 sec
+WARNING:2026-11-05 16:38:05,451:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000045061 sec
+WARNING:2026-11-05 16:38:05,451:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000118732 sec
+WARNING:2026-11-05 16:38:05,460:jax._src.dispatch:206: Finished tracing + transforming _squeeze for pjit in 0.000052929 sec
+WARNING:2026-11-05 16:38:05,461:jax._src.dispatch:206: Finished tracing + transforming multiply for pjit in 0.000157118 sec
+WARNING:2026-11-05 16:38:05,461:jax._src.dispatch:206: Finished tracing + transforming add for pjit in 0.000125408 sec
+WARNING:2026-11-05 16:38:05,462:jax._src.dispatch:206: Finished tracing + transforming <lambda> for pjit in 0.063719988 sec
+WARNING:2026-11-05 16:38:05,464:jax._src.interpreters.pxla:1939: Compiling jit(<lambda>) with global shapes and types (ShapedArray(float64[25381]), ShapedArray(float64[10112,783]), ShapedArray(float64[10112,0]), ShapedArray(int32[10112,13]), ShapedArray(int32[10112,13]), ShapedArray(float64[13,13]), ShapedArray(bool[10112,13]), ShapedArray(int64[788736]), ShapedArray(float64[10112,783]), ShapedArray(float64[32], weak_type=True), ShapedArray(float64[32], weak_type=True), ShapedArray(float64[32], weak_type=True), ShapedArray(float64[32], weak_type=True), ShapedArray(float64[32], weak_type=True), ShapedArray(float64[32], weak_type=True), ShapedArray(float64[32], weak_type=True), ShapedArray(int32[32,3]), ShapedArray(int32[32,3]), ShapedArray(float64[32,0]), ShapedArray(int32[32,2]), ShapedArray(int32[32,2]), ShapedArray(float64[2,2]), ShapedArray(float64[2], weak_type=True), ShapedArray(float64[2], weak_type=True), ShapedArray(int32[2,3]), ShapedArray(int32[2,3])). Argument mapping: (UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,469:jax._src.dispatch:206: Finished tracing + transforming _reduce_any for pjit in 0.000453711 sec
+WARNING:2026-11-05 16:38:05,494:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(<lambda>) in 0.029513121 sec
+WARNING:2026-11-05 16:38:05,638:jax._src.dispatch:206: Finished XLA compilation of jit(<lambda>) in 0.143905163 sec
+WARNING:2026-11-05 16:38:05,648:jax._src.dispatch:206: Finished tracing + transforming <lambda> for pjit in 0.000831366 sec
+WARNING:2026-11-05 16:38:05,648:jax._src.interpreters.pxla:1939: Compiling jit(<lambda>) with global shapes and types (ShapedArray(float64[10112,13]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,652:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(<lambda>) in 0.003835201 sec
+WARNING:2026-11-05 16:38:05,660:jax._src.dispatch:206: Finished XLA compilation of jit(<lambda>) in 0.007849216 sec
+WARNING:2026-11-05 16:38:05,665:jax._src.dispatch:206: Finished tracing + transforming negative for pjit in 0.000249624 sec
+WARNING:2026-11-05 16:38:05,665:jax._src.interpreters.pxla:1939: Compiling jit(negative) with global shapes and types (ShapedArray(float64[25381]),). Argument mapping: (UnspecifiedValue,).
+WARNING:2026-11-05 16:38:05,668:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(negative) in 0.003203154 sec
+WARNING:2026-11-05 16:38:05,684:jax._src.dispatch:206: Finished XLA compilation of jit(negative) in 0.014950514 sec
+WARNING:2026-11-05 16:38:05,686:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000093699 sec
+WARNING:2026-11-05 16:38:05,687:jax._src.dispatch:206: Finished tracing + transforming _squeeze for pjit in 0.000062227 sec
+WARNING:2026-11-05 16:38:05,688:jax._src.dispatch:206: Finished tracing + transforming lexsort for pjit in 0.000237703 sec
+WARNING:2026-11-05 16:38:05,689:jax._src.dispatch:206: Finished tracing + transforming less for pjit in 0.000414133 sec
+WARNING:2026-11-05 16:38:05,689:jax._src.dispatch:206: Finished tracing + transforming _broadcast_arrays for pjit in 0.000050068 sec
+WARNING:2026-11-05 16:38:05,691:jax._src.dispatch:206: Finished tracing + transforming _solve_with_symbol_jit for pjit in 0.003724813 sec
+WARNING:2026-11-05 16:38:05,692:jax._src.dispatch:206: Finished tracing + transforming <lambda> for pjit in 0.006625175 sec
+WARNING:2026-11-05 16:38:05,692:jax._src.interpreters.pxla:1939: Compiling jit(<lambda>) with global shapes and types (ShapedArray(float64[789170]), ShapedArray(float64[25381])). Argument mapping: (UnspecifiedValue, UnspecifiedValue).
+WARNING:2026-11-05 16:38:05,702:jax._src.dispatch:206: Finished jaxpr to MLIR module conversion jit(<lambda>) in 0.009442091 sec
+E1105 16:38:06.735999     335 slow_operation_alarm.cc:73] Constant folding an instruction is taking > 1s:
+
+  %sort.2 = (s32[216753]{0}, s32[216753]{0}, s64[216753]{0}) sort(%constant.16, %constant.17, %iota.2), dimensions={0}, is_stable=true, to_apply=%region_1.2, metadata={op_name="jit(<lambda>)/jit(_solve_with_symbol_jit)/jit(lexsort)/sort" source_file="/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/klujax.py" source_line=258 source_end_line=258 source_column=12 source_end_column=33}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+E1105 16:38:08.465121     234 slow_operation_alarm.cc:140] The operation took 2.730924863s
+Constant folding an instruction is taking > 1s:
+
+  %sort.2 = (s32[216753]{0}, s32[216753]{0}, s64[216753]{0}) sort(%constant.16, %constant.17, %iota.2), dimensions={0}, is_stable=true, to_apply=%region_1.2, metadata={op_name="jit(<lambda>)/jit(_solve_with_symbol_jit)/jit(lexsort)/sort" source_file="/home/cdaunt/Documents/ChatGPT/circulax/.venv/lib/python3.12/site-packages/klujax.py" source_line=258 source_end_line=258 source_column=12 source_end_column=33}
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+WARNING:2026-11-05 16:38:08,550:jax._src.dispatch:206: Finished XLA compilation of jit(<lambda>) in 2.847871780 sec
+{
+  "finite_kernel_outputs": true,
+  "raw_output_shapes": [
+    [
+      10112,
+      13
+    ],
+    [
+      10112,
+      169
+    ],
+    [
+      10112,
+      13
+    ],
+    [
+      10112,
+      169
+    ],
+    [
+      10112,
+      0
+    ]
+  ],
+  "representation": "reduced",
+  "unknowns": 25381,
+  "unique_coo": 216753,
+  "raw_voltage_shape": [
+    10112,
+    13
+  ],
+  "raw_model_eval": {
+    "seconds_per_call": [
+      0.004164834899711423,
+      0.00642824090027716,
+      0.004489194598863833
+    ],
+    "median_s": 0.004489194598863833,
+    "iterations_per_repeat": 10
+  },
+  "full_system_assembly_including_eval": {
+    "seconds_per_call": [
+      0.011830223698052578,
+      0.01103173239971511,
+      0.01114712150010746
+    ],
+    "median_s": 0.01114712150010746,
+    "iterations_per_repeat": 10
+  },
+  "coalesce_numeric_klu_factor_and_solve": {
+    "seconds_per_call": [
+      0.02513794139958918,
+      0.020489325799280776,
+      0.023853869101731106
+    ],
+    "median_s": 0.023853869101731106,
+    "iterations_per_repeat": 10
+  },
+  "scope": "Zero initial iterate, alpha=1.5, dt=2 ps. Native/assembly/solve measured separately after own JIT warmup; numeric solve includes COO coalescing; not a whole-transient decomposition."
+}

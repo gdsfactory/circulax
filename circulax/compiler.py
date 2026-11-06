@@ -190,6 +190,7 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
     models_map: dict,
     *,
     params_map: dict[str, dict[str, str]] | None = None,
+    osdi_reduction: bool = True,
 ) -> tuple[dict, int, dict]:
     """Compile a netlist into batched, vectorized component groups ready for simulation.
 
@@ -323,6 +324,23 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
             }
         )
 
+    # Configure the exact immutable batches before assigning global unknowns.
+    if osdi_buckets:
+        from circulax.osdi_topology import configure_batch, union_terminal_nets
+
+    configured = {
+        name: configure_batch(models_map[name], items, reduce=osdi_reduction)
+        for name, items in osdi_buckets.items()
+    }
+    remap = list(range(num_nodes))
+    if osdi_buckets:
+        remap, num_nodes = union_terminal_nets(num_nodes, osdi_buckets, configured)
+    port_to_node_map = {key: remap[value] for key, value in port_to_node_map.items()}
+    for items in (*buckets.values(), *osdi_buckets.values()):
+        for item in items:
+            item["ports"] = [remap[index] for index in item["ports"]]
+    sys_size = num_nodes
+
     compiled_groups = {}
 
     # Helper to generate unique names for split groups
@@ -411,25 +429,10 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
         group_name = comp_type
         n_dev = len(items)
         n_pins = descriptor.model.num_pins
-        n_nodes = descriptor.model.num_nodes  # terminals + non-collapsed internal
-        n_internal = n_nodes - n_pins  # extra unknowns per instance
+        n_nodes = descriptor.model.num_nodes  # raw slots, including collapsed internals
 
-        params_arr = jnp.array(
-            [[item["params_dict"][k] for k in descriptor.param_names] for item in items],
-            dtype=jnp.float64,
-        )  # (N, num_params)
+        params_arr, handle, topology = configured[comp_type]
         states_arr = jnp.zeros((n_dev, descriptor.model.num_states), dtype=jnp.float64)
-
-        # Bosdi Tier-3: pre-bake params into an OsdiBatchHandle so per-Newton-iter
-        # OSDI calls skip the params upload (~20–40 % faster for PSP103).
-        handle = None
-        try:
-            import numpy as _np
-            from osdi_jax import osdi_setup_batch
-
-            handle = osdi_setup_batch(descriptor.model.id, _np.asarray(params_arr))
-        except ImportError:
-            pass  # older bosdi without Tier-3; legacy model_id + params path still works
 
         # Regularisation diagonal: 1.0 only on internal reactive-only nodes.
         # External terminal nodes never need it — the wider circuit KCL provides
@@ -440,23 +443,31 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
         reg_mask = (is_internal & is_reactive).astype(jnp.float64)
         reg_diag = jnp.diag(reg_mask)  # (num_nodes, num_nodes)
 
-        # Build (N, n_nodes) index array: terminal indices first, then one new
-        # state slot per internal node per instance (appended to global state vector).
-        all_var_idx_list = []
-        for item in items:
-            terminal_indices = item["ports"]
-            internal_indices = []
-            for _i in range(n_internal):
-                internal_indices.append(sys_size)
-                sys_size += 1
-            all_var_idx_list.append(terminal_indices + internal_indices)
+        from circulax.osdi_topology import ReducedOsdiGroup, allocate_raw_indices
 
-        all_var_idx = jnp.array(all_var_idx_list, dtype=jnp.int32)  # (N, n_nodes)
-
+        all_var_idx, row_mask, jac_take, sys_size = allocate_raw_indices(
+            items, topology, n_nodes, n_pins, sys_size, port_to_node_map
+        )
+        all_var_idx = jnp.asarray(all_var_idx, dtype=jnp.int32)
         jac_rows = jnp.broadcast_to(all_var_idx[:, :, None], (n_dev, n_nodes, n_nodes)).reshape(-1)
         jac_cols = jnp.broadcast_to(all_var_idx[:, None, :], (n_dev, n_nodes, n_nodes)).reshape(-1)
+        extra = {}
+        group_cls = OsdiComponentGroup
+        if topology is not None:
+            if getattr(descriptor, "use_schur_reduction", False):
+                msg = "OSDI node collapse and Schur reduction cannot be combined"
+                raise ValueError(msg)
+            group_cls = ReducedOsdiGroup
+            jac_rows, jac_cols = jac_rows[jac_take], jac_cols[jac_take]
+            extra = {
+                "physical_rows": jnp.asarray(row_mask),
+                "jac_take": jnp.asarray(jac_take),
+                "representatives": tuple(map(tuple, topology.raw_to_representative.tolist())),
+                "configured_params": params_arr,
+            }
 
-        compiled_groups[group_name] = OsdiComponentGroup(
+        compiled_groups[group_name] = group_cls(
+            **extra,
             name=group_name,
             model_id=descriptor.model.id,
             num_pins=n_pins,

@@ -247,3 +247,39 @@ def test_set_simparams_sweep_keeps_previous_jit_valid(binary: Path) -> None:
         rtol=2e-3,
         atol=1e-4,
     )
+
+
+@pytest.mark.parametrize("initial_mode", ["dc", "ac", "tran"])
+def test_small_signal_native_registration_and_runtime_parameters(binary: Path, initial_mode: str) -> None:
+    """Source-driven native response combines DC G with AC Q derivatives."""
+    from circulax.components.electronic import WaveformCurrentSource
+
+    descriptor = pytest.importorskip("bosdi.circulax").osdi_component(
+        str(binary), ("p", "n"), analysis=initial_mode, state_policy="limiting_only"
+    )
+    circuit = compile_circuit(
+        {
+            "instances": {
+                "r": {"component": "native"},
+                "I": {"component": "current"},
+                "GND": {"component": "ground"},
+            },
+            "connections": {"r,p": "I,p1", "GND,p1": ("r,n", "I,p2")},
+            "ports": {"out": "r,p"},
+        },
+        {"native": descriptor, "current": WaveformCurrentSource},
+        backend="dense",
+        is_complex=False,
+        g_leak=0,
+    )
+    circuit.prepare_analysis("small_signal")
+    frequencies = jnp.array([1e3, 1e6])
+    bias = circuit.dc()
+
+    def response(resistance: jax.Array) -> jax.Array:
+        model = circuit.small_signal(y_dc=bias, params={"r.r": resistance, "r.c": 2e-9})
+        return model(freqs=frequencies, sources={"I": -1e-3}).voltage("out")
+
+    actual = jax.jit(response)(2000.0)
+    expected = 1e-3 / (1 / 2000 + 2j * jnp.pi * frequencies * 2e-9)
+    np.testing.assert_allclose(actual, expected, rtol=1e-9)

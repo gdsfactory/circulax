@@ -1,0 +1,34 @@
+........................................................................ [ 25%]
+.....................s..........................s.s..................... [ 50%]
+.......................................................................s [ 76%]
+sssssssss.............................ssssssssssssssss............F.     [100%]
+=================================== FAILURES ===================================
+_______________ test_analysis_and_settings_cannot_reuse_topology _______________
+
+binaries = {'rc': PosixPath('/tmp/pytest-of-cdaunt/pytest-173/topology0/rc.osdi'), 'branch': PosixPath('/tmp/pytest-of-cdaunt/pyt...unt/pytest-173/topology0/variant.osdi'), 'shorts': PosixPath('/tmp/pytest-of-cdaunt/pytest-173/topology0/shorts.osdi')}
+
+    def test_analysis_and_settings_cannot_reuse_topology(binaries):
+        from bosdi.circulax import osdi_component
+        from circulax import compile_circuit
+    
+        desc = osdi_component(str(binaries["variant"]), ("p", "n"), analysis="tran", temperature=300)
+        net = {
+            "instances": {"r": {"component": "r"}, "GND": {"component": "ground"}},
+            "connections": {"r,n": "GND,p1"},
+            "ports": {"out": "r,p"},
+        }
+        circuit = compile_circuit(net, {"r": desc}, backend="dense", g_leak=0)
+>       ac = circuit.prepare_analysis("ac_response")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/test_osdi_topology.py:307: Failed
+=============================== warnings summary ===============================
+tests/test_transient.py: 12 warnings
+  /home/cdaunt/Documents/ChatGPT/circulax/circulax/solvers/transient.py:33: DeprecationWarning: free_numeric is deprecated; handles are freed automatically
+    _klujax_free_numeric(handle)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_osdi_topology.py::test_analysis_and_settings_cannot_reuse_topology
+1 failed, 254 passed, 29 skipped, 12 warnings in 91.76s (0:01:31)

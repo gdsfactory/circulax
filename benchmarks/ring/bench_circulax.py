@@ -33,7 +33,9 @@ jax.config.update("jax_enable_x64", True)
 # subsequent runs hit the cache and skip the cost entirely.  Each
 # (device-class, sys_size) pair has its own cache entry, so different
 # N stages don't share but a re-bench at the same N is near-free.
-_JAX_CACHE = Path.home() / ".cache" / "jax" / "circulax_ring"
+import os
+
+_JAX_CACHE = Path(os.environ.get("CIRCULAX_RING_CACHE", str(Path.home() / ".cache" / "jax" / "circulax_ring")))
 _JAX_CACHE.mkdir(parents=True, exist_ok=True)
 jax.config.update("jax_compilation_cache_dir", str(_JAX_CACHE))
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", 0)
@@ -50,7 +52,7 @@ N_STEPS = int(T1 / DT)
 N_SAVE = 4000
 
 
-def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
+def _build_ring(n_stages: int, variant: str, differentiable: bool = False, osdi_reduction: bool = True):
     """Return (groups, sys_size, port_map) for an N-stage CMOS ring.
 
     ``differentiable=True`` keeps float process parameters as JAX-traced
@@ -97,7 +99,7 @@ def _build_ring(n_stages: int, variant: str, differentiable: bool = False):
                   "kick": SmoothPulse, "r_kick": Resistor, "cload": Capacitor}
         return compile_netlist(
             {"instances": instances, "connections": connections, "ports": {"out": "n1,p1"}},
-            models,
+            models, osdi_reduction=osdi_reduction,
         )
     if variant in ("va", "va_static"):
         import dataclasses
@@ -287,7 +289,7 @@ def _dom_freq(t: np.ndarray, x: np.ndarray) -> float:
 
 
 def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
-        backend: str = "klu_split", profile_dir: str | None = None) -> dict:
+        backend: str = "klu_split", profile_dir: str | None = None, osdi_reduction: bool = True, waveform_path: Path | None = None) -> dict:
     """Build, DC-init, JIT-warm, time one 1 µs transient.
 
     When ``profile_dir`` is supplied, ``jax.profiler.start_trace`` wraps
@@ -297,7 +299,7 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
     from circulax.solvers import analyze_circuit, setup_transient
     from circulax.solvers.transient import TrapFactorizedTransientSolver
 
-    groups, sys_size, port_map = _build_ring(n_stages, variant, differentiable=differentiable)
+    groups, sys_size, port_map = _build_ring(n_stages, variant, differentiable=differentiable, osdi_reduction=osdi_reduction)
     solver = analyze_circuit(groups, sys_size, backend=backend)
 
     t_dc = time.perf_counter()
@@ -332,6 +334,16 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
         return {"status": "dc_diverged", "n_stages": n_stages, "variant": variant,
                 "notes": f"|y0|_max={y_max:.2e}"}
 
+    dc_audit = {}
+    if variant == "osdi":
+        from circulax.solvers.assembly import assemble_residual_only_real
+        residual, _ = assemble_residual_only_real(y0, groups, 0.0, 1e18)
+        dc_audit = {
+            "dc_initialization": "unchecked_source_and_gmin_homotopy",
+            "dc_initial_output_V": float(y0[port_map["n1,p1"]]),
+            "dc_max_residual_excluding_ground": float(jnp.max(jnp.abs(residual[1:]))),
+        }
+
     run_fn = setup_transient(
         groups, solver, transient_solver=TrapFactorizedTransientSolver,
     )
@@ -349,7 +361,7 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
     saveat_warmup = diffrax.SaveAt(ts=jnp.linspace(0.0, 2 * DT, N_SAVE))
     t_compile = time.perf_counter()
     _ = run_fn(
-        t0=0.0, t1=2 * DT, dt0=DT, y0=y0, saveat=saveat_warmup,
+        t0=jnp.asarray(0.0), t1=jnp.asarray(2 * DT), dt0=jnp.asarray(DT), y0=y0, saveat=saveat_warmup,
         max_steps=max_steps, stepsize_controller=controller,
     ).ys.block_until_ready()
     compile_s = time.perf_counter() - t_compile
@@ -360,7 +372,7 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
 
     t0 = time.perf_counter()
     sol = run_fn(
-        t0=0.0, t1=T1, dt0=DT, y0=y0, saveat=saveat,
+        t0=jnp.asarray(0.0), t1=jnp.asarray(T1), dt0=jnp.asarray(DT), y0=y0, saveat=saveat,
         max_steps=max_steps, stepsize_controller=controller,
     )
     sol.ys.block_until_ready()
@@ -377,10 +389,13 @@ def run(n_stages: int = 9, variant: str = "osdi", differentiable: bool = False,
                 "n_steps": N_STEPS}
 
     v = ys[:, port_map["n1,p1"]]
+    if waveform_path is not None:
+        np.savez_compressed(waveform_path, time=t, voltages=v)
     mask = t > 100e-9
     freq = _dom_freq(t[mask], v[mask]) if mask.any() else float("nan")
 
     return {
+        **dc_audit,
         "status": "ok", "n_stages": n_stages, "variant": variant, "backend": backend,
         "wall_s": wall, "compile_s": compile_s, "dc_s": dc_s,
         "n_steps": N_STEPS, "us_per_step": wall / N_STEPS * 1e6,
