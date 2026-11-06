@@ -34,7 +34,9 @@ dependencies = [
     "lineax==0.1.0",
     "equinox~=0.13.0",
     "optimistix~=0.1.0",
-    "klujax~=0.5.2",
+    # >=0.5.3: frees numeric handles created inside jit (free_numeric with
+    # dependency=...); 0.5.1/0.5.2 leaked one factorization per transient step.
+    "klujax>=0.5.3,<0.6",
     "kfnetlist~=0.3.0",
 ]
 
