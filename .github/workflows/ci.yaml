@@ -211,7 +211,6 @@ jobs:
       - name: Run notebook tests
         env:
           JAX_PLATFORMS: cpu
-          CIRCULAX_NOTEBOOK_CI: "1"
         run: |
           # Keep resource evidence in the live log if the runner shuts down.
           while true; do
