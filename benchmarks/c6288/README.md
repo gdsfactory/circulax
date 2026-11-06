@@ -189,7 +189,8 @@ between 0.1 and 0.2 ns. The omitted pulse fall/width/period are made explicit;
 no falling edge occurs within the run. The original simulator control block
 is replaced by the Circulax harness. BDF2 with full Newton is the default;
 `--solver trap` matches the ring benchmark's integration method, and
-`--newton frozen` factors once per step. `--solver euler` selects backward
+`--newton frozen` factors once per step, and `--newton full-refactor` runs full Newton with
+one fresh LU per step and a fused KLU refactor+solve per iteration (requires `--backend klu_split`). `--solver euler` selects backward
 Euler. These fixed-step methods are not identical to VACASK's adaptive method.
 
 ```sh

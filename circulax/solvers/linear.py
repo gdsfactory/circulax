@@ -566,13 +566,14 @@ class KLUSplitLinear(KLUSplitSolver):
             ``klujax.free_numeric`` after use to avoid C++ memory leaks.
 
         """
+        return klujax.factor(self.u_rows, self.u_cols, self._coalesced_values(all_vals), self._handle_wrapper.handle)
+
+    def _coalesced_values(self, all_vals: jax.Array) -> jax.Array:
+        """Append ground and leakage stamps and sum duplicate COO entries."""
         g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
         l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-
         raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-
-        return klujax.factor(self.u_rows, self.u_cols, coalesced_vals, self._handle_wrapper.handle)
+        return jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
 
     def solve_with_frozen_jacobian(self, residual: jax.Array, numeric: jax.Array) -> lx.Solution:
         """Solve using a pre-computed numeric factorization.
@@ -609,11 +610,12 @@ KLUSplitFactorSolver = KLUSplitLinear  # backward-compat alias
 class KLUSplitQuadratic(KLUSplitLinear):
     """KLU split solver paired with full Newton for quadratic convergence via ``klu_refactor``.
 
-    Extends :class:`KLUSplitLinear` with :meth:`refactor_jacobian`, which updates the numeric
-    LU factorization in-place using ``klujax.refactor``.  The sparsity pattern is fixed for a
-    given circuit topology, so KLU reuses the existing memory allocation and fill-reducing
-    permutation — only the L/U values are recomputed.  This gives full Newton (quadratic)
-    convergence at a fraction of the cost of re-calling ``klu_factor`` at every iteration.
+    Extends :class:`KLUSplitLinear` with :meth:`refactor_and_solve_jacobian`, which updates the
+    numeric LU factorization in-place and solves in one ``klujax.refactor_and_solve`` call.
+    The sparsity pattern is fixed for a given circuit topology, so KLU reuses the existing
+    memory allocation and fill-reducing permutation — only the L/U values are recomputed.
+    This gives full Newton (quadratic) convergence at a fraction of the cost of re-calling
+    ``klu_factor`` at every iteration.
 
     Use together with :class:`~circulax.solvers.transient.RefactoringTransientSolver`.
 
@@ -635,15 +637,36 @@ class KLUSplitQuadratic(KLUSplitLinear):
             numeric: Existing handle returned by :meth:`~KLUSplitLinear.factor_jacobian`.
 
         Returns:
-            Refreshed numeric handle (same underlying C++ object, now connected in the
-            XLA computation graph so the refactor cannot be eliminated as dead code).
+            Numeric handle as returned by ``klujax.refactor``. Inside ``jax.jit``, klujax
+            releases up to 0.5.2 return the *input* handle, so nothing consumes the refactor
+            and XLA eliminates it: solves on the returned handle then use the old factors.
+            The transient solvers therefore use :meth:`refactor_and_solve_jacobian`.
 
         """
-        g_vals = jnp.full(self.ground_indices.shape[0], GROUND_STIFFNESS, dtype=all_vals.dtype)
-        l_vals = jnp.full(self.sys_size, self.g_leak, dtype=all_vals.dtype)
-        raw_vals = jnp.concatenate([all_vals, g_vals, l_vals])
-        coalesced_vals = jax.ops.segment_sum(raw_vals, self.map_idx, num_segments=self.n_unique)
-        return klujax.refactor(self.u_rows, self.u_cols, coalesced_vals, numeric, self._handle_wrapper.handle)
+        return klujax.refactor(self.u_rows, self.u_cols, self._coalesced_values(all_vals), numeric, self._handle_wrapper.handle)
+
+    def refactor_and_solve_jacobian(
+        self, all_vals: jax.Array, residual: jax.Array, numeric: jax.Array
+    ) -> tuple[lx.Solution, jax.Array]:
+        """Refactor in-place with new Jacobian values and solve, in one fused klujax call.
+
+        The solution is an output of the refactorization itself, so it is ordered after it
+        and remains correct inside ``jax.jit`` and ``lax.while_loop``.
+
+        Args:
+            all_vals: Flattened non-zero Jacobian values (COO format).
+            residual: The right-hand side vector ``-F(y)``.
+            numeric: Existing handle returned by :meth:`~KLUSplitLinear.factor_jacobian`.
+
+        Returns:
+            ``(solution, numeric)``: the Newton step and the numeric handle from klujax.
+
+        """
+        x, numeric = klujax.refactor_and_solve(
+            self.u_rows, self.u_cols, self._coalesced_values(all_vals), residual, numeric, self._handle_wrapper.handle
+        )
+        solution = lx.Solution(value=x.reshape(residual.shape), result=lx.RESULTS.successful, state=None, stats={})
+        return solution, numeric
 
     @classmethod
     def from_component_groups(

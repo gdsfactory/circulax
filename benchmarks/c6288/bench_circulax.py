@@ -73,9 +73,12 @@ def run(args: argparse.Namespace, record: Callable[[dict], None]) -> dict:  # no
     from circulax.solvers import setup_transient
     from circulax.solvers.transient import (
         BDF2FactorizedTransientSolver,
+        BDF2RefactoringTransientSolver,
         BDF2VectorizedTransientSolver,
         FactorizedTransientSolver,
+        RefactoringTransientSolver,
         TrapFactorizedTransientSolver,
+        TrapRefactoringTransientSolver,
         TrapVectorizedTransientSolver,
         VectorizedTransientSolver,
     )
@@ -192,6 +195,13 @@ def run(args: argparse.Namespace, record: Callable[[dict], None]) -> dict:  # no
     solvers = {"trap": TrapFactorizedTransientSolver, "bdf2": BDF2FactorizedTransientSolver, "euler": FactorizedTransientSolver}
     if args.newton == "full":
         solvers = {"bdf2": BDF2VectorizedTransientSolver, "trap": TrapVectorizedTransientSolver, "euler": VectorizedTransientSolver}
+    elif args.newton == "full-refactor":
+        # Full Newton with one fresh LU per step and a fused KLU refactor per iteration.
+        solvers = {
+            "bdf2": BDF2RefactoringTransientSolver,
+            "trap": TrapRefactoringTransientSolver,
+            "euler": RefactoringTransientSolver,
+        }
     integrator = solvers[args.solver](
         linear_solver=circuit.solver, newton_rtol=1e-6, newton_atol=1e-8, newton_max_steps=args.max_newton
     )
