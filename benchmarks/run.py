@@ -50,6 +50,9 @@ CASES: dict[str, BenchmarkCase] = {
     ),
     "juncap200": BenchmarkCase(ROOT / "juncap200" / "run.py", "IHP juncap200 DC sweep via OSDI [VA extra]"),
     "mosvar": BenchmarkCase(ROOT / "mosvar" / "run.py", "IHP mosvar DC sweep via OSDI [VA extra]"),
+    "c6288": BenchmarkCase(
+        ROOT / "c6288" / "run.py", "PSP103 c6288 multiplier via batched BOSDI (stress test)"
+    ),
     "ring-bsim4": BenchmarkCase(ROOT / "ring_bsim4" / "bench_bsim4_osdi.py", "BSIM4 ring oscillator via OSDI [VA extra]"),
     # ── Legacy ───────────────────────────────────────────────────────────────
     "legacy-rc-pulse": BenchmarkCase(ROOT / "legacy" / "rc_pulse_testbench.py", "Legacy RC pulse testbench"),

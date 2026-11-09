@@ -1,6 +1,7 @@
 * [Home](index.md)
 * Guide
     * [Writing Components](writing_components.md)
+    * [Small-Signal Analysis](small_signal.md)
     * [Transient Simulation](transient.md)
     * [Waveform Sources](waveform_sources.md)
     * [Rational Model Enforcement](rational_model_enforcement.md)
@@ -8,6 +9,8 @@
     * [Harmonic Balance](harmonic_balance.md)
     * [Choosing a Solver](choosing_a_solver.md)
     * [Subcircuit Hierarchy](hierarchy.md)
+* Components
+    * [Component Catalog](components/index.md)
 * Getting Started
     * [Resistor Ladder](examples/resistor_ladder.md)
     * [LCR Transient](examples/lcr_transient.md)
@@ -19,12 +22,15 @@
     * [Harmonic Balance](examples/harmonic_balance.md)
     * [LC Ladder](examples/lc_ladder.md)
 * Photonic Examples
+    * [Traveling-Wave MZM](examples/traveling_wave_mzm.md)
+    * [TFLN Traveling-Wave MZM](examples/tfln_traveling_wave_mzm.md)
     * [Semiconductor Optical Amplifier](examples/soa.md)
     * [Mach-Zehnder Modulator](examples/mzm.md)
     * [Photonics Transient](examples/photonics_transient.md)
     * [Ring Modulator](examples/ring_modulator.md)
 * Advanced Topics
     * [Vector Fitting](examples/vector_fitting.md)
+    * [Reduced RLGC Transmission Line](examples/rlgc_transmission_line.md)
     * [Time Delay](examples/time_delay.md)
     * [Inverse Design](inverse_design.md)
         * [LC Filter Synthesis](examples/01_lc_filter_synthesis.md)

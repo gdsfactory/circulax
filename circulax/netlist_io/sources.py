@@ -185,8 +185,6 @@ def parse_waveform(
         Keyword settings for the waveform source components, including ``kind``.
         Fields not needed by the waveform keep their component defaults.
 
-    @tags circulax-simulation
-
     """
     text = waveform.strip()
     match = _CALL.match(text)
@@ -220,8 +218,6 @@ def parse_source(
     Returns:
         Keyword settings with ``kind``, ``dc`` and ``dc_given`` plus waveform fields, ready
         for ``WaveformVoltageSource(**settings)`` / ``WaveformCurrentSource(**settings)``.
-
-    @tags circulax-simulation
 
     """
     calls = list(_CALL.finditer(spec))

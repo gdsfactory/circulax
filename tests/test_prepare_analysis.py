@@ -17,7 +17,7 @@ def _forbid_solve(*_args: object, **_kwargs: object) -> None:
 def _native_circuit(*, num_states: int = 0, complex_mode: bool = False, holomorphic: bool = True) -> Circuit:
     """Represent a native registration factory without provisioning artifacts."""
     indices = jnp.array([[0, 1]])
-    group = SimpleNamespace(var_indices=indices, jac_rows=indices, jac_cols=indices, num_states=num_states, holomorphic=holomorphic)
+    group = SimpleNamespace(var_indices=indices, eq_indices=indices, jac_rows=indices, jac_cols=indices, num_states=num_states, holomorphic=holomorphic)
     solver = SimpleNamespace(is_complex=complex_mode, solve_dc=_forbid_solve)
     return Circuit(solver, {"native": group}, 2, {"out": 1})
 
@@ -29,6 +29,7 @@ def _native_circuit(*, num_states: int = 0, complex_mode: bool = False, holomorp
         ("dc", "dc"),
         ("sp_wavelength", "dc"),
         ("ac_response", "ac"),
+        ("small_signal", "ac"),
         ("sp_frequency", "ac"),
         ("tran", "tran"),
         ("hb", "tran"),
@@ -188,3 +189,12 @@ def test_prepared_native_variant_reuses_the_bench_built_by_preparation(monkeypat
     prepared.sp_wavelength(**kwargs)
     parent.sp_wavelength(**kwargs)
     assert len(compiles) == 1
+
+
+def test_small_signal_complex_native_rejects_before_registration_or_solve() -> None:
+    """Real-only native derivatives cannot form a full complex-coordinate model."""
+    circuit = _native_circuit(complex_mode=True)
+    circuit.groups["native"].model_id = 1
+    circuit._analysis_factory = _forbid_solve  # noqa: SLF001 -- capability check precedes registration
+    with pytest.raises(NotImplementedError, match="real-only"):
+        circuit.prepare_analysis("small_signal")

@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "n_stages": 15,
+  "variant": "osdi",
+  "backend": "klu_split",
+  "wall_s": 7.613306385988835,
+  "compile_s": 1.0990413289982826,
+  "dc_s": 0.6437709580059163,
+  "n_steps": 20000,
+  "us_per_step": 380.66531929944176,
+  "sys_size": 80,
+  "freq_MHz": 173.78977643193426,
+  "model": {
+    "path": "/home/cdaunt/Documents/ChatGPT/circulax/circulax/components/osdi/compiled/psp103v4_psp103.osdi",
+    "sha256": "b4ecc3288226503d7546e959a1ccbadfcf7a87994290819410900a297a278a95"
+  },
+  "fixture_sha256": "f3bff04d6ed10c5a53689e605d60ead1d2e7520919a5f729947a18df4661cc28",
+  "model_cards": {
+    "path": "/home/cdaunt/code/vacask/VACASK/benchmark/ring/vacask/models.inc",
+    "sha256": "394b747ff7d08853af3d7bc20a7f28d922c6dd73831c2bae61519177d839e69b"
+  },
+  "representation": "reduced"
+}

@@ -1,3 +1,5 @@
+# Copyright 2026 Circulax contributors
+
 """AC small-signal frequency sweep returning S-parameters.
 
 AC analysis linearises the circuit DAE at a DC operating point and sweeps a
@@ -153,7 +155,7 @@ def renormalize(
     z0_from = jnp.broadcast_to(jnp.atleast_1d(jnp.asarray(z0_from, dtype=jnp.complex128)), (n_freqs, n_ports))
     z0_to = jnp.broadcast_to(jnp.atleast_1d(jnp.asarray(z0_to, dtype=jnp.complex128)), (n_freqs, n_ports))
 
-    def _renorm_one(S_f, zf, zt):
+    def _renorm_one(S_f: Array, zf: Array, zt: Array) -> Array:
         I = jnp.eye(n_ports, dtype=jnp.complex128)
         gamma = (zt - zf) / (zt + zf)
         Gamma = jnp.diag(gamma)
@@ -161,6 +163,86 @@ def renormalize(
         return A @ (S_f - Gamma) @ jnp.linalg.solve(I - Gamma @ S_f, I) @ jnp.linalg.inv(A)
 
     return jax.vmap(_renorm_one)(S, z0_from, z0_to)
+
+
+def linearize_ac(
+    groups: dict[str, Any],
+    num_vars: int,
+    y_dc: Array,
+    *,
+    is_complex: bool = False,
+    quadratures: bool = False,
+    dc_groups: dict[str, Any] | None = None,
+) -> tuple[Array, Array]:
+    """Assemble frequency-independent derivatives with a shared COO layout.
+
+    Quadrature assembly retains all four real derivative blocks. Native AC
+    registrations supply C; optional DC registrations supply G.
+    """
+    rows, cols, _, size = _build_index_arrays(groups, num_vars, is_complex=quadratures)
+    if quadratures:
+        g_blocks, c_blocks = assemble_gc_complex_2n(y_dc, groups)
+        if dc_groups is not None:
+            g_blocks, _ = assemble_gc_complex_2n(y_dc, dc_groups)
+        g_values, c_values = jnp.concatenate(g_blocks), jnp.concatenate(c_blocks)
+    else:
+        assemble = assemble_gc_complex if is_complex else assemble_gc_real
+        g_values, c_values = assemble(y_dc, groups)
+        if dc_groups is not None:
+            g_values, _ = assemble(y_dc, dc_groups)
+    rows, cols = jnp.asarray(rows), jnp.asarray(cols)
+    conductance = jnp.zeros((size, size), dtype=jnp.complex128).at[rows, cols].add(g_values)
+    capacitance = jnp.zeros_like(conductance).at[rows, cols].add(c_values)
+    return conductance, capacitance
+
+
+def ac_admittance(
+    conductance: Array,
+    capacitance: Array,
+    groups: dict[str, Any],
+    y_dc: Array,
+    freq: Array,
+    *,
+    num_vars: int,
+    is_complex: bool = False,
+    quadratures: bool = False,
+) -> Array:
+    """Add frequency-dependent physics and reference constraints to G + jwC."""
+    admittance = conductance + 2j * jnp.pi * freq * capacitance
+    for group in groups.values():
+        rows, cols = group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)
+        if getattr(group, "is_fdomain", False):
+            values = jax.vmap(functools.partial(group.physics_func, freq))(group.params).reshape(-1)
+            if quadratures:
+                # RF phase and optical-field phase are distinct. Recover the
+                # coordinate transfer functions from both envelope sidebands;
+                # taking real/imag at +f alone discards temporal phase (e.g.
+                # a real capacitor must contribute jwC to both diagonals).
+                negative = jax.vmap(functools.partial(group.physics_func, -freq))(group.params).reshape(-1)
+                direct = (values + jnp.conj(negative)) / 2
+                cross = (values - jnp.conj(negative)) / (2j)
+                blocks = (direct, -cross, cross, direct)
+            else:
+                admittance = admittance.at[rows, cols].add(values)
+        elif getattr(group, "has_delay", False):
+            if quadratures:
+                values = _delay_admittance_2n(group, y_dc, freq)
+                width = group.var_indices.shape[-1]
+                blocks = tuple(
+                    values[:, r : r + width, c : c + width].reshape(-1) for r, c in ((0, 0), (0, width), (width, 0), (width, width))
+                )
+            else:
+                values = _delay_admittance(group, y_dc, freq, is_complex=is_complex)
+                admittance = admittance.at[rows, cols].add(values.reshape(-1))
+        else:
+            continue
+        if quadratures:
+            for values, (row_offset, col_offset) in zip(
+                blocks, ((0, 0), (0, num_vars), (num_vars, 0), (num_vars, num_vars)), strict=True
+            ):
+                admittance = admittance.at[rows + row_offset, cols + col_offset].add(values)
+    ground = jnp.array([0, num_vars] if quadratures else [0])
+    return admittance.at[ground, ground].add(GROUND_STIFFNESS)
 
 
 def setup_ac_response(
@@ -172,35 +254,15 @@ def setup_ac_response(
 ) -> Callable[[Array, Array, Array], Array]:
     """Linearize physical response without scattering-port terminations.
 
-    The caller supplies an independent-source RHS, leaving DC bias intact.
-    Native AC charge registrations, delays and frequency-domain admittances
-    use the same assembly as scattering analysis.
+    This legacy interface retains the N-sized holomorphic complex response.
+    SmallSignalModel uses the same assembly helpers with full quadratures.
     """
-    rows, cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
-    rows = jnp.asarray(rows)
-    cols = jnp.asarray(cols)
-    ground = jnp.asarray(ground_idxs)
-    assemble = assemble_gc_complex if is_complex else assemble_gc_real
 
     def run_response(y_dc: Array, freqs: Array, rhs: Array) -> Array:
-        """Solve one physical excitation at each frequency."""
-        g_values, c_values = assemble(y_dc, groups)
-        if dc_groups is not None:
-            g_values, _ = assemble(y_dc, dc_groups)
-        conductance = jnp.zeros((num_vars, num_vars), dtype=jnp.complex128).at[rows, cols].add(g_values)
-        capacitance = jnp.zeros_like(conductance).at[rows, cols].add(c_values)
+        conductance, capacitance = linearize_ac(groups, num_vars, y_dc, is_complex=is_complex, dc_groups=dc_groups)
 
         def solve_frequency(freq: Array) -> Array:
-            """Include dynamic component admittances before solving the RHS."""
-            admittance = conductance + 2j * jnp.pi * freq * capacitance
-            for group in groups.values():
-                if getattr(group, "is_fdomain", False):
-                    values = jax.vmap(functools.partial(group.physics_func, freq))(group.params)
-                    admittance = admittance.at[group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)].add(values.reshape(-1))
-                if getattr(group, "has_delay", False):
-                    values = _delay_admittance(group, y_dc, freq, is_complex=is_complex)
-                    admittance = admittance.at[group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)].add(values.reshape(-1))
-            admittance = admittance.at[ground, ground].add(GROUND_STIFFNESS)
+            admittance = ac_admittance(conductance, capacitance, groups, y_dc, freq, num_vars=num_vars, is_complex=is_complex)
             return jnp.linalg.solve(admittance, rhs)
 
         return jax.vmap(solve_frequency)(freqs)
@@ -286,164 +348,39 @@ def setup_ac_sweep(
         msg = "Port node cannot be the ground node (index 0)."
         raise ValueError(msg)
 
-    if is_complex and not holomorphic:
-        return _setup_ac_sweep_2n(groups, num_vars, port_nodes, z0=z0, dc_groups=dc_groups)
+    quadratures = is_complex and not holomorphic
+    port_nodes_arr = jnp.asarray(port_nodes, dtype=jnp.int32)
+    n_ports = len(port_nodes)
+    z0_arr = _normalize_z0(z0, n_ports)
+    size = num_vars * (2 if quadratures else 1)
 
-    # --- Pre-compute static COO index arrays (captured in closure) -----------
-    static_rows, static_cols, ground_idxs, _ = _build_index_arrays(groups, num_vars, is_complex=False)
-    static_rows_jax = jnp.array(static_rows)
-    static_cols_jax = jnp.array(static_cols)
-    ground_indices = jnp.array(ground_idxs)
-
-    N_ports = len(port_nodes)
-    port_nodes_arr = jnp.array(port_nodes, dtype=jnp.int32)
-
-    fdomain_scatter: dict[str, tuple[Array, Array]] = {
-        gk: (
-            jnp.array(groups[gk].jac_rows).reshape(-1),
-            jnp.array(groups[gk].jac_cols).reshape(-1),
-        )
-        for gk in sorted(groups)
-        if groups[gk].is_fdomain
-    }
-    delay_scatter: dict[str, tuple[Array, Array]] = {
-        gk: (
-            jnp.array(groups[gk].jac_rows).reshape(-1),
-            jnp.array(groups[gk].jac_cols).reshape(-1),
-        )
-        for gk in sorted(groups)
-        if getattr(groups[gk], "has_delay", False)
-    }
-
-    gc_assemble = assemble_gc_complex if is_complex else assemble_gc_real
-
-    z0_arr = _normalize_z0(z0, N_ports)
-
-    # -------------------------------------------------------------------------
     def run_ac(y_dc: Array, freqs: Array) -> Array:
-        G_vals, C_vals = gc_assemble(y_dc, groups)
-        if dc_groups is not None:
-            G_vals, _ = gc_assemble(y_dc, dc_groups)
+        conductance, capacitance = linearize_ac(
+            groups, num_vars, y_dc, is_complex=is_complex, quadratures=quadratures, dc_groups=dc_groups
+        )
+        rhs = jnp.zeros((size, n_ports), dtype=jnp.complex128)
+        rhs = rhs.at[port_nodes_arr, jnp.arange(n_ports)].set(2.0 / z0_arr)
 
-        G_mat = jnp.zeros((num_vars, num_vars), dtype=jnp.complex128)
-        G_mat = G_mat.at[static_rows_jax, static_cols_jax].add(G_vals)
+        def solve_frequency(freq: Array) -> Array:
+            admittance = ac_admittance(
+                conductance,
+                capacitance,
+                groups,
+                y_dc,
+                freq,
+                num_vars=num_vars,
+                is_complex=is_complex,
+                quadratures=quadratures,
+            )
+            admittance = admittance.at[port_nodes_arr, port_nodes_arr].add(1.0 / z0_arr)
+            if quadratures:
+                admittance = admittance.at[port_nodes_arr + num_vars, port_nodes_arr + num_vars].add(1.0 / z0_arr)
+            solution = jnp.linalg.solve(admittance, rhs)
+            fields = solution[port_nodes_arr, :]
+            if quadratures:
+                fields = fields + 1j * solution[port_nodes_arr + num_vars, :]
+            return fields - jnp.eye(n_ports, dtype=jnp.complex128)
 
-        C_mat = jnp.zeros((num_vars, num_vars), dtype=jnp.complex128)
-        C_mat = C_mat.at[static_rows_jax, static_cols_jax].add(C_vals)
-
-        RHS = jnp.zeros((num_vars, N_ports), dtype=jnp.complex128)
-        RHS = RHS.at[port_nodes_arr, jnp.arange(N_ports)].set(2.0 / z0_arr)
-
-        def _solve_one_freq(f: Array) -> Array:
-            omega = 2.0 * jnp.pi * f
-            Y = G_mat + 1j * omega * C_mat
-
-            for gk, (rows_fd, cols_fd) in fdomain_scatter.items():
-                group_fd = groups[gk]
-                Y_mats = jax.vmap(functools.partial(group_fd.physics_func, f))(group_fd.params)
-                Y = Y.at[rows_fd, cols_fd].add(Y_mats.reshape(-1))
-
-            for gk, (rows_delay, cols_delay) in delay_scatter.items():
-                Y_delay = _delay_admittance(groups[gk], y_dc, f, is_complex=is_complex)
-                Y = Y.at[rows_delay, cols_delay].add(Y_delay.reshape(-1))
-
-            Y = Y.at[port_nodes_arr, port_nodes_arr].add(1.0 / z0_arr)
-            Y = Y.at[ground_indices, ground_indices].add(GROUND_STIFFNESS)
-
-            V = jnp.linalg.solve(Y, RHS)
-            V_ports = V[port_nodes_arr, :]
-            return V_ports - jnp.eye(N_ports, dtype=jnp.complex128)
-
-        return jax.vmap(_solve_one_freq)(freqs)
+        return jax.vmap(solve_frequency)(freqs)
 
     return run_ac
-
-
-def _setup_ac_sweep_2n(
-    groups: dict[str, Any],
-    num_vars: int,
-    port_nodes: list[int],
-    *,
-    z0: float | Array = 50.0,
-    dc_groups: dict[str, Any] | None = None,
-) -> Callable[[Array, Array], Array]:
-    """Build an AC sweep using the full 2N×2N real-block system."""
-    N = num_vars
-    static_rows, static_cols, ground_idxs, _ = _build_index_arrays(groups, N, is_complex=False)
-    rows_j = jnp.array(static_rows)
-    cols_j = jnp.array(static_cols)
-    ground_2n = jnp.concatenate([jnp.array(ground_idxs), jnp.array(ground_idxs) + N])
-    offsets = jnp.array([[0, 0], [0, N], [N, 0], [N, N]])
-
-    N_ports = len(port_nodes)
-    port_nodes_arr = jnp.array(port_nodes, dtype=jnp.int32)
-
-    fdomain_scatter: dict[str, tuple[Array, Array]] = {
-        gk: (
-            jnp.array(groups[gk].jac_rows).reshape(-1),
-            jnp.array(groups[gk].jac_cols).reshape(-1),
-        )
-        for gk in sorted(groups)
-        if groups[gk].is_fdomain
-    }
-    delay_scatter: dict[str, tuple[Array, Array]] = {
-        gk: (
-            jnp.array(groups[gk].jac_rows).reshape(-1),
-            jnp.array(groups[gk].jac_cols).reshape(-1),
-        )
-        for gk in sorted(groups)
-        if getattr(groups[gk], "has_delay", False)
-    }
-
-    z0_arr = _normalize_z0(z0, N_ports)
-
-    def run_ac_2n(y_dc: Array, freqs: Array) -> Array:
-        G_blocks, C_blocks = assemble_gc_complex_2n(y_dc, groups)
-        if dc_groups is not None:
-            G_blocks, _ = assemble_gc_complex_2n(y_dc, dc_groups)
-
-        RHS = jnp.zeros((2 * N, N_ports), dtype=jnp.complex128)
-        RHS = RHS.at[port_nodes_arr, jnp.arange(N_ports)].set(2.0 / z0_arr)
-
-        def _solve_one_freq(f: Array) -> Array:
-            omega = 2.0 * jnp.pi * f
-            Y = jnp.zeros((2 * N, 2 * N), dtype=jnp.complex128)
-            for k in range(4):
-                ro, co = offsets[k]
-                vals = (G_blocks[k] + 1j * omega * C_blocks[k]).astype(jnp.complex128)
-                Y = Y.at[rows_j + ro, cols_j + co].add(vals)
-
-            for gk, (rows_fd, cols_fd) in fdomain_scatter.items():
-                group_fd = groups[gk]
-                Y_mats = jax.vmap(functools.partial(group_fd.physics_func, f))(group_fd.params)
-                Y_flat = Y_mats.reshape(-1)
-                Y = Y.at[rows_fd, cols_fd].add(Y_flat.real)
-                Y = Y.at[rows_fd + N, cols_fd + N].add(Y_flat.real)
-                Y = Y.at[rows_fd, cols_fd + N].add(-Y_flat.imag)
-                Y = Y.at[rows_fd + N, cols_fd].add(Y_flat.imag)
-
-            for gk, (rows_delay, cols_delay) in delay_scatter.items():
-                group_delay = groups[gk]
-                Y_delay = _delay_admittance_2n(group_delay, y_dc, f)
-                width = group_delay.var_indices.shape[-1]
-                Y_delay = Y_delay.reshape(-1, 2 * width, 2 * width)
-                rr = Y_delay[:, :width, :width].reshape(-1)
-                ri = Y_delay[:, :width, width:].reshape(-1)
-                ir = Y_delay[:, width:, :width].reshape(-1)
-                ii = Y_delay[:, width:, width:].reshape(-1)
-                Y = Y.at[rows_delay, cols_delay].add(rr)
-                Y = Y.at[rows_delay, cols_delay + N].add(ri)
-                Y = Y.at[rows_delay + N, cols_delay].add(ir)
-                Y = Y.at[rows_delay + N, cols_delay + N].add(ii)
-
-            Y = Y.at[port_nodes_arr, port_nodes_arr].add(1.0 / z0_arr)
-            Y = Y.at[port_nodes_arr + N, port_nodes_arr + N].add(1.0 / z0_arr)
-            Y = Y.at[ground_2n, ground_2n].add(GROUND_STIFFNESS)
-
-            V = jnp.linalg.solve(Y, RHS)
-            V_ports = V[port_nodes_arr, :] + 1j * V[port_nodes_arr + N, :]
-            return V_ports - jnp.eye(N_ports, dtype=jnp.complex128)
-
-        return jax.vmap(_solve_one_freq)(freqs)
-
-    return run_ac_2n

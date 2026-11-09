@@ -273,21 +273,21 @@ wheels = [
 
 [[package]]
 name = "bosdi"
-version = "0.1.6"
+version = "0.1.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "equinox" },
     { name = "jax" },
     { name = "jaxlib" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d8/4d/3c9e3a3d461884774dcd2091dfa9d9da080a3724c00ca6a800212d664c71/bosdi-0.1.6.tar.gz", hash = "sha256:7a63606796355eaa11c4f2cc052611a458b17156bf928a1a0771f4c51858caba", size = 243301, upload-time = "2026-09-27T20:03:02.949Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/e4/50a5731d5de877ff4e4cc335cb6cc2d53a8d6be9e6436370b8db9f2bd559/bosdi-0.1.9.tar.gz", hash = "sha256:1c9d75fb657a1969207201f2d54dccb71eef1480fe50738e162e553f81bf6073", size = 1021073, upload-time = "2026-11-05T18:49:06.352Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/e7/22a82e3b28cea14d02ce2bfca3b11cc2bff426f7880be15046d5a574639e/bosdi-0.1.6-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:e6d417820424d43ca562c25caa4a308759c7594a7d6e1ac0e0902968efa94d42", size = 861764, upload-time = "2026-09-27T20:02:53.839Z" },
-    { url = "https://files.pythonhosted.org/packages/59/8e/a75446930195fd41a7db27f602116fb96581525fde2c26a3880643250402/bosdi-0.1.6-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:e2badeaa05e9d66bc27f1c7aeb81d524bb69d770f73778328332cd295a39d854", size = 3013358, upload-time = "2026-09-27T20:02:55.505Z" },
-    { url = "https://files.pythonhosted.org/packages/35/0a/77b16c9b9fefb6433e90a8cd3f52b1d05ebc55d8ab15bc511a25cf9ea4fa/bosdi-0.1.6-cp312-cp312-win_amd64.whl", hash = "sha256:44b5cf07bf3059673a69f0f6750bc044eb3902a6beb78c737f9ea38449027bf0", size = 365205, upload-time = "2026-09-27T20:02:57.067Z" },
-    { url = "https://files.pythonhosted.org/packages/c9/6d/89243f0d8a656b58c6b8b6eba337ec59a6ce139433868a46acd5774a23c3/bosdi-0.1.6-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:f217a59a6b1908cd54b69f4efd3f7bfd31f0d49d0626847a173ffc7626f2b7f9", size = 861944, upload-time = "2026-09-27T20:02:58.417Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/28/ec4d9ca61f0f8902d551ccd13f8cbd5788198d0b1f0b80ae8ec3a4daf2b8/bosdi-0.1.6-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:23f2d552eb253a9d6e55303446ce4241679bcc4eb0c6393109e70f40fb94dee5", size = 3008527, upload-time = "2026-09-27T20:02:59.951Z" },
-    { url = "https://files.pythonhosted.org/packages/07/d9/cac2d893407340f6db4470994dc9b4a3d2f54084d40e9719354421acf599/bosdi-0.1.6-cp313-cp313-win_amd64.whl", hash = "sha256:091765e0e08ffa1ec2201bce62bdd755950bba96cbe29c42ee93899b172d5265", size = 365161, upload-time = "2026-09-27T20:03:01.355Z" },
+    { url = "https://files.pythonhosted.org/packages/da/8a/53050c552fd067582ed50d760b34d34546c313c8b66047e6d2362d8b9cf0/bosdi-0.1.9-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:f78818de98f5ff5d39cde36769be7942e1be532c0a8cffb1d4717397f0015d57", size = 883408, upload-time = "2026-11-05T18:48:56.784Z" },
+    { url = "https://files.pythonhosted.org/packages/59/0d/e0a071dc6c93b96cdc577e5ce9b3cc40c7449c5b653cc0870c569167c2ff/bosdi-0.1.9-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:8a01cdfb46b6ea7634b01ca0a6f81bf09f0a7e922209160ee2d83c79315abbd8", size = 3106303, upload-time = "2026-11-05T18:48:58.682Z" },
+    { url = "https://files.pythonhosted.org/packages/95/a9/cad491b3fb33867d17b571e748e6eb859a127ac1ac5de70e432b7a3c7690/bosdi-0.1.9-cp312-cp312-win_amd64.whl", hash = "sha256:263c0a824770e3dc0c070a81f668d847052fc5ec77a41e0ea43f072083cb17dd", size = 374946, upload-time = "2026-11-05T18:49:00.359Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/bb/7ea0f43341442f334c966bb82bdb3a2629434a130fbeab16ed38c97d9d53/bosdi-0.1.9-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:0a2c774731969e4e51c303db1f30d0ae99be2f904f9f42cad0ad4eced5bba25c", size = 883545, upload-time = "2026-11-05T18:49:01.674Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/e8/d4157f1c1e4368d8936968bd539523d855ac1f004c7c3c0399609eadbad0/bosdi-0.1.9-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:85d8b321e9d574e0588cac5711e47bed35c373f4049fd05844cf179247260635", size = 3101784, upload-time = "2026-11-05T18:49:03.178Z" },
+    { url = "https://files.pythonhosted.org/packages/61/5f/b4ddd2d39806d63ca0b1eb80915c4923a54c44bce309e97912a8d26bb7b5/bosdi-0.1.9-cp313-cp313-win_amd64.whl", hash = "sha256:0e52d0ef7a7eaa67b7707c7c2641ba9a9fa0d792456c1896f8df711077d652ef", size = 374890, upload-time = "2026-11-05T18:49:04.592Z" },
 ]
 
 [[package]]
@@ -530,8 +530,8 @@ verilog-a = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'" },
-    { name = "bosdi", marker = "extra == 'dev'", specifier = "~=0.1.6" },
-    { name = "bosdi", marker = "extra == 'verilog-a'", specifier = "~=0.1.6" },
+    { name = "bosdi", marker = "extra == 'dev'", specifier = "~=0.1.9" },
+    { name = "bosdi", marker = "extra == 'verilog-a'", specifier = "~=0.1.9" },
     { name = "diffrax", specifier = "~=0.7.2" },
     { name = "equinox", specifier = "~=0.13.0" },
     { name = "hippogriffe", marker = "extra == 'dev'", specifier = "==0.2.2" },
@@ -591,7 +591,7 @@ requires-dist = [
     { name = "scipy", specifier = "~=1.12" },
     { name = "typing-extensions", specifier = "~=4.13" },
 ]
-provides-extras = ["dev", "docs", "verilog-a"]
+provides-extras = ["dev", "docs", "netlists", "verilog-a"]
 
 [[package]]
 name = "click"

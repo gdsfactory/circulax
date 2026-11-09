@@ -86,9 +86,7 @@ class TestPruneUnreachableInstances:
         assert "die_frame" in nl.instances
 
     def test_compile_netlist_drops_unmodeled_inert_instance(self):
-        """The end-to-end case from gdsfactoryplus#4882/#4883: an unmodeled,
-        topologically inert component must not abort compilation.
-        """
+        """End-to-end: an unmodeled, topologically inert component must not abort compilation."""
         from circulax.components.electronic import Capacitor, Resistor
 
         nl = _kfnl_lrc_with_port()
@@ -160,11 +158,8 @@ class TestPruneUnreachableInstances:
 class TestPruneUnreachableInstancesDictAndRecursive:
     """The dict-facing half of prune_unreachable_instances (gdsfactory/circulax#60).
 
-    This is the entry point a consumer like gdsfactoryplus should call
-    directly on its recursive netlist *before* its own composite-expansion /
-    model-resolution walk — the same call site that previously needed a
-    local ``_prune_inert_instances`` workaround
-    (github.com/doplaydo/gdsfactoryplus/pull/4883).
+    This is the entry point to call directly on a recursive netlist *before*
+    any composite-expansion / model-resolution walk.
     """
 
     def test_flat_dict_drops_inert_instance(self):
@@ -191,9 +186,7 @@ class TestPruneUnreachableInstancesDictAndRecursive:
         assert set(pruned["instances"]) == {"R1", "die_frame"}
 
     def test_recursive_netlist_drops_top_level_inert_instance(self):
-        """The exact shape of gdsfactoryplus#4882: a top circuit with a
-        connected `mmi` and an unmodeled, unconnected `die_half`.
-        """
+        """A top circuit with a connected `mmi` and an unmodeled, unconnected `die_half`."""
         recnet = {
             "top": {
                 "instances": {

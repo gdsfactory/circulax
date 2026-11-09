@@ -1,0 +1,138 @@
+C6288 16x16 multiplier
+
+load "/home/cdaunt/.cache/circulax/osdi/psp103-ef7c18f42d5f8cbfcb6be7d8dee1e50184c94a93eaed69db8c9ba1bd04c442a8.osdi"
+load "/home/cdaunt/.cache/circulax/osdi/resistor-3d07d5632e0536224ca410d9867c063626a667b29ed83b941f0f9d69a1594b3f.osdi"
+
+include "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/models.inc"
+include "/home/cdaunt/code/vacask/VACASK/benchmark/c6288/vacask/multiplier.inc"
+model v vsource
+model r sp_resistor
+
+parameters vdd=1.2
+
+subckt drv(out)
+  parameters v0=0 v1=1
+  parameters rs=1 delay=0.1n rise=0.1n
+  vdrv (int 0) v type="pulse" val0=v0*vdd val1=v1*vdd delay=delay rise=rise
+  rdrv (int out) r r=rs
+ends
+
+vdd (vdd 0) v dc=vdd
+vss (vss 0) v dc=0
+
+//
+// Various top-level circuits for testing
+//
+
+subckt gatedrv_test()
+  v1 (in1 0) v type="pulse" val0=0 val1=vdd delay=0.2n rise=1p fall=1p width=0.2n
+  v2 (in2 0) v type="pulse" val0=0 val1=vdd delay=0.3n rise=1p fall=1p width=0.2n
+  linv (dummy out) not
+ends
+
+subckt inv_test()
+  x1 (out in1) not
+ends
+
+subckt nor_test()
+  x1 (out in1 in2) nor
+ends
+
+subckt and_test()
+  x1 (out in1 in2) and
+ends
+
+//
+// Multiplier test circuit
+//
+
+subckt c6288_test() 
+  u1 (
+    a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15
+    b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15
+    p0 p1 p2 p3 p4 p5 p6 p7 p8 p9 p10 p11 p12 p13 p14 p15
+    p16 p17 p18 p19 p20 p21 p22 p23 p24 p25 p26 p27 p28 p29 p30 p31
+  ) c6288
+  
+  da0  (a0)  drv v0=0 v1=1 
+  da1  (a1)  drv v0=0 v1=1
+  da2  (a2)  drv v0=0 v1=1
+  da3  (a3)  drv v0=0 v1=1
+  da4  (a4)  drv v0=0 v1=1
+  da5  (a5)  drv v0=0 v1=1
+  da6  (a6)  drv v0=0 v1=1
+  da7  (a7)  drv v0=0 v1=1
+  da8  (a8)  drv v0=0 v1=1
+  da9  (a9)  drv v0=0 v1=1
+  da10 (a10) drv v0=0 v1=1 
+  da11 (a11) drv v0=0 v1=1
+  da12 (a12) drv v0=0 v1=1
+  da13 (a13) drv v0=0 v1=1
+  da14 (a14) drv v0=0 v1=1
+  da15 (a15) drv v0=0 v1=1
+
+  db0  (b0)  drv v0=0 v1=1 
+  db1  (b1)  drv v0=0 v1=1
+  db2  (b2)  drv v0=0 v1=1
+  db3  (b3)  drv v0=0 v1=1
+  db4  (b4)  drv v0=0 v1=1
+  db5  (b5)  drv v0=0 v1=1
+  db6  (b6)  drv v0=0 v1=1
+  db7  (b7)  drv v0=0 v1=1
+  db8  (b8)  drv v0=0 v1=1
+  db9  (b9)  drv v0=0 v1=1
+  db10 (b10) drv v0=0 v1=1 
+  db11 (b11) drv v0=0 v1=1
+  db12 (b12) drv v0=0 v1=1
+  db13 (b13) drv v0=0 v1=1
+  db14 (b14) drv v0=0 v1=1
+  db15 (b15) drv v0=0 v1=1
+  
+  // 0xffff x 0xffff -> 0xfffe0001
+ends
+
+control
+  options nr_convtol=1 nr_bypasstol=1 nr_bypass=0 nr_contbypass=1 
+  options tran_lteratio=1.5
+  // options nr_residualcheck=0
+  // options tran_debug=0
+  // options tran_redofactor=2.5 tran_lteratio=3.5 tran_spicelte=1 
+  
+  save v(p0) v(p1) v(p2) v(p3) v(p4) v(p5) v(p6) v(p7) v(p8) v(p9)
+  save v(p10) v(p11) v(p12) v(p13) v(p14) v(p15) v(p16) v(p17) v(p18) v(p19)
+  save v(p20) v(p21) v(p22) v(p23) v(p24) v(p25) v(p26) v(p27) v(p28) v(p29)
+  save v(p30) v(p31)
+  save v(a0) v(a1) v(a2) v(a3) v(a4) v(a5) v(a6) v(a7)
+  save v(a8) v(a9) v(a10) v(a11) v(a12) v(a13) v(a14) v(a15)
+  save v(b0) v(b1) v(b2) v(b3) v(b4) v(b5) v(b6) v(b7)
+  save v(b8) v(b9) v(b10) v(b11) v(b12) v(b13) v(b14) v(b15)
+  
+  elaborate circuit("c6288_test")
+  print counts
+  
+  // options op_skipinitial=1 homotopy_debug=1 op_homotopy=["src", "gdev"]
+  // options homotopy_srcscale=3 // homotopy_srcsteps=2
+  // options op_debug=0
+  // analysis op1 op
+  // options op_debug=0 homotopy_debug=0
+
+  // New benchmark
+  options tran_method="bdf2"
+  analysis tranmul tran stop=2.0000000000000001e-09 step=2e-12 icmode="uic" maxstep=2e-12
+  
+  // elaborate circuit("inv_test", "gatedrv_test")
+  // options tran_method="gear2"
+  // analysis traninv tran stop=0.6n step=10p
+  // 
+  // elaborate circuit("nor_test", "gatedrv_test")
+  // options tran_method="gear2"
+  // analysis trannor tran stop=0.8n step=10p
+  // 
+  // elaborate circuit("and_test", "gatedrv_test")
+  // options tran_method="gear2"
+  // analysis tranand tran stop=0.8n step=10p
+  
+  print stats
+  
+  postprocess(PYTHON, "runme.py")
+endc

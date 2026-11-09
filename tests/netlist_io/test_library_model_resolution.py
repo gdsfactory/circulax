@@ -53,8 +53,8 @@ N2 mid n core
     monkeypatch.setattr("circulax.netlist_io.osdi.compile_va", forbidden)
     settings = {"corner": "ff", "width": 4}
     resolved = model.resolve(settings)
-    assert model.inspection_identity()["resolved"]["corner"] == "tt"
-    assert model.inspection_identity(settings)["resolved"]["corner"] == "ff"
+    tt_sources, ff_sources = model.source_digests(), model.source_digests(settings)
+    assert [r["path"] for r in tt_sources] == [r["path"] for r in ff_sources] == [str(path)]
     assert settings == {"corner": "ff", "width": 4}
     assert resolved.ports == {"P": "p", "N": "n"}
     assert len(resolved.instances) == 2
@@ -135,7 +135,7 @@ def test_temperature_override_without_source_provenance_is_explicitly_rejected()
         model.resolve({"temperature_c": 80.0})
 
 
-def test_card_and_include_edits_refresh_resolved_values_and_inspection_identity(tmp_path: Path) -> None:
+def test_card_and_include_edits_refresh_resolved_values_and_source_digests(tmp_path: Path) -> None:
     """Source revisions invalidate parsed cards while unchanged sources reuse them."""
     include = tmp_path / "parameters.lib"
     include.write_text("* parameter\n.param base=2\n")
@@ -147,43 +147,19 @@ def test_card_and_include_edits_refresh_resolved_values_and_inspection_identity(
     card.write_text(template.format(1))
     model = LibraryModel.from_file(card, "device")
     first = model.resolve()
-    identity = model.inspection_identity()
+    digests = model.source_digests()
     cached = tuple(model._libraries.values())  # noqa: SLF001 -- verify unchanged parsed library reuse
     assert first.instances[0].parameters["dc"] == 3
-    assert model.inspection_identity() == identity
+    assert model.source_digests() == digests
     assert tuple(model._libraries.values()) == cached  # noqa: SLF001 -- no redundant reparsing
-    assert {record["path"] for record in identity["sources"]} == {str(card), str(include)}
+    assert {record["path"] for record in digests} == {str(card), str(include)}
     card.write_text(template.format(4))
     assert model.resolve().instances[0].parameters["dc"] == 6
-    changed = model.inspection_identity()
-    assert changed["fingerprint"] != identity["fingerprint"]
+    changed = model.source_digests()
+    assert changed != digests
     include.write_text("* parameter\n.param base=5\n")
     assert model.resolve().instances[0].parameters["dc"] == 9
-    assert model.inspection_identity()["fingerprint"] != changed["fingerprint"]
-
-
-def test_inspection_identity_tracks_available_artifacts_without_native_loading(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Artifact provenance is reported without proving ABI readiness or compiling."""
-    card = tmp_path / "card.lib"
-    card.write_text("* card\n.subckt device p n\n.model vs vsource dc=1\nN1 p n vs\n.ends\n")
-    artifact = tmp_path / "native.osdi"
-    artifact.write_bytes(b"provenance-only-not-a-native-module")
-    model = LibraryModel.from_file(card, "device", osdi_modules=(artifact,))
-
-    def forbidden(*_args: object, **_kwargs: object) -> None:
-        """Discovery must not load, validate or provision native modules."""
-        pytest.fail("identity inspection cannot load native artifacts")
-
-    monkeypatch.setattr("circulax.netlist_io.model.build_resolved", forbidden)
-    monkeypatch.setattr("circulax.netlist_io.osdi.module_metadata", forbidden)
-    first = model.inspection_identity()
-    artifact.write_bytes(b"changed-provenance-still-not-an-osdi-module")
-    second = model.inspection_identity()
-    assert first["fingerprint"] != second["fingerprint"]
-    assert second["resolved"]["temperature_c"] == 27
-    assert second["native_artifacts"][0]["path"] == str(artifact)
+    assert model.source_digests() != changed
 
 
 _CARD = "* card\n.subckt device p n\n.model vs vsource dc=1\nN1 p n vs\n.ends\n"

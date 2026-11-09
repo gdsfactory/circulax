@@ -328,3 +328,28 @@ def test_sax_connections_reject_malformed_port_refs():
                 "ports": {"bad": "R"},
             }
         )
+
+
+def test_node_mapping_reads_instance_snapshot_once() -> None:
+    """Avoid cloning a large Rust instance map for every terminal."""
+    netlist = kfnl.Netlist()
+    netlist.create_inst(name="earth", kcl="", component="ground")
+    netlist.create_inst(name="R", kcl="", component="resistor")
+    netlist.create_net(kfnl.PortRef(instance="earth", port="p1"), kfnl.PortRef(instance="R", port="p2"))
+    netlist.create_net(kfnl.PortRef(instance="R", port="p1"))
+
+    class SnapshotCounter:
+        reads = 0
+        nets = netlist.nets
+
+        @property
+        def instances(self) -> dict:
+            self.reads += 1
+            return netlist.instances
+
+    counted = SnapshotCounter()
+    mapping, size = build_net_map_kfnetlist(counted)
+    assert mapping["earth,p1"] == mapping["R,p2"] == 0
+    assert mapping["R,p1"] == 1
+    assert size == 2
+    assert counted.reads == 1

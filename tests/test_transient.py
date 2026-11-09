@@ -182,6 +182,50 @@ def test_refactoring_transient_matches_vectorized(simple_lrc_netlist) -> None:  
     assert jnp.allclose(sol_refactor.ys, sol_full.ys, atol=1e-4)
 
 
+def test_klu_split_refactor_and_solve_uses_new_values_inside_jit(simple_lrc_netlist) -> None:  # noqa: ANN001
+    """Inside jit, a refactor loop must solve with the latest Jacobian values (issue #106).
+
+    The linear LRC trajectory test above cannot detect a refactor that never runs: a stale
+    Jacobian is still exact there. This checks the linear-solver call that every
+    ``*RefactoringTransientSolver`` uses directly against a fresh factorization.
+    """
+    import jax
+    import numpy as np
+
+    from circulax.solvers.assembly import assemble_system_real
+    from circulax.solvers.transient import free_numeric
+
+    net_dict, models_map = simple_lrc_netlist
+    groups, sys_size, _ = compile_netlist(net_dict, models_map)
+    strat = analyze_circuit(groups, sys_size, backend="klu_split")
+    assert hasattr(strat, "refactor_and_solve_jacobian")
+    _, _, vals = assemble_system_real(jnp.zeros(sys_size), groups, 0.0, 1e-12)
+    rhs = jnp.arange(1.0, sys_size + 1.0)
+
+    @jax.jit
+    def refactored(vals: jax.Array) -> jax.Array:
+        numeric = strat.factor_jacobian(vals)
+
+        def body(i: int, _: jax.Array) -> jax.Array:
+            sol, _ = strat.refactor_and_solve_jacobian(vals * (2.0 + i), rhs, numeric)
+            return sol.value
+
+        x = jax.lax.fori_loop(0, 2, body, jnp.zeros_like(rhs))
+        free_numeric(numeric, x)
+        return x
+
+    @jax.jit
+    def fresh(vals: jax.Array) -> jax.Array:
+        numeric = strat.factor_jacobian(vals)
+        x = strat.solve_with_frozen_jacobian(rhs, numeric).value
+        free_numeric(numeric, x)
+        return x
+
+    expected, stale = np.asarray(fresh(3.0 * vals)), np.asarray(fresh(vals))
+    assert not np.allclose(stale, expected, rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(refactored(vals)), expected, rtol=1e-10)
+
+
 @pytest.mark.parametrize("backend", _backends)
 def test_bdf2_vectorized_runs_float(simple_lrc_netlist, backend):
     """BDF2VectorizedTransientSolver should produce a finite trajectory on a real LRC circuit."""

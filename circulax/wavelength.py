@@ -129,6 +129,7 @@ def build_wavelength_bench(circuit: Any, compile_fn: Callable, selected: tuple[s
             attach_testbench(device, sources=fixtures),
             models,
             is_complex=True,
+            osdi_reduction=getattr(circuit, "_osdi_reduction", True),
             g_leak=getattr(circuit.solver, "g_leak", 1e-9),
             rtol=circuit.rtol,
             atol=circuit.atol,
