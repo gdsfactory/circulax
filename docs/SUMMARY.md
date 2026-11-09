@@ -19,6 +19,7 @@
     * [Harmonic Balance](examples/harmonic_balance.md)
     * [LC Ladder](examples/lc_ladder.md)
 * Photonic Examples
+    * [Semiconductor Optical Amplifier](examples/soa.md)
     * [Mach-Zehnder Modulator](examples/mzm.md)
     * [Photonics Transient](examples/photonics_transient.md)
     * [Ring Modulator](examples/ring_modulator.md)
