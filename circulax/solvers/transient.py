@@ -7,11 +7,14 @@ from typing import Any
 import diffrax
 import jax
 import jax.numpy as jnp
+import lineax as lx
 import optimistix as optx
 from diffrax import AbstractSolver, ConstantStepSize
 from jax.typing import ArrayLike
 
 from circulax.solvers.circuit_diffeq import circuit_diffeqsolve
+from circulax.solvers.convergence import newton_solve
+from circulax.solvers.step_size import ComplexPIDController
 
 try:
     from klujax import free_numeric as _klujax_free_numeric
@@ -146,10 +149,23 @@ class VectorizedTransientSolver(AbstractSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        solver = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, solver, y_pred, max_steps=self.newton_max_steps, throw=False)
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=dt, hist_t=hist_t, hist_y=hist_y
+            )
+            return total_f + (total_q - q_prev) / dt
+
+        sol = newton_solve(
+            newton_update_step,
+            physical_residual,
+            y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
+            max_steps=self.newton_max_steps,
+        )
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -230,15 +246,22 @@ class FactorizedTransientSolver(VectorizedTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        solver = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=dt, hist_t=hist_t, hist_y=hist_y
+            )
+            return total_f + (total_q - q_prev) / dt
+
+        sol = newton_solve(
             newton_update_step,
-            solver,
+            physical_residual,
             y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
             max_steps=self.newton_max_steps,
-            throw=False,
         )
 
         free_numeric(numeric_handle)
@@ -316,15 +339,22 @@ class RefactoringTransientSolver(FactorizedTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=dt, hist_t=hist_t, hist_y=hist_y
+            )
+            return total_f + (total_q - q_prev) / dt
+
+        sol = newton_solve(
             newton_update_step,
-            fpi,
+            physical_residual,
             y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
             max_steps=self.newton_max_steps,
-            throw=False,
         )
 
         free_numeric(numeric_handle)
@@ -460,10 +490,23 @@ class BDF2VectorizedTransientSolver(VectorizedTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+            )
+            return make_residual(total_f, total_q)
+
+        sol = newton_solve(
+            newton_update_step,
+            physical_residual,
+            y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
+            max_steps=self.newton_max_steps,
+        )
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -528,10 +571,23 @@ class BDF2FactorizedTransientSolver(FactorizedTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+            )
+            return make_residual(total_f, total_q)
+
+        sol = newton_solve(
+            newton_update_step,
+            physical_residual,
+            y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
+            max_steps=self.newton_max_steps,
+        )
         free_numeric(numeric_handle)
 
         y_next = sol.value
@@ -600,10 +656,23 @@ class BDF2RefactoringTransientSolver(RefactoringTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+            )
+            return make_residual(total_f, total_q)
+
+        sol = newton_solve(
+            newton_update_step,
+            physical_residual,
+            y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
+            max_steps=self.newton_max_steps,
+        )
         free_numeric(numeric_handle)
 
         y_next = sol.value
@@ -697,10 +766,23 @@ class SDIRK3VectorizedTransientSolver(VectorizedTransientSolver):
                 delta = sol.value
                 max_change = jnp.max(jnp.abs(delta))
                 damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-                return y + delta * damping
+                return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-            fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
+            def physical_residual(y, _):
+                total_f, total_q = _compute_history_fq(
+                    component_groups, y, t_stage, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+                )
+                return total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
+
+            stage_sol = newton_solve(
+                newton_update_step,
+                physical_residual,
+                y_init,
+                layout=self.linear_solver.convergence_layout,
+                rtol=self.newton_rtol,
+                atol=self.newton_atol,
+                max_steps=self.newton_max_steps,
+            )
             return stage_sol.value, stage_sol.result
 
         # Stage 1 — t_s1 = t0 + γ·h
@@ -786,10 +868,23 @@ class SDIRK3FactorizedTransientSolver(FactorizedTransientSolver):
                 delta = sol.value
                 max_change = jnp.max(jnp.abs(delta))
                 damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-                return y + delta * damping
+                return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-            fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
+            def physical_residual(y, _):
+                total_f, total_q = _compute_history_fq(
+                    component_groups, y, t1, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+                )
+                return total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
+
+            stage_sol = newton_solve(
+                newton_update_step,
+                physical_residual,
+                y_init,
+                layout=self.linear_solver.convergence_layout,
+                rtol=self.newton_rtol,
+                atol=self.newton_atol,
+                max_steps=self.newton_max_steps,
+            )
             return stage_sol.value, stage_sol.result
 
         t_s1 = t0 + _SDIRK3_G * h_n
@@ -873,10 +968,23 @@ class SDIRK3RefactoringTransientSolver(RefactoringTransientSolver):
                 delta = sol.value
                 max_change = jnp.max(jnp.abs(delta))
                 damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-                return y + delta * damping
+                return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-            fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-            stage_sol = optx.fixed_point(newton_update_step, fpi, y_init, max_steps=self.newton_max_steps, throw=False)
+            def physical_residual(y, _):
+                total_f, total_q = _compute_history_fq(
+                    component_groups, y, t_stage, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+                )
+                return total_f + (total_q - q_hist) / (_SDIRK3_G * h_n)
+
+            stage_sol = newton_solve(
+                newton_update_step,
+                physical_residual,
+                y_init,
+                layout=self.linear_solver.convergence_layout,
+                rtol=self.newton_rtol,
+                atol=self.newton_atol,
+                max_steps=self.newton_max_steps,
+            )
             return stage_sol.value, stage_sol.result
 
         t_s1 = t0 + _SDIRK3_G * h_n
@@ -1020,10 +1128,23 @@ class TrapVectorizedTransientSolver(VectorizedTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+            )
+            return make_residual(total_f, total_q)
+
+        sol = newton_solve(
+            newton_update_step,
+            physical_residual,
+            y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
+            max_steps=self.newton_max_steps,
+        )
 
         y_next = sol.value
         y_error = y_next - y_pred
@@ -1098,10 +1219,23 @@ class TrapFactorizedTransientSolver(FactorizedTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+            )
+            return make_residual(total_f, total_q)
+
+        sol = newton_solve(
+            newton_update_step,
+            physical_residual,
+            y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
+            max_steps=self.newton_max_steps,
+        )
         free_numeric(numeric_handle)
 
         y_next = sol.value
@@ -1181,10 +1315,23 @@ class TrapRefactoringTransientSolver(RefactoringTransientSolver):
             delta = sol.value
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        fpi = optx.FixedPointIteration(rtol=self.newton_rtol, atol=self.newton_atol)
-        sol = optx.fixed_point(newton_update_step, fpi, y_pred, max_steps=self.newton_max_steps, throw=False)
+        def physical_residual(y, _):
+            total_f, total_q = _compute_history_fq(
+                component_groups, y, t1, num_vars, is_complex, dt=h_n, hist_t=hist_t, hist_y=hist_y
+            )
+            return make_residual(total_f, total_q)
+
+        sol = newton_solve(
+            newton_update_step,
+            physical_residual,
+            y_pred,
+            layout=self.linear_solver.convergence_layout,
+            rtol=self.newton_rtol,
+            atol=self.newton_atol,
+            max_steps=self.newton_max_steps,
+        )
         free_numeric(numeric_handle)
 
         y_next = sol.value
@@ -1222,7 +1369,7 @@ def _delay_history_capacity(max_delay, dt0, controller, capacity=None) -> int:
         return capacity
     if type(controller) is ConstantStepSize:
         minimum, name = dt0, "dt0"
-    elif type(controller) is diffrax.PIDController:
+    elif type(controller) in (diffrax.PIDController, ComplexPIDController):
         minimum, name = controller.dtmin, "PIDController.dtmin"
     else:
         return 1024
@@ -1342,6 +1489,7 @@ def setup_transient(
         **kwargs: Any,
     ) -> diffrax.Solution:
         """Executes the transient simulation for the pre-configured circuit."""
+        saveat = diffrax.SaveAt(t1=True) if saveat is None else saveat
         term = kwargs.pop("term", _DEFAULT_TRANSIENT_TERM)
         solver = kwargs.pop("solver", tsolver)
         from circulax.solvers.source_settings import waveform_groups
@@ -1349,6 +1497,7 @@ def setup_transient(
         analysis_groups = waveform_groups(groups, tstep=dt0 if tstep is None else tstep, tstop=t1)
         args = kwargs.pop("args", (analysis_groups, sys_size))
         stepsize_controller = kwargs.pop("stepsize_controller", ConstantStepSize())
+
         checkpoints = kwargs.pop("checkpoints", None)
         history_capacity = kwargs.pop("history_capacity", None)
         max_delay = jnp.asarray(0.0)

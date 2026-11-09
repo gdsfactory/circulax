@@ -4,6 +4,21 @@ from circulax._version import __version__
 from circulax.circuit import Circuit, compile_circuit
 from circulax.compiler import compile_netlist
 from circulax.components.electronic import TransmissionLine
+from circulax.disciplines import (
+    Discipline as Discipline,
+    Nature as Nature,
+    TolerancePolicy as TolerancePolicy,
+    current as current,
+    electrical as electrical,
+    optical as optical,
+    optical_flow as optical_flow,
+    optical_potential as optical_potential,
+    power as power,
+    temperature as temperature,
+    thermal as thermal,
+    voltage as voltage,
+    wave_amplitude as wave_amplitude,
+)
 from circulax.netlist import (
     Netlist as Netlist,
 )

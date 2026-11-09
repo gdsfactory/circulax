@@ -15,6 +15,8 @@ import numpy as np
 import optimistix as optx
 
 from circulax.solvers.assembly import assemble_system_complex, assemble_system_real
+from circulax.disciplines import TolerancePolicy
+from circulax.solvers.convergence import ConvergenceLayout, build_convergence_layout, newton_solve
 
 # ---------------------------------------------------------------------------
 # Solver constants
@@ -104,6 +106,7 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
 
     """
 
+    convergence_layout: ConvergenceLayout | None = eqx.field(default=None, kw_only=True)
     ground_indices: jax.Array
     is_complex: bool = eqx.field(static=True)
 
@@ -178,8 +181,8 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
         """
         assemble_fn = assemble_system_complex if self.is_complex else assemble_system_real
 
-        def dc_step(y: jax.Array, _: Any) -> jax.Array:
-            total_f, _, all_vals = assemble_fn(y, component_groups, t1=0.0, dt=DC_DT, source_scale=source_scale)
+        def dc_step(y: jax.Array, grps: Any) -> jax.Array:
+            total_f, _, all_vals = assemble_fn(y, grps, t1=0.0, dt=DC_DT, source_scale=source_scale)
 
             total_f_grounded = total_f
             for idx in self.ground_indices:
@@ -195,10 +198,23 @@ class CircuitLinearSolver(lx.AbstractLinearSolver):
             y_scale = jnp.maximum(jnp.max(jnp.abs(y)), 1.0)
             damping = jnp.minimum(1.0, DAMPING_FACTOR * y_scale / (max_change + DAMPING_EPS))
 
-            return y + delta * damping
+            return y + delta * damping, (delta, sol.result == lx.RESULTS.successful)
 
-        solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
-        sol = optx.fixed_point(dc_step, solver, y_guess, max_steps=max_steps, throw=False)
+        def dc_residual(y, grps):
+            # Source stepping uses assembly's source-scale support in the full path.
+            total_f, _, _ = assemble_fn(y, grps, t1=0.0, dt=DC_DT, source_scale=source_scale)
+            return total_f
+
+        sol = newton_solve(
+            dc_step,
+            dc_residual,
+            y_guess,
+            layout=self.convergence_layout,
+            rtol=rtol,
+            atol=atol,
+            max_steps=max_steps,
+            args=component_groups,
+        )
         return sol.value, sol.result == optx.RESULTS.successful
 
     def solve_dc(
@@ -788,7 +804,13 @@ backends["default"] = backends["klu_split_linear"]
 
 
 def analyze_circuit(
-    groups: list, num_vars: int, backend: str = "default", *, is_complex: bool = False, g_leak: float = 1e-9
+    groups: dict,
+    num_vars: int,
+    backend: str = "default",
+    *,
+    is_complex: bool = False,
+    g_leak: float = 1e-9,
+    tolerances: TolerancePolicy | None = None,
 ) -> CircuitLinearSolver:
     """Initializes a linear solver strategy for circuit analysis.
 
@@ -821,4 +843,7 @@ def analyze_circuit(
 
     linear_strategy = solver_class.from_component_groups(groups, num_vars, is_complex=is_complex, g_leak=g_leak)
 
+    if tolerances is not None:
+        layout = build_convergence_layout(groups, num_vars, tolerances)
+        linear_strategy = eqx.tree_at(lambda s: s.convergence_layout, linear_strategy, layout, is_leaf=lambda x: x is None)
     return linear_strategy

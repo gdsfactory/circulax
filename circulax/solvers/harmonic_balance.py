@@ -31,12 +31,14 @@ Example::
 from collections.abc import Callable
 from typing import Any
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import optimistix as optx
 from jax import Array
 
 from circulax.solvers.assembly import assemble_residual_only_complex, assemble_residual_only_real
+from circulax.solvers.convergence import ConvergenceLayout, newton_solve
 from circulax.solvers.linear import (
     DAMPING_EPS,
     DAMPING_FACTOR,
@@ -194,6 +196,7 @@ def setup_harmonic_balance(
     g_leak: float = 1e-9,
     osc_node: int | None = None,
     amplitude_tries: Array | None = None,
+    convergence_layout: ConvergenceLayout | None = None,
 ) -> Callable[[Array], tuple[Array, Array]]:
     """Configure and return a Harmonic Balance callable.
 
@@ -277,40 +280,58 @@ def setup_harmonic_balance(
             # avoid crashing exponential nonlinearities (diodes, transistors).
             max_change = jnp.max(jnp.abs(delta))
             damping = jnp.minimum(1.0, DAMPING_FACTOR / (max_change + DAMPING_EPS))
-            return y_flat + delta * damping
+            return y_flat + delta * damping, (delta, jnp.all(jnp.isfinite(delta)))
 
-        def _solve(y_flat: Array) -> tuple[Array, Array]:
+        def _solve(y_flat: Array) -> tuple[Array, Array, Array]:
             # groups MUST be passed via args= — ImplicitAdjoint differentiates
             # only through explicit args; closure-captured variables give zero gradients.
-            hb_solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
-            sol = optx.fixed_point(
+            def physical_residual(y, grps):
+                return _hb_residual(y.reshape(K, sys_size), grps, t_points, omega, ground_indices, is_complex=is_complex).flatten()
+
+            sol = newton_solve(
                 newton_step,
-                hb_solver,
+                physical_residual,
                 y_flat,
-                args=groups,
+                layout=convergence_layout,
+                rtol=rtol,
+                atol=atol,
                 max_steps=max_steps,
-                throw=False,
+                args=groups,
+                state_shape=(K, sys_size),
             )
             y_flat_sol = sol.value
             y_time_sol = y_flat_sol.reshape(K, sys_size)
             # Normalise by K so that y_freq[k] is the true complex amplitude.
             y_freq_sol = jnp.fft.rfft(y_time_sol, axis=0) / K
-            return y_time_sol, y_freq_sol
+            return y_time_sol, y_freq_sol, sol.result == optx.RESULTS.successful
+
+        def checked_result(y_time, y_freq, successful):
+            result = (y_time, y_freq)
+            if convergence_layout is not None:
+                result = eqx.error_if(
+                    result,
+                    ~successful,
+                    "Harmonic balance failed physical convergence; increase max_steps or revise the initial guess",
+                )
+            return result
 
         # Autonomous multi-start: y=0 is always a trivial fixed point for oscillators,
         # so low-amplitude starts converge to zero. Try several amplitudes and keep
         # the one with the largest fundamental — at least one will be above the basin.
         if osc_node is not None and y_flat_init is None:
 
-            def _single_start(A: Array) -> tuple[Array, Array]:
+            def _single_start(A: Array) -> tuple[Array, Array, Array]:
                 y0 = jnp.zeros(K * sys_size, dtype=jnp.float64).at[jnp.arange(K) * sys_size + osc_node].set(A * jnp.sin(_phase))
                 return _solve(y0)
 
-            y_times, y_freqs = jax.vmap(_single_start)(_amplitude_tries)
-            best = jnp.argmax(jnp.abs(y_freqs[:, 1, osc_node]))
-            return jnp.take(y_times, best, axis=0), jnp.take(y_freqs, best, axis=0)
+            y_times, y_freqs, successful = jax.vmap(_single_start)(_amplitude_tries)
+            amplitudes = jnp.abs(y_freqs[:, 1, osc_node])
+            if convergence_layout is not None:
+                amplitudes = jnp.where(successful, amplitudes, -jnp.inf)
+            best = jnp.argmax(amplitudes)
+            return checked_result(jnp.take(y_times, best, axis=0), jnp.take(y_freqs, best, axis=0), jnp.any(successful))
 
         y_flat = y_flat_init if y_flat_init is not None else jnp.tile(y_dc, K)
-        return _solve(y_flat)
+        return checked_result(*_solve(y_flat))
 
     return run_hb

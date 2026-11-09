@@ -14,11 +14,12 @@ from circulax.components.base_component import (
     component,
     source,
 )
+from circulax.disciplines import current, electrical, voltage
 
 _PN_ALIASES = {"p1": "P", "p2": "N"}
 
 
-@component(ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
+@component(discipline=electrical, ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
 def Resistor(signals: Signals, R: float = 1e3) -> PhysicsReturn:
     """Ohmic two-terminal resistor. Connect p1/p2; R is in ohms and current into p1 is (V1-V2)/R.
 
@@ -43,7 +44,7 @@ def Resistor(signals: Signals, R: float = 1e3) -> PhysicsReturn:
     return {"p1": i, "p2": -i}, {}
 
 
-@component(ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
+@component(discipline=electrical, ports=("p1", "p2"), port_aliases=_PN_ALIASES, holomorphic=True)
 def Capacitor(signals: Signals, C: float = 1e-12) -> PhysicsReturn:
     """Two-terminal stored charge Q=C*(V1-V2).
 
@@ -65,13 +66,21 @@ def Capacitor(signals: Signals, C: float = 1e-12) -> PhysicsReturn:
         print("Stored terminal charge:", q["p1"], "C")
         ```
 
-    """  # noqa: D205
+    """
     v_drop = signals.p1 - signals.p2
     q_val = C * v_drop
     return {}, {"p1": q_val, "p2": -q_val}
 
 
-@component(ports=("p1", "p2"), states=("i_L",), port_aliases=_PN_ALIASES, holomorphic=True)
+@component(
+    discipline=electrical,
+    state_natures={"i_L": current},
+    equation_natures={"i_L": voltage},
+    ports=("p1", "p2"),
+    states=("i_L",),
+    port_aliases=_PN_ALIASES,
+    holomorphic=True,
+)
 def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
     """Two-terminal inductive branch. L is in henries; its branch current is an internal solved state.
 
@@ -104,7 +113,14 @@ def Inductor(signals: Signals, L: float = 1e-9) -> PhysicsReturn:
     return ({"p1": signals.i_L, "p2": -signals.i_L, "i_L": v_drop}, {"i_L": -L * signals.i_L})
 
 
-@component(ports=("d", "c", "a", "b"), states=("ia", "ib"), holomorphic=True)
+@component(
+    discipline=electrical,
+    state_natures={"ia": current, "ib": current},
+    equation_natures={"ia": voltage, "ib": voltage},
+    ports=("d", "c", "a", "b"),
+    states=("ia", "ib"),
+    holomorphic=True,
+)
 def DifferentialAdapter(signals: Signals) -> PhysicsReturn:
     """Lossless bidirectional differential/common to conductor adapter.
 
@@ -124,6 +140,9 @@ def DifferentialAdapter(signals: Signals) -> PhysicsReturn:
 
 
 @component(
+    discipline=electrical,
+    state_natures={"i1": current, "i2": current},
+    equation_natures={"i1": voltage, "i2": voltage},
     ports=("p1", "p2", "s1", "s2"),
     states=("i1", "i2"),
     port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
@@ -147,6 +166,9 @@ def CoupledInductors(signals: Signals, L1: float = 1e-9, L2: float = 1e-9, k: fl
 
 
 @component(
+    discipline=electrical,
+    state_natures={"i_p": current},
+    equation_natures={"i_p": voltage},
     ports=("p1", "p2", "s1", "s2"),
     states=("i_p",),
     port_aliases={"p1": "P1", "p2": "P2", "s1": "S1", "s2": "S2"},
@@ -170,6 +192,9 @@ def IdealTransformer(signals: Signals, n: float = 1.0) -> PhysicsReturn:
 
 
 @component(
+    discipline=electrical,
+    state_natures={"a1": voltage, "a2": voltage},
+    equation_natures={"a1": voltage, "a2": voltage},
     ports=("p1", "p2"),
     states=("a1", "a2"),
     port_aliases=_PN_ALIASES,
@@ -210,6 +235,9 @@ def TransmissionLine(
 
 
 @source(
+    discipline=electrical,
+    state_natures={"i_src": current},
+    equation_natures={"i_src": voltage},
     ports=("p1", "p2"),
     states=("i_src",),
     amplitude_param="V",
@@ -225,6 +253,9 @@ def VoltageSource(signals: Signals, t: float, V: float = 0.0, delay: float = 0.0
 
 
 @source(
+    discipline=electrical,
+    state_natures={"i_src": current},
+    equation_natures={"i_src": voltage},
     ports=("p1", "p2"),
     states=("i_src",),
     amplitude_param="V",
@@ -247,6 +278,9 @@ def SmoothPulse(
 
 
 @source(
+    discipline=electrical,
+    state_natures={"i_src": current},
+    equation_natures={"i_src": voltage},
     ports=("p1", "p2"),
     states=("i_src",),
     amplitude_param="V",
@@ -271,6 +305,9 @@ def VoltageSourceAC(
 
 
 @source(
+    discipline=electrical,
+    state_natures={"i_src": current},
+    equation_natures={"i_src": voltage},
     ports=("p1", "p2"),
     states=("i_src",),
     amplitude_param="v2",
@@ -316,7 +353,9 @@ def PulseVoltageSource(
     return {"p1": signals.i_src, "p2": -signals.i_src, "i_src": constraint}, {}
 
 
-@component(ports=("p1", "p2"), amplitude_param="I", holomorphic=True, ac_source_stamp={"p1": -1.0, "p2": 1.0})
+@component(
+    discipline=electrical, ports=("p1", "p2"), amplitude_param="I", holomorphic=True, ac_source_stamp={"p1": -1.0, "p2": 1.0}
+)
 def CurrentSource(signals: Signals, I: float = 0.0) -> PhysicsReturn:
     """Constant current source."""
     return {"p1": I, "p2": -I}, {}
@@ -419,6 +458,9 @@ def _source_value(
 
 
 @source(
+    discipline=electrical,
+    state_natures={"i_src": current},
+    equation_natures={"i_src": voltage},
     ports=("p1", "p2"),
     states=("i_src",),
     amplitude_param="source_scale",
@@ -475,6 +517,7 @@ def WaveformVoltageSource(
 
 
 @source(
+    discipline=electrical,
     ports=("p1", "p2"),
     amplitude_param="source_scale",
     port_aliases=_PN_ALIASES,
@@ -545,7 +588,7 @@ _remember_dc_override(WaveformCurrentSource)
 # ===========================================================================
 
 
-@component(ports=("p1", "p2"))
+@component(discipline=electrical, ports=("p1", "p2"))
 def Diode(signals: Signals, Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85e-3) -> PhysicsReturn:
     """Ideal diode using the Shockley equation ``I = Is * (exp(Vd / n*Vt) - 1)``.
 
@@ -565,7 +608,7 @@ def Diode(signals: Signals, Is: float = 1e-12, n: float = 1.0, Vt: float = 25.85
     return {"p1": i, "p2": -i}, {}
 
 
-@component(ports=("p1", "p2"))
+@component(discipline=electrical, ports=("p1", "p2"))
 def ZenerDiode(
     signals: Signals,
     Vz: float = 5.0,
@@ -628,7 +671,7 @@ def _nmos_current(v_d: float, v_g: float, v_s: float, Kp: float, W: float, L: fl
     return jnp.where(vgs <= Vth, 0.0, jnp.where(vds < v_over, linear_current, sat_current))
 
 
-@component(ports=("d", "g", "s"))
+@component(discipline=electrical, ports=("d", "g", "s"))
 def NMOS(
     signals: Signals,
     Kp: float = 2e-5,
@@ -654,7 +697,7 @@ def NMOS(
     return {"d": i_ds, "g": 0.0, "s": -i_ds}, {}
 
 
-@component(ports=("d", "g", "s"))
+@component(discipline=electrical, ports=("d", "g", "s"))
 def PMOS(
     signals: Signals,
     Kp: float = 1e-5,
@@ -691,7 +734,7 @@ def PMOS(
     return {"d": -i_sd, "g": 0.0, "s": i_sd}, {}
 
 
-@component(ports=("d", "g", "s"))
+@component(discipline=electrical, ports=("d", "g", "s"))
 def NMOSDynamic(
     signals: Signals,
     Kp: float = 2e-5,
@@ -788,7 +831,7 @@ def _junction_charge(v, Cj0, Vj, m) -> float:
     return jnp.where(v < v_thresh, q_normal, q_high)
 
 
-@component(ports=("c", "b", "e"))
+@component(discipline=electrical, ports=("c", "b", "e"))
 def BJT_NPN(
     signals: Signals,
     Is: float = 1e-12,
@@ -829,7 +872,7 @@ def BJT_NPN(
     return {"c": i_c, "b": i_b, "e": i_e}, {}
 
 
-@component(ports=("c", "b", "e"))
+@component(discipline=electrical, ports=("c", "b", "e"))
 def BJT_NPN_Dynamic(
     signals: Signals,
     Is: float = 1e-12,
@@ -924,7 +967,14 @@ def BJT_NPN_Dynamic(
 # ===========================================================================
 
 
-@component(ports=("out_p", "out_m", "ctrl_p", "ctrl_m"), states=("i_src",), holomorphic=True)
+@component(
+    discipline=electrical,
+    state_natures={"i_src": current},
+    equation_natures={"i_src": voltage},
+    ports=("out_p", "out_m", "ctrl_p", "ctrl_m"),
+    states=("i_src",),
+    holomorphic=True,
+)
 def VCVS(signals: Signals, A: float = 1.0) -> PhysicsReturn:
     """Voltage Controlled Voltage Source."""
     constraint = (signals.out_p - signals.out_m) - A * (signals.ctrl_p - signals.ctrl_m)
@@ -937,14 +987,21 @@ def VCVS(signals: Signals, A: float = 1.0) -> PhysicsReturn:
     }, {}
 
 
-@component(ports=("out_p", "out_m", "ctrl_p", "ctrl_m"), holomorphic=True)
+@component(discipline=electrical, ports=("out_p", "out_m", "ctrl_p", "ctrl_m"), holomorphic=True)
 def VCCS(signals: Signals, G: float = 0.0) -> PhysicsReturn:
     """Voltage Controlled Current Source."""
     i = G * (signals.ctrl_p - signals.ctrl_m)
     return {"out_p": i, "out_m": -i, "ctrl_p": 0.0, "ctrl_m": 0.0}, {}
 
 
-@component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_src",), holomorphic=True)
+@component(
+    discipline=electrical,
+    state_natures={"i_src": current},
+    equation_natures={"i_src": voltage},
+    ports=("out_p", "out_m", "in_p", "in_m"),
+    states=("i_src",),
+    holomorphic=True,
+)
 def IdealOpAmp(signals: Signals, A: float = 1e6) -> PhysicsReturn:
     """Ideal Op Amp."""
     constraint = (signals.out_p - signals.out_m) - A * (signals.in_p - signals.in_m)
@@ -957,7 +1014,7 @@ def IdealOpAmp(signals: Signals, A: float = 1e6) -> PhysicsReturn:
     }, {}
 
 
-@component(ports=("p1", "p2", "cp", "cm"), holomorphic=True)
+@component(discipline=electrical, ports=("p1", "p2", "cp", "cm"), holomorphic=True)
 def VoltageControlledSwitch(signals: Signals, Ron: float = 1.0, Roff: float = 1e6, Vt: float = 0.0) -> PhysicsReturn:
     """Voltage Controlled Switch."""
     v_ctrl = signals.cp - signals.cm
@@ -972,7 +1029,14 @@ def VoltageControlledSwitch(signals: Signals, Ron: float = 1.0, Roff: float = 1e
     return {"p1": i, "p2": -i, "cp": 0.0, "cm": 0.0}, {}
 
 
-@component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_src", "i_ctrl"), holomorphic=True)
+@component(
+    discipline=electrical,
+    state_natures={"i_src": current, "i_ctrl": current},
+    equation_natures={"i_src": voltage, "i_ctrl": voltage},
+    ports=("out_p", "out_m", "in_p", "in_m"),
+    states=("i_src", "i_ctrl"),
+    holomorphic=True,
+)
 def CCVS(signals: Signals, R: float = 1.0) -> PhysicsReturn:
     """Current Controlled Voltage Source: V_out = R * i_ctrl, V_in = 0 (short)."""
     eq_in = signals.in_p - signals.in_m
@@ -987,7 +1051,14 @@ def CCVS(signals: Signals, R: float = 1.0) -> PhysicsReturn:
     }, {}
 
 
-@component(ports=("out_p", "out_m", "in_p", "in_m"), states=("i_ctrl",), holomorphic=True)
+@component(
+    discipline=electrical,
+    state_natures={"i_ctrl": current},
+    equation_natures={"i_ctrl": voltage},
+    ports=("out_p", "out_m", "in_p", "in_m"),
+    states=("i_ctrl",),
+    holomorphic=True,
+)
 def CCCS(signals: Signals, alpha: float = 1.0) -> PhysicsReturn:
     """Current Controlled Current Source: I_out = alpha * i_ctrl, V_in = 0 (short)."""
     eq_in = signals.in_p - signals.in_m

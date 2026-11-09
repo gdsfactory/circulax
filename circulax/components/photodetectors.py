@@ -12,6 +12,7 @@ import equinox.internal as eqxi
 import jax.numpy as jnp
 
 from circulax.components.base_component import PhysicsReturn, Signals, component, source
+from circulax.disciplines import electrical, normalized_carrier, optical
 
 QE = 1.602176634e-19
 PORTS = ("optical_in", "anode", "cathode")
@@ -70,7 +71,7 @@ def optical_conversion(
     return optical_current, r_abs * absorbed_power
 
 
-@component(ports=PORTS, holomorphic=False)
+@component(port_disciplines={"optical_in": optical, "anode": electrical, "cathode": electrical}, ports=PORTS, holomorphic=False)
 def IdealPhotodetector(
     signals: Signals,
     responsivity: float = 0.8,
@@ -134,7 +135,7 @@ def junction_charge(v, c0=20e-15, v_bi=0.8, fc=0.5):
     return q_depletion + c_join * dv + 0.5 * dc_join * dv**2
 
 
-@component(ports=PORTS, holomorphic=False)
+@component(port_disciplines={"optical_in": optical, "anode": electrical, "cathode": electrical}, ports=PORTS, holomorphic=False)
 def Photodiode(
     signals: Signals,
     responsivity: float = 0.8,
@@ -200,7 +201,7 @@ def Photodiode(
     return {"optical_in": optical_current, "anode": current, "cathode": -current}, {"anode": charge, "cathode": -charge}
 
 
-@source(ports=("p1", "p2"), holomorphic=True)
+@source(discipline=optical, ports=("p1", "p2"), holomorphic=True)
 def OpticalCW(
     signals: Signals,
     t: float,
@@ -261,7 +262,14 @@ def carrier_rates(x_e, x_h, v, tau_e0=8e-12, tau_h0=40e-12, v_bi=0.8, v_ref=3.0,
     return tau_e, tau_h, recombination
 
 
-@component(ports=PORTS, states=("x_e", "x_h"), holomorphic=False)
+@component(
+    port_disciplines={"optical_in": optical, "anode": electrical, "cathode": electrical},
+    state_natures={"x_e": normalized_carrier, "x_h": normalized_carrier},
+    equation_natures={"x_e": normalized_carrier, "x_h": normalized_carrier},
+    ports=PORTS,
+    states=("x_e", "x_h"),
+    holomorphic=False,
+)
 def CarrierPhotodiode(
     signals: Signals,
     responsivity: float = 0.8,
@@ -347,7 +355,7 @@ def CarrierPhotodiode(
     }, {"anode": charge, "cathode": -charge, "x_e": tau_ref * signals.x_e, "x_h": tau_ref * signals.x_h}
 
 
-@source(ports=("p1", "p2"), holomorphic=True)
+@source(discipline=optical, ports=("p1", "p2"), holomorphic=True)
 def OpticalGaussianPulse(
     signals: Signals, t: float, power: float = 1e-3, center: float = 120e-12, sigma: float = 12e-12, phase: float = 0.0
 ) -> PhysicsReturn:

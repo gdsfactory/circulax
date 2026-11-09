@@ -30,14 +30,6 @@ assert np.isfinite(q).all()
 print(CarrierPhotodiode.__name__, "ports:", model.ports)
 ```
 
-```text
-WARNING:2026-10-30 14:59:31,048:jax._src.xla_bridge:864: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
-```
-
-```text
-CarrierPhotodiode ports: ('optical_in', 'anode', 'cathode')
-```
-
 ## IdealPhotodetector
 
 Instantaneous absorbed optical power to current.
@@ -53,10 +45,6 @@ from circulax.components.photodetectors import IdealPhotodetector
 f, q = IdealPhotodetector(responsivity=0.8, reflectivity=0.0)(optical_in=np.sqrt(1e-3), anode=0.0, cathode=0.0)
 np.testing.assert_allclose(-f["anode"], 0.8e-3)
 print("Photocurrent leaving the anode:", -f["anode"], "A")
-```
-
-```text
-Photocurrent leaving the anode: 0.0007999999999999999 A
 ```
 
 ## Photodiode
@@ -82,10 +70,6 @@ assert np.isfinite(q).all()
 print(Photodiode.__name__, "ports:", model.ports)
 ```
 
-```text
-Photodiode ports: ('optical_in', 'anode', 'cathode')
-```
-
 ## make_photodetector_subcircuit
 
 Reusable PD package: intrinsic core, true series R, and pad R || C.
@@ -103,10 +87,6 @@ from circulax.components.photodetectors import make_photodetector_subcircuit
 device = make_photodetector_subcircuit()
 assert device.sys_size > 0
 print("External ports:", tuple(device.ports))
-```
-
-```text
-External ports: ('optical_in', 'anode', 'cathode', 'pad_ground')
 ```
 
 ## ElectricalPhaseShifter
@@ -138,10 +118,6 @@ assert np.isfinite(q).all()
 print(ElectricalPhaseShifter.__name__, "ports:", model.ports)
 ```
 
-```text
-ElectricalPhaseShifter ports: ('anode', 'cathode', 'o1', 'o2')
-```
-
 ## JouleHeater
 
 Ohmic heater; resistance is specified at ambient temperature in kelvin.
@@ -164,10 +140,6 @@ f, q = JouleHeater(resistance=100.0)(hp=1.0, hn=0.0, dt=0.0)
 np.testing.assert_allclose(f["hp"], 0.01)
 np.testing.assert_allclose(-f["dt"], 0.01)
 print("Heater current: 10 mA; generated heat: 10 mW")
-```
-
-```text
-Heater current: 10 mA; generated heat: 10 mW
 ```
 
 ## PNJunctionPhaseShifter
@@ -198,10 +170,6 @@ assert np.isfinite(q).all()
 print(PNJunctionPhaseShifter.__name__, "ports:", model.ports)
 ```
 
-```text
-PNJunctionPhaseShifter ports: ('anode', 'cathode', 'o1', 'o2')
-```
-
 ## PNPhaseShifter
 
 The reference notebook's corresponding delayed PN-section API.
@@ -223,10 +191,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(PNPhaseShifter.__name__, "ports:", model.ports)
-```
-
-```text
-PNPhaseShifter ports: ('anode', 'cathode', 'o1', 'o2')
 ```
 
 ## ThermalPhaseShifter
@@ -259,10 +223,6 @@ assert np.isfinite(q).all()
 print(ThermalPhaseShifter.__name__, "ports:", model.ports)
 ```
 
-```text
-ThermalPhaseShifter ports: ('o1', 'o2', 'dt')
-```
-
 ## loaded_phase_shifter
 
 Compile ideal phase control behind a genuine series-R/shunt-C load.
@@ -281,10 +241,6 @@ from circulax.components.phase_shifters import loaded_phase_shifter
 device = loaded_phase_shifter()
 assert device.sys_size > 0
 print("External ports:", tuple(device.ports))
-```
-
-```text
-External ports: ('anode', 'cathode', 'junction', 'o1', 'o2')
 ```
 
 ## thermo_optic_phase_shifter
@@ -307,10 +263,6 @@ from circulax.components.thermo_optic import thermo_optic_phase_shifter
 device = thermo_optic_phase_shifter()
 assert device.sys_size > 0
 print("External ports:", tuple(device.ports))
-```
-
-```text
-External ports: ('hp', 'hn', 'o1', 'o2', 'dt', 'thermal_reference')
 ```
 
 ## lumped_mzm
@@ -362,10 +314,6 @@ np.testing.assert_allclose(abs(field) ** 2, 0.002 * (1 + np.sin(0.7 * 0.2)) / 2,
 print("Loaded MZM output power:", abs(field) ** 2, "W")
 ```
 
-```text
-Loaded MZM output power: 0.0011395431157024257 W
-```
-
 ## mach_zehnder
 
 Compile reciprocal four-optical-port MZI with two genuine couplers.
@@ -383,10 +331,6 @@ from circulax.components.modulators import mach_zehnder
 device = mach_zehnder()
 assert device.sys_size > 0
 print("External ports:", tuple(device.ports))
-```
-
-```text
-External ports: ('in', 'in_aux', 'out', 'out_aux')
 ```
 
 ## traveling_wave_mzm
@@ -412,10 +356,6 @@ line = mode_transmission_line(frequencies, attenuation_db_per_m=200.0, n_eff=2.2
 device = traveling_wave_mzm(differential_line=line, common_line=line, n_sections=1)
 assert {"optical_in", "optical_out", "d_in", "d_out", "c_in", "c_out"} <= set(device.ports)
 print("Distributed sections: 1; complex unknowns:", device.sys_size)
-```
-
-```text
-Distributed sections: 1; complex unknowns: 60
 ```
 
 ## NonlinearOpticalWaveguide
@@ -451,10 +391,6 @@ assert np.isfinite(q).all()
 print(NonlinearOpticalWaveguide.__name__, "ports:", model.ports)
 ```
 
-```text
-NonlinearOpticalWaveguide ports: ('p1', 'p2')
-```
-
 ## OpticalCW
 
 A prescribed continuous optical carrier, optionally modulated in power.
@@ -476,10 +412,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(OpticalCW.__name__, "ports:", model.ports)
-```
-
-```text
-OpticalCW ports: ('p1', 'p2')
 ```
 
 ## OpticalDelayLine
@@ -532,10 +464,6 @@ assert np.isfinite(q).all()
 print(OpticalDelayLine.__name__, "ports:", model.ports)
 ```
 
-```text
-OpticalDelayLine ports: ('p1', 'p2')
-```
-
 ## OpticalGaussianPulse
 
 A prescribed Gaussian incident-power pulse for arrival-time and detector-charge studies.
@@ -557,10 +485,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(OpticalGaussianPulse.__name__, "ports:", model.ports)
-```
-
-```text
-OpticalGaussianPulse ports: ('p1', 'p2')
 ```
 
 ## OpticalSource
@@ -595,10 +519,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(OpticalSource.__name__, "ports:", model.ports)
-```
-
-```text
-OpticalSource ports: ('p1', 'p2')
 ```
 
 ## OpticalSourcePulse
@@ -637,10 +557,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(OpticalSourcePulse.__name__, "ports:", model.ports)
-```
-
-```text
-OpticalSourcePulse ports: ('p1', 'p2')
 ```
 
 ## OpticalWaveguide
@@ -682,10 +598,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(OpticalWaveguide.__name__, "ports:", model.ports)
-```
-
-```text
-OpticalWaveguide ports: ('p1', 'p2')
 ```
 
 ## delay_line_fdomain
@@ -773,10 +685,6 @@ assert np.isfinite(q).all()
 print(DirectionalCoupler.__name__, "ports:", model.ports)
 ```
 
-```text
-DirectionalCoupler ports: ('p1', 'p2', 'p3', 'p4')
-```
-
 ## Grating
 
 Grating coupler with Gaussian wavelength-dependent insertion loss.
@@ -813,10 +721,6 @@ assert np.isfinite(q).all()
 print(Grating.__name__, "ports:", model.ports)
 ```
 
-```text
-Grating ports: ('grating', 'waveguide')
-```
-
 ## OpticalAttenuator
 
 Matched reciprocal attenuator.
@@ -837,10 +741,6 @@ assert abs(f["a1"]) < 1e-12
 assert abs(f["a2"]) < 1e-12
 np.testing.assert_allclose(transmission**2, 10 ** (-3 / 10))
 print("Output power for 1 W incident:", transmission**2, "W")
-```
-
-```text
-Output power for 1 W incident: 0.5011872336272722 W
 ```
 
 ## OpticalInterface
@@ -875,10 +775,6 @@ assert np.isfinite(q).all()
 print(OpticalInterface.__name__, "ports:", model.ports)
 ```
 
-```text
-OpticalInterface ports: ('p1', 'p2')
-```
-
 ## OpticalPhaseShifter
 
 Matched reciprocal phase bias, transmission exp(+i phase-loss_dB ln(10)/20).
@@ -902,10 +798,6 @@ assert abs(f["a1"]) < 1e-12
 assert abs(f["a2"]) < 1e-12
 np.testing.assert_allclose(abs(transmission) ** 2, 1.0)
 print("Phase shift:", np.angle(transmission), "rad")
-```
-
-```text
-Phase shift: 0.7 rad
 ```
 
 ## OpticalTermination
@@ -933,10 +825,6 @@ assert np.isfinite(q).all()
 print(OpticalTermination.__name__, "ports:", model.ports)
 ```
 
-```text
-OpticalTermination ports: ('p1',)
-```
-
 ## QuadratureCombiner
 
 Retained directed mixing/combining blocks from older demonstrations.
@@ -958,10 +846,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(QuadratureCombiner.__name__, "ports:", model.ports)
-```
-
-```text
-QuadratureCombiner ports: ('active', 'reference', 'out')
 ```
 
 ## Splitter
@@ -999,10 +883,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(Splitter.__name__, "ports:", model.ports)
-```
-
-```text
-Splitter ports: ('p1', 'p2', 'p3')
 ```
 
 ## TunableBeamSplitter
@@ -1061,10 +941,6 @@ assert np.isfinite(q).all()
 print(TunableBeamSplitter.__name__, "ports:", model.ports)
 ```
 
-```text
-TunableBeamSplitter ports: ('p1', 'p2', 'p3', 'p4')
-```
-
 ## AddDropRing
 
 Reciprocal four-port ring with independent forward/reverse cavity states.
@@ -1093,10 +969,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(AddDropRing.__name__, "ports:", model.ports)
-```
-
-```text
-AddDropRing ports: ('p1', 'p2', 'p3', 'p4')
 ```
 
 ## AllPassRing
@@ -1130,10 +1002,6 @@ assert np.isfinite(q).all()
 print(AllPassRing.__name__, "ports:", model.ports)
 ```
 
-```text
-AllPassRing ports: ('p1', 'p2')
-```
-
 ## AllPassRingEO
 
 Ring control core; tuning is resonance shift in rad/s/V at real v_e.
@@ -1161,10 +1029,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(AllPassRingEO.__name__, "ports:", model.ports)
-```
-
-```text
-AllPassRingEO ports: ('p1', 'p2', 'v_e')
 ```
 
 ## OpticalFilter
@@ -1216,8 +1080,6 @@ plt.show()
 plt.close(fig)
 ```
 
-![Device example plot](device_guide_files/device_70_0.png)
-
 ## RingModSetup
 
 Promoted illustrative models preserving older ring notebook behavior.
@@ -1239,10 +1101,6 @@ f, q = model.solver_call(0.0, y, model)
 assert np.isfinite(f).all()
 assert np.isfinite(q).all()
 print(RingModSetup.__name__, "ports:", model.ports)
-```
-
-```text
-RingModSetup ports: ('in_', 'thru')
 ```
 
 ## RingModulator
@@ -1300,10 +1158,6 @@ assert np.isfinite(q).all()
 print(RingModulator.__name__, "ports:", model.ports)
 ```
 
-```text
-RingModulator ports: ('p1', 'p2')
-```
-
 ## RingModulatorEO
 
 Ring modulator with an external electrical voltage port ``v_e``.
@@ -1336,10 +1190,6 @@ assert np.isfinite(q).all()
 print(RingModulatorEO.__name__, "ports:", model.ports)
 ```
 
-```text
-RingModulatorEO ports: ('p1', 'p2', 'v_e')
-```
-
 ## loaded_ring
 
 Compose AllPassRingEO with series R/shunt C; external drive port is drive.
@@ -1357,8 +1207,4 @@ from circulax.components.resonators import loaded_ring
 device = loaded_ring()
 assert device.sys_size > 0
 print("External ports:", tuple(device.ports))
-```
-
-```text
-External ports: ('p1', 'p2', 'drive', 'gnd', 'junction')
 ```
