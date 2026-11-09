@@ -7,12 +7,54 @@ The reference is a common positive real coordinate normalization. These
 helpers do not renormalize S-parameters or eliminate incident-wave states.
 """
 
+from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING, NamedTuple
 
 import jax
 import jax.numpy as jnp
 
-from circulax.components.base_component import PhysicsReturn, Signals
+if TYPE_CHECKING:
+    from circulax.components.base_component import PhysicsReturn, Signals
+
+
+class PortWaves(NamedTuple):
+    """Local traveling envelopes in sqrt(W), with flow positive into the component.
+
+    Powers describe total physical envelopes, not AC perturbations or Fourier
+    coefficients. Leading array dimensions are preserved.
+    """
+
+    incident: jax.Array
+    outgoing: jax.Array
+
+    @property
+    def incident_power(self) -> jax.Array:
+        """Power arriving at this component port, in W."""
+        return jnp.abs(self.incident) ** 2
+
+    @property
+    def outgoing_power(self) -> jax.Array:
+        """Power leaving this component port, in W."""
+        return jnp.abs(self.outgoing) ** 2
+
+    @property
+    def net_power(self) -> jax.Array:
+        """Signed net power into this component port, in W."""
+        return self.incident_power - self.outgoing_power
+
+
+def reconstruct_waves(potential: jax.Array, flow: jax.Array, *, r0: float = 1.0) -> PortWaves:
+    """Reconstruct total waves from potential and signed terminal flow.
+
+    ``flow`` must be positive into the component, including any dynamic
+    contribution. The caller supplies compatible carrier, mode, and reference
+    coordinates. This helper also works under jit/vmap; ``r0`` is static.
+    """
+    root = jnp.sqrt(validate_reference(r0))
+    v, i = jnp.asarray(potential), jnp.asarray(flow)
+    return PortWaves((v / root + root * i) / 2, (v / root - root * i) / 2)
 
 
 def validate_reference(r0: float) -> float:

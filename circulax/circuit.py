@@ -8,11 +8,13 @@ from copy import deepcopy
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.netlist import _is_recursive_netlist
+from circulax.power_waves import PortWaves, reconstruct_waves
 from circulax.small_signal import SmallSignalModel, build_small_signal_model, validate_small_signal_groups
 from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
@@ -900,6 +902,76 @@ class Circuit:
     def port(self, y: jax.Array, port: str) -> jax.Array:
         """Alias for :meth:`get_port_field`."""
         return self.get_port_field(y, port)
+
+    def port_waves(
+        self,
+        y: jax.Array,
+        port: str,
+        *,
+        analysis: str = "dc",
+        t: jax.Array | float = 0.0,
+        params: dict[str, Any] | None = None,
+    ) -> PortWaves:
+        """Read incident/outgoing total envelopes and powers at a component port.
+
+        Supports DC arrays, transient ``solution.ys`` (pass ``t=solution.ts``),
+        and HB time samples (``analysis='hb_time'``). Uses local potential and
+        terminal F flow, without depending on auxiliary state names. Supported
+        components declare a wave reference and have algebraic terminal flows:
+        SAX wrappers and explicit optical wave boundaries. Frequency operators
+        support DC only (their zero-frequency operator). Delayed models,
+        legacy potential sources, and dynamic port
+        charges require a separate flow reconstruction and are rejected here.
+
+        Pass the same scalar parameter updates used for the solve. Leading y
+        dimensions are sample/batch dimensions, with broadcastable sample times.
+        AC perturbations and HB coefficients are not total physical envelopes;
+        this method rejects those analysis labels. Reconstruct HB time samples
+        before computing powers. No matching of surrounding devices is assumed.
+        """
+        if analysis not in {"dc", "tran", "hb_time"}:
+            msg = "port_waves supports total DC, tran, or hb_time fields, not AC perturbations or harmonic coefficients"
+            raise ValueError(msg)
+        instance, separator, terminal = port.partition(",")
+        if not separator:
+            msg = "port_waves requires a component port 'Instance,port'"
+            raise ValueError(msg)
+        groups = self._with_param_values(self._require_scalar_params(params or {}, "port_waves"))
+        matches = [g for g in groups.values() if instance in (getattr(g, "index_map", None) or {})]
+        if len(matches) != 1:
+            raise KeyError(port)
+        group = matches[0]
+        if group.wave_reference is None or group.has_delay:
+            msg = "port_waves requires an algebraic power-wave component (SAX or explicit optical wave boundary)"
+            raise ValueError(msg)
+        if group.is_fdomain and analysis != "dc":
+            msg = "frequency-dependent port_waves supports DC only; time-domain terminal flows require reconstruction"
+            raise ValueError(msg)
+        cls = type(group.params)
+        terminal = getattr(cls, "_raw_to_sanitized_ports", {}).get(terminal, terminal)
+        if terminal not in cls.ports:
+            raise KeyError(port)
+        local_port = cls.ports.index(terminal)
+        index = group.index_map[instance]
+        local_params = jax.tree.map(lambda leaf: leaf[index] if eqx.is_array(leaf) else leaf, group.params)
+        values = jnp.asarray(y)
+        if values.shape[-1] != self._n():
+            msg = "port_waves expects the DC/transient real-block solution layout"
+            raise ValueError(msg)
+        fields = values[..., : self.sys_size]
+        if self.solver.is_complex:
+            fields = fields + 1j * values[..., self.sys_size :]
+        local = fields[..., group.var_indices[index]]
+        if group.is_fdomain:
+            operator = group.physics_func(0.0, local_params)
+            flow = (local @ operator.T)[..., local_port]
+        else:
+            times = jnp.broadcast_to(jnp.asarray(t), values.shape[:-1])
+            flows, _ = jax.vmap(lambda time, state: group.physics_func(time, state, local_params))(
+                times.reshape(-1), local.reshape(-1, local.shape[-1])
+            )
+            flow = flows[:, local_port].reshape(values.shape[:-1])
+        return reconstruct_waves(local[..., local_port], flow, r0=group.wave_reference)
 
     def with_groups(self, groups: dict) -> Circuit:
         """Return a new Circuit with replaced component groups.
