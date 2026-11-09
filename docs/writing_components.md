@@ -328,41 +328,55 @@ The f-domain path has one practical advantage: the inductor no longer needs an i
 
 ## Photonic Components
 
-Optical field amplitudes are treated as complex-valued "voltages" and S-parameter-derived admittances as "conductances". Since photonic S-parameters describe the steady state at a given wavelength — the Y-matrix is constant w.r.t. the electrical solver frequency — photonic components use `@component`, not `@fdomain_component`.
+SAX models use retained incident and outgoing root-power waves, `a` and `b`, in sqrt(W).
+For a common finite positive real reference `r0` (default 1), the coordinates are
 
-### A: Manual `@component` with `s_to_y()`
+```text
+potential = sqrt(r0) * (a + b)
+flow      = (a - b) / sqrt(r0)       # positive into the device
+b         = S @ a
+```
 
-Build the S-matrix, convert to Y via `s_to_y`, return `I = Y @ V`.
+The incident amplitudes are algebraic unknowns. Retaining them avoids inverting
+`I + S`, which may be singular for a valid exactly lossless device. The dry run
+only discovers ports and parameters; the representation stays fixed throughout
+parameter sweeps and optimization.
+
+A wavelength-parameterized S-matrix is static with respect to the electrical
+solver frequency. Use `frequency_param` explicitly when the S-matrix depends on
+modulation frequency. A static scattering model does not introduce envelope delay.
+
+### A: Manual `@component` with retained waves
+
+The reusable helper returns terminal flows and incident constraints with zero Q:
 
 ```python
-from circulax.s_transforms import s_to_y
+from circulax.power_waves import power_wave_stamp
 
-@component(ports=("p1", "p2"))
-def OpticalWaveguide(
+@component(ports=("p1", "p2"), states=("wave_p1", "wave_p2"), holomorphic=True)
+def WaveguideSection(
     signals: Signals,
     length_um: float = 100.0,
     neff: float = 2.4,
     wavelength_nm: float = 1310.0,
     loss_dB_cm: float = 1.0,
 ):
-    """Single-mode waveguide with propagation loss and phase shift."""
     phi = 2.0 * jnp.pi * neff * (length_um / wavelength_nm) * 1000.0
     loss = loss_dB_cm * (length_um / 10000.0)
-    T = 10.0 ** (-loss / 20.0) * jnp.exp(-1j * phi)
-
-    S = jnp.array([[0.0, T], [T, 0.0]], dtype=jnp.complex128)
-    Y = s_to_y(S)
-
-    v_vec = jnp.array([signals.p1, signals.p2], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-    return {"p1": i_vec[0], "p2": i_vec[1]}, {}
+    transmission = 10.0 ** (-loss / 20.0) * jnp.exp(-1j * phi)
+    scattering = jnp.array([[0.0, transmission], [transmission, 0.0]])
+    return power_wave_stamp(signals, ("p1", "p2"), scattering, r0=1.0)
 ```
 
-Use this approach for new photonic components.
+The port tuple follows the matrix row/column order. Each port requires a state
+named `wave_<port>`. Validate any configurable static reference using
+`validate_reference` when constructing the component. General S/Y conversion
+utilities remain available for conversions; they are not needed to stamp a
+scattering law. Built-in photonic model migration is a subsequent step.
 
 ### B: `sax_component` — importing SAX models
 
-Wraps existing [SAX](https://flaport.github.io/sax/) models (e.g. from gdsfactory PDK libraries) without rewriting physics. Auto-detects port names and handles S→Y conversion.
+Wraps existing [SAX](https://flaport.github.io/sax/) models (e.g. from gdsfactory PDK libraries) without rewriting physics. Auto-detects port names and retains one incident-wave state per port, including for lossy models.
 
 ```python
 from circulax.s_transforms import sax_component
@@ -382,7 +396,45 @@ def sax_coupler(coupling: float = 0.5):
 Coupler = sax_component(sax_coupler)
 ```
 
-Use `sax_component` only for reusing existing SAX models. For new components, prefer the explicit `@component` pattern.
+The fully retained formulation is the default for explicit wrappers and raw SAX
+models passed to `compile_circuit`. It does not assume the surrounding circuit is
+matched. Zero reflection or coupling at default parameters never removes an
+incident unknown: sweeps may change those values. Any future reduction requires
+an explicit structural guarantee valid throughout the supported parameter range
+and for arbitrary connected loads.
+
+For models driven by sweep frequency, opt in explicitly:
+
+```python
+def delayed_through(f=0.0, delay=1e-12):
+    transmission = jnp.exp(-2j * jnp.pi * f * delay)
+    return {("p1", "p2"): transmission, ("p2", "p1"): transmission}
+
+DelayedThrough = sax_component(delayed_through, frequency_param="f", r0=1.0)
+```
+
+This route uses the same retained constraints at DC (`f=0`), AC, and HB. It
+cannot run in transient or export through `to_sax_circuit`; a frequency-domain
+law alone does not supply a time-domain realization. Static SAX wrappers retain
+SAX export support, including a common non-default `r0`.
+
+**Migration:** every wrapper now adds one complex incident-wave state per port.
+Recompile circuits and recreate initial guesses from the compiled layout rather
+than reusing saved raw state arrays. SAX function parameters, port aliases, and
+physical S-parameter laws are preserved. `r0` is a wrapper construction option;
+a SAX model parameter also named `r0` remains a model parameter on the instance.
+
+Changing the wrapper reference rescales potential/flow coordinates; it does not
+renormalize the supplied S-matrix. Use compatible references on connected optical
+models, sources, terminations, and analysis ports (`circuit.sp(..., z0=r0)`).
+For `r0 != 1`, mixing these coordinates with an electrical admittance requires an
+explicit normalization contract.
+
+Traveling powers are `abs(a)**2` and `abs(b)**2`, and net power into a device is
+`abs(a)**2 - abs(b)**2`. In a reflecting circuit, `abs(potential)**2` is generally
+not a traveling optical power. Existing optical voltage-source semantics are
+unchanged in this foundation; explicit launched-wave sources and power-result
+APIs are subsequent work.
 
 ---
 

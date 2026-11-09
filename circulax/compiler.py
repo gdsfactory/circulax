@@ -74,6 +74,7 @@ class ComponentGroup(eqx.Module):
     combined_func: Any = eqx.field(static=True, default=None)
     holomorphic: bool = eqx.field(static=True, default=False)
     is_sax_wrapped: bool = eqx.field(static=True, default=False)
+    wave_reference: float | None = eqx.field(static=True, default=None)
 
     # Fixed time-delay support (see circulax.solvers.assembly). ``has_delay``
     # is inferred from ``signals.at_delay(...)`` during compilation;
@@ -419,6 +420,7 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
             combined_func=_combined_func,
             holomorphic=getattr(comp_cls, "_holomorphic", True),
             is_sax_wrapped=getattr(comp_cls, "_is_sax_wrapped", False),
+            wave_reference=getattr(comp_cls, "_wave_r0", None),
             has_delay=has_delay,
             tau_func=comp_cls.tau_of if has_delay else None,
         )

@@ -340,16 +340,19 @@ class Circuit:
         Only valid for an all-SAX, source-free circuit (``self._is_pure_sax``):
         such a circuit has no reactive (``dQ/dt``) terms, so its small-signal
         admittance is frequency-independent and the DC operating point is
-        exactly zero — a single linear solve at ``z0=1.0`` (SAX's own
-        reference impedance convention, not circulax's electrical 50 Ohm
-        default) fully determines the S-matrix.
+        exactly zero — a single linear solve at the wrappers' common ``r0``
+        (default 1.0) fully determines the S-matrix.
         """
         from circulax.solvers import setup_ac_sweep
 
         port_nodes = [self._resolve_port_node(p) for p in self.ports]
         holomorphic = _infer_holomorphic(groups)
+        references = {group.wave_reference for group in groups.values()}
+        if len(references) != 1:
+            msg = "SAX export requires a common power-wave reference r0"
+            raise ValueError(msg)
         run_ac = setup_ac_sweep(
-            groups, self.sys_size, port_nodes, z0=1.0, is_complex=self.solver.is_complex, holomorphic=holomorphic
+            groups, self.sys_size, port_nodes, z0=references.pop(), is_complex=self.solver.is_complex, holomorphic=holomorphic
         )
         S = run_ac(jnp.zeros(self._n()), jnp.zeros(1))[0]
         idx = {p: i for i, p in enumerate(self.ports)}
@@ -911,7 +914,7 @@ class Circuit:
             A new :class:`Circuit` with the updated groups.
 
         """
-        is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) for g in groups.values())
+        is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) and not g.is_fdomain for g in groups.values())
         return Circuit(
             self.solver,
             groups,
@@ -1104,7 +1107,7 @@ def compile_circuit(
     if is_complex:
         _validate_holomorphic_flags(groups)
     solver = analyze_circuit(groups, sys_size, backend=backend, is_complex=is_complex, g_leak=g_leak)
-    is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) for g in groups.values())
+    is_pure_sax = bool(groups) and all(getattr(g, "is_sax_wrapped", False) and not g.is_fdomain for g in groups.values())
     circuit = Circuit(
         solver=solver,
         groups=groups,
@@ -1183,7 +1186,9 @@ def _infer_is_complex(groups: dict) -> bool:
 
 
 def _group_outputs_complex(group: Any) -> bool:
-    if getattr(group, "is_fdomain", False) or hasattr(group, "model_id"):
+    if getattr(group, "is_fdomain", False):
+        return getattr(group, "is_sax_wrapped", False)
+    if hasattr(group, "model_id"):
         return False
     if not hasattr(group, "physics_func"):
         # Group types that bypass the physics_func interface entirely (e.g.

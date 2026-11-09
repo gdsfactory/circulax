@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import optimistix as optx
 from jax import Array
 
-from circulax.solvers.assembly import assemble_residual_only_complex, assemble_residual_only_real
+from circulax.solvers.assembly import assemble_residual_only_complex, assemble_residual_only_real, evaluate_fdomain
 from circulax.solvers.linear import (
     DAMPING_EPS,
     DAMPING_FACTOR,
@@ -154,17 +154,19 @@ def _hb_residual(
 
             def _fdomain_contrib(v_k: jax.Array, f_k: float, _group=group) -> jax.Array:
                 """Compute f-domain current contribution at a single harmonic."""
-                Y_mats = jax.vmap(lambda p: _group.physics_func(f_k, p))(_group.params)
+                Y_mats = evaluate_fdomain(_group, f_k)
                 contrib = jnp.zeros(sys_size, dtype=jnp.complex128)
                 if is_complex:
-                    # Each quadrature waveform has complex Fourier
-                    # coefficients. Apply the real 2x2 block representation
-                    # of complex multiplication without conflating the field
-                    # quadrature with Fourier phase.
+                    # Recover quadrature transfer functions from both
+                    # envelope sidebands. Their entries are complex Fourier
+                    # responses, not just the real/imag parts at +f.
+                    negative = evaluate_fdomain(_group, -f_k)
+                    direct = (Y_mats + jnp.conj(negative)) / 2
+                    cross = (Y_mats - jnp.conj(negative)) / (2j)
                     v_r = v_k[_group.var_indices]
                     v_i = v_k[_group.var_indices + physical_size]
-                    i_r = jnp.einsum("nij,nj->ni", Y_mats.real, v_r) - jnp.einsum("nij,nj->ni", Y_mats.imag, v_i)
-                    i_i = jnp.einsum("nij,nj->ni", Y_mats.imag, v_r) + jnp.einsum("nij,nj->ni", Y_mats.real, v_i)
+                    i_r = jnp.einsum("nij,nj->ni", direct, v_r) - jnp.einsum("nij,nj->ni", cross, v_i)
+                    i_i = jnp.einsum("nij,nj->ni", cross, v_r) + jnp.einsum("nij,nj->ni", direct, v_i)
                     return contrib.at[_group.eq_indices].add(i_r).at[_group.eq_indices + physical_size].add(i_i)
 
                 v_ports = v_k[_group.var_indices]

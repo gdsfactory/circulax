@@ -40,7 +40,6 @@ Example::
     S = jax.jit(run_ac)(y_dc, freqs)
 """
 
-import functools
 from collections.abc import Callable
 from typing import Any
 
@@ -52,6 +51,7 @@ from circulax.solvers.assembly import (
     assemble_gc_complex,
     assemble_gc_complex_2n,
     assemble_gc_real,
+    evaluate_fdomain,
 )
 from circulax.solvers.linear import GROUND_STIFFNESS, _build_index_arrays
 
@@ -212,13 +212,13 @@ def ac_admittance(
     for group in groups.values():
         rows, cols = group.jac_rows.reshape(-1), group.jac_cols.reshape(-1)
         if getattr(group, "is_fdomain", False):
-            values = jax.vmap(functools.partial(group.physics_func, freq))(group.params).reshape(-1)
+            values = evaluate_fdomain(group, freq).reshape(-1)
             if quadratures:
                 # RF phase and optical-field phase are distinct. Recover the
                 # coordinate transfer functions from both envelope sidebands;
                 # taking real/imag at +f alone discards temporal phase (e.g.
                 # a real capacitor must contribute jwC to both diagonals).
-                negative = jax.vmap(functools.partial(group.physics_func, -freq))(group.params).reshape(-1)
+                negative = evaluate_fdomain(group, -freq).reshape(-1)
                 direct = (values + jnp.conj(negative)) / 2
                 cross = (values - jnp.conj(negative)) / (2j)
                 blocks = (direct, -cross, cross, direct)
