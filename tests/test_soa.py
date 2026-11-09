@@ -140,3 +140,30 @@ def test_zero_net_gain_has_finite_derivative() -> None:
     derivative = jax.grad(residual)(h)
     expected = 1 + 280e-12 * pin / float(soa_scales()[2]) * (1 + h / 2)
     np.testing.assert_allclose(derivative, expected, rtol=1e-12)
+
+
+def test_modulation_response_above_and_below_carrier_corner(soa_circuit: Circuit) -> None:
+    """Input modulation is compressed slowly; pump modulation is low pass."""
+    circuit = soa_circuit
+    current = 0.08
+    power = 2e-4
+    lifetime = 280e-12
+    voltage = 1.8 * 0.02585 * np.log1p(current / 1e-12) + 5 * current
+    model = circuit.small_signal(params={"BIAS.V": voltage, "LIGHT.power": power})
+    gain = float(np.abs(circuit.port(model.y_dc, "out")) ** 2 / power)
+    energy = float(soa_scales()[2])
+    rate = 1 / lifetime + power * gain / energy
+    frequencies = jnp.array([0.0, 0.01, 1.0, 100.0]) * rate / (2 * jnp.pi)
+    optical = model(freqs=frequencies, sources={"LIGHT": np.sqrt(power) * 1e-3 / 2})
+    normalized = optical.power("out", field_unit="sqrt(W)") / (gain * optical.power("SOA,optical_in", field_unit="sqrt(W)"))
+    expected = 1 - power * (gain - 1) / energy / (rate + 2j * jnp.pi * frequencies)
+    np.testing.assert_allclose(normalized, expected, rtol=2e-7, atol=1e-9)
+    assert abs(normalized[0]) < abs(normalized[-1])
+    np.testing.assert_allclose(normalized[-1], 1, atol=0.01)
+
+    pump = model(freqs=frequencies, sources={"BIAS": 1e-3})
+    pump_power = pump.power("out", field_unit="sqrt(W)")
+    diode_conductance = (current + 1e-12) / (1.8 * 0.02585)
+    electrical_time = 5 * 150e-15 / (1 + 5 * diode_conductance)
+    expected_pump = rate / (rate + 2j * jnp.pi * frequencies) / (1 + 2j * jnp.pi * frequencies * electrical_time)
+    np.testing.assert_allclose(pump_power / pump_power[0], expected_pump, rtol=2e-7, atol=1e-9)
