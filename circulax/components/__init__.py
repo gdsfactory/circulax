@@ -3,6 +3,12 @@
 from circulax.components.characteristic_line import characteristic_rlgc_transmission_line
 from circulax.components.electronic import CoupledInductors, DifferentialAdapter, IdealTransformer, TransmissionLine
 from circulax.components.filters import Bessel3, Biquad, LowPass1
+from circulax.components.optical_boundaries import (
+    OpticalWaveSource,
+    OpticalWaveTermination,
+    optical_wave_source,
+    optical_wave_termination,
+)
 from circulax.components.phase_shifter import (
     JunctionModel,
     charge_from_capacitance_table,
@@ -31,6 +37,8 @@ __all__ = [
     "JunctionModel",
     "LowPass1",
     "OpticalDelayLine",
+    "OpticalWaveSource",
+    "OpticalWaveTermination",
     "RLGCTransmissionLine",
     "TransmissionLine",
     "characteristic_rlgc_transmission_line",
@@ -41,6 +49,8 @@ __all__ = [
     "diode_current",
     "junction_model",
     "mode_transmission_line",
+    "optical_wave_source",
+    "optical_wave_termination",
     "phase_shifter_factory",
     "pn_diode",
     "reduced_rlgc_transmission_line",

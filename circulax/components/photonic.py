@@ -286,10 +286,13 @@ def OpticalSource(signals: Signals, power: float = 1.0, phase: float = 0.0) -> P
 
     Enforces a fixed complex field amplitude ``sqrt(power) * exp(j * phase)``
     across its ports, analogous to an ideal voltage source in electrical circuits.
+    ``power`` sets the squared potential difference, not a prescribed launched
+    traveling-wave power under reflection. For that contract use
+    :class:`circulax.components.OpticalWaveSource`.
 
     Args:
         signals: Port fields and source-current state ``i_src``.
-        power: Output optical power in watts. Defaults to ``1.0``.
+        power: Squared potential-difference amplitude. Defaults to ``1.0``.
         phase: Output field phase in radians. Defaults to ``0.0``.
 
     """
@@ -319,11 +322,14 @@ def OpticalSourcePulse(
     Field amplitude ramps smoothly from zero to ``sqrt(power)`` around
     ``delay``, with the steepness of the transition controlled by ``rise``.
     Suitable for transient simulations of optical pulse propagation.
+    This remains a potential-difference constraint; ``power`` does not prescribe
+    launched traveling-wave power under reflection. Use
+    :func:`circulax.components.optical_wave_source` for a prescribed wave envelope.
 
     Args:
         signals: Port fields and source-current state ``i_src``.
         t: Current simulation time in seconds.
-        power: Peak output optical power in watts. Defaults to ``1.0``.
+        power: Peak squared potential-difference amplitude. Defaults to ``1.0``.
         phase: Output field phase in radians. Defaults to ``0.0``.
         delay: Turn-on delay in seconds. Defaults to ``0.2e-9``.
         rise: Sigmoid rise time constant in seconds. Defaults to ``0.05e-9``.
