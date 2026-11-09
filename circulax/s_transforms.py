@@ -15,6 +15,7 @@ from sax import get_ports, sdense
 from sax.saxtypes import try_into
 
 from circulax.components.base_component import CircuitComponent, Signals, _extract_param, component
+from circulax.power_waves import power_wave_operator, power_wave_stamp, validate_reference
 
 
 def _unwrap(fn: callable) -> callable:
@@ -42,60 +43,6 @@ def _sanitize_port(name: str) -> str:
     if not s.isidentifier():
         s = "p_" + s
     return s
-
-
-_WAVE_STAMP_CONDITIONING_THRESHOLD = 0.02
-_WAVE_STAMP_TRANSMISSION_THRESHOLD = 0.999
-
-
-def _needs_wave_stamp(
-    s_matrix: jax.Array,
-    conditioning_threshold: float = _WAVE_STAMP_CONDITIONING_THRESHOLD,
-    transmission_threshold: float = _WAVE_STAMP_TRANSMISSION_THRESHOLD,
-) -> bool:
-    """Return True if this S-matrix is a candidate for `s_to_y`'s (I+S)^-1 going ill-conditioned.
-
-    Two independent, phase-invariant checks on the dry-run S-matrix; either
-    is sufficient to flag the component. Both thresholds are deliberately
-    tight — tripped only by matrices that are genuinely (at, or extremely
-    close to) singular, e.g. ideal/lossless models, not merely "somewhat
-    ill-conditioned" real components with finite loss:
-
-    1. **Structural**: smallest singular value of ``(I + S)`` below
-       ``conditioning_threshold``. This is the quantity that actually governs
-       ``s_to_y``'s conditioning (``Y = (I-S)(I+S)^-1``) — it catches a
-       near-degenerate *combination* of couplings even when no single
-       S-matrix entry is close to unity magnitude (e.g. an ideal, lossless
-       N-port splitter has ``sv_min(I+S) = 0`` exactly). A realistically lossy
-       instance of the same topology (e.g. ``sax.models.mmi1x2`` at 0.3 dB
-       loss, ``sv_min ~ 0.034``) sits above this threshold and stays on the
-       cheaper ``s_to_y`` path.
-    2. **Propagation/phase-rotation risk**: any single transmission magnitude
-       above ``transmission_threshold``. Loss varies smoothly with a model's
-       swept parameter (wavelength, length, ...), but phase from a
-       ``exp(i*beta*length)``-type term does not — it can rotate through a
-       full cycle for a tiny parameter change. So a *currently*
-       well-conditioned propagation path can still cross the ``(I+S)``
-       singularity at another wavelength/length/tuning value if its
-       transmission magnitude is genuinely ~1 (e.g. a lossless
-       ``sax.models.straight`` at its default). Magnitude is ~invariant to
-       that phase, so checking it here is a reliable, sample-free proxy —
-       cheaper and more robust than sampling the sweep directly, which can
-       straddle a narrow near-singular dip and miss it.
-
-    Components that trip either check are stamped with reflection-free wave
-    variables instead (see ``sax_component``) so no matrix inverse is ever
-    taken for them.
-    """
-    n = s_matrix.shape[-1]
-    if n < 2:
-        return False
-    eye = jnp.eye(n, dtype=jnp.complex128)
-    m = eye + s_matrix.astype(jnp.complex128)
-    sv_min = jnp.min(jnp.linalg.svd(m, compute_uv=False))
-    off_diag = jnp.abs(s_matrix)[~jnp.eye(n, dtype=bool)]
-    max_transmission = jnp.max(off_diag)
-    return bool(sv_min < conditioning_threshold) or bool(max_transmission > transmission_threshold)
 
 
 @jax.jit
@@ -224,18 +171,11 @@ def fdomain_model(fn: callable, *, ports: tuple[str, ...], z0: complex = 1.0 + 1
         f = arguments.pop(f_name)
         Y = fn(f, **arguments)
         S = y_to_s(Y, z0=z0)
-        return {(a, b): S[i, j] for i, a in enumerate(ports) for j, b in enumerate(ports)}
+        return {(a, b): S[j, i] for i, a in enumerate(ports) for j, b in enumerate(ports)}
 
     sax_model.__name__ = fn.__name__
     sax_model.__doc__ = fn.__doc__
     sax_model.__signature__ = sig
-    # Keep enough provenance for ``sax_component(..., frequency_param="f")``
-    # to recover the original admittance function.  This is deliberately
-    # private metadata: without the explicit ``frequency_param`` opt-in the
-    # returned callable remains a completely ordinary SAX model.
-    sax_model._fdomain_admittance = fn
-    sax_model._fdomain_ports = ports
-    sax_model._fdomain_frequency_param = f_name
     return sax_model
 
 
@@ -244,36 +184,20 @@ def sax_component(
     *,
     name: str | None = None,
     frequency_param: str | None = None,
+    r0: float = 1.0,
 ) -> callable:
     """Decorator to convert a SAX model function into a circulax component.
 
-    Inspects ``fn`` at decoration time to discover its port interface via a
-    dry run, then wraps its S-matrix output in an admittance-based physics
-    function compatible with the circulax nodal solver.
-
-    The conversion proceeds in three stages:
-
-    1. **Discovery** — ``fn`` is called once with its default (or dummy)
-       parameter values and :func:`sax.get_ports` extracts the sorted port
-       names from the resulting S-parameter dict. The same dry-run matrix is
-       checked via :func:`_needs_wave_stamp` to decide, once per wrapped
-       model, which physics stamp this component type gets.
-    2. **Physics wrapper** — a closure is built that calls ``fn`` at runtime
-       and converts the S-dict to a dense matrix via :func:`sax.sdense`.
-       Components that passed the dry-run conditioning check use
-       :func:`s_to_y` directly and return ``I = Y @ V``. Components flagged
-       as near-lossless instead get one auxiliary "incident wave" state per
-       port (``wave_<port>``) and are stamped with ``b = S @ a``,
-       ``I = a - b``, ``a + b - V = 0`` — algebraically equivalent to the
-       Y-matrix form (for z0=1, solving the constraint recovers
-       ``I = (I-S)(I+S)^-1 V``) but never inverts ``S`` directly, so the
-       ill-conditioning is resolved by the global sparse solve instead of a
-       local matrix inverse.
-    3. **Component registration** — the wrapper is passed to
-       :func:`~circulax.components.base_component.component` with the
-       discovered ports (and, for wave-stamped components, the auxiliary
-       states), producing a :class:`~circulax.components.base_component.CircuitComponent`
-       subclass.
+    Discover ports with a dry run, then retain one incident root-power-wave
+    state per port. For ``b = S @ a``, terminal flows are
+    ``(a - b) / sqrt(r0)`` and algebraic constraints are
+    ``a + b - potential / sqrt(r0) = 0``. Both waves have units sqrt(W).
+    No S-to-Y inversion or default-parameter conditioning decision is used.
+    The dry run discovers the interface only; the same equations apply over
+    the complete parameter range, including exactly lossless devices.
+    This is also the default for automatically imported SAX models. No
+    external matching or zero reflection at default parameters is assumed;
+    every port retains its incident unknown even for reflectionless models.
 
     ``fn`` may be a plain function or a :class:`functools.partial` wrapping
     one (SAX PDKs typically use partials to bind fab-specific defaults).
@@ -297,10 +221,12 @@ def sax_component(
             :meth:`~circulax.circuit.Circuit.to_sax_circuit`. Use this for an
             explicit round trip such as
             ``sax_component(fdomain_model(y_fn, ports=("p1", "p2")),
-            frequency_param="f")``. For models made by
-            :func:`fdomain_model`, the original Y function is recovered
-            directly; arbitrary SAX models are converted from S to Y at each
-            sweep point.
+            frequency_param="f")``. Frequency-dependent models retain the
+            same incident-wave states and constraints as static models.
+        r0: Common finite positive real reference normalization. Defaults to
+            1.0. This sets potential/flow coordinates; it does not renormalize
+            the supplied S-matrix. Connected optical models and boundaries
+            must use compatible coordinates.
 
     Returns:
         A :class:`~circulax.components.base_component.CircuitComponent`
@@ -311,8 +237,9 @@ def sax_component(
         RuntimeError: If the dry run fails for any reason.
 
     """
+    r0 = validate_reference(r0)
     if frequency_param is not None:
-        return _build_frequency_sax_component(fn, frequency_param=frequency_param, name=name)
+        return _build_frequency_sax_component(fn, frequency_param=frequency_param, name=name, r0=r0)
 
     sig = inspect.signature(fn)
     base_fn = _unwrap(fn)
@@ -324,12 +251,9 @@ def sax_component(
     try:
         dummy_s_dict = fn(**defaults)
         detected_ports = get_ports(dummy_s_dict)
-        dummy_s_matrix, _ = sdense(dummy_s_dict)
     except Exception as exc:
         msg = f"Failed to dry-run SAX component '{cls_name}': {exc}"
         raise RuntimeError(msg) from exc
-
-    use_wave_stamp = _needs_wave_stamp(dummy_s_matrix)
 
     # Component variables use attribute access, which requires every port
     # name to be a valid Python identifier. Some SAX PDKs label
@@ -340,7 +264,7 @@ def sax_component(
     for raw, sanitized in raw_to_sanitized.items():
         sanitized_to_raw.setdefault(sanitized, []).append(raw)
     port_names = tuple(raw_to_sanitized[str(p)] for p in detected_ports)
-    aux_state_names = tuple(f"wave_{p}" for p in port_names) if use_wave_stamp else ()
+    aux_state_names = tuple(f"wave_{p}" for p in port_names)
 
     def physics_wrapper(signals: Signals, **kwargs) -> tuple[dict, dict]:  # noqa: ANN003
         s_dict = fn(**kwargs)
@@ -353,20 +277,7 @@ def sax_component(
         s_matrix, port_map = sdense(s_dict)
         matrix_order = sorted(port_map, key=port_map.get)  # raw names, matrix-row order
         sanitized_in_order = [_sanitize_port(p) for p in matrix_order]
-        v_vec = jnp.array([getattr(signals, p) for p in sanitized_in_order], dtype=jnp.complex128)
-
-        if use_wave_stamp:
-            a_vec = jnp.array([getattr(signals, f"wave_{p}") for p in sanitized_in_order], dtype=jnp.complex128)
-            b_vec = s_matrix.astype(jnp.complex128) @ a_vec
-            i_vec = a_vec - b_vec
-            constraints = a_vec + b_vec - v_vec
-            f_dict = {p: i_vec[k] for k, p in enumerate(sanitized_in_order)}
-            f_dict.update({f"wave_{p}": constraints[k] for k, p in enumerate(sanitized_in_order)})
-            return f_dict, {}
-
-        y_matrix = s_to_y(s_matrix)
-        i_vec = y_matrix @ v_vec
-        return {p: i_vec[k] for k, p in enumerate(sanitized_in_order)}, {}
+        return power_wave_stamp(signals, tuple(sanitized_in_order), s_matrix, r0=r0)
 
     physics_wrapper.__name__ = cls_name
     physics_wrapper.__doc__ = getattr(base_fn, "__doc__", None)
@@ -393,6 +304,7 @@ def sax_component(
 
     cls = component(ports=port_names, states=aux_state_names, holomorphic=True)(physics_wrapper)
     cls._is_sax_wrapped = True
+    cls._wave_r0 = r0
     cls._raw_to_sanitized_ports = raw_to_sanitized
     cls._sanitized_to_raw_ports = {sanitized: tuple(raws) for sanitized, raws in sanitized_to_raw.items()}
     return cls
@@ -401,16 +313,21 @@ def sax_component(
 def _build_fdomain_component(
     fn: callable,
     ports: tuple[str, ...],
+    *,
+    states: tuple[str, ...] = (),
 ) -> type[CircuitComponent]:
-    """Compile a frequency-domain admittance function into a :class:`CircuitComponent` subclass.
+    """Compile a frequency-domain local linear operator into a component class.
 
     The decorated function must have signature ``fn(f, **params) -> jnp.ndarray`` where
-    the return value is a Y-matrix of shape ``(n_ports, n_ports)``.
+    the returned square operator acts on ``(*ports, *states)``. With no states
+    it is the usual port admittance. Retained wave constraints use extra rows
+    and columns, assembled by the same DC/AC/HB scatter layout.
 
     Args:
-        fn: Admittance function.  First argument must be ``f`` (frequency in Hz);
+        fn: Local linear operator. First argument must be ``f`` (frequency in Hz);
             subsequent keyword arguments are scalar parameters with defaults.
         ports: Ordered tuple of port names matching the netlist connections.
+        states: Internal algebraic unknowns appended to the port coordinates.
 
     Returns:
         A new :class:`CircuitComponent` subclass named after ``fn`` with
@@ -445,14 +362,14 @@ def _build_fdomain_component(
     _user_fn = fn
 
     def _fast_physics(f: float, args: Any) -> jnp.ndarray:
-        """Evaluate admittance matrix at frequency *f*.
+        """Evaluate the local linear operator at frequency *f*.
 
         Args:
             f: Frequency in Hz.
             args: Parameter container (Equinox module or dict) for this instance.
 
         Returns:
-            Y-matrix of shape ``(n_ports, n_ports)``, dtype ``complex128``.
+            Square operator over ports and states, dtype ``complex128``.
 
         """
         kw = {name: _extract_param(args, name) for name in _param_names}
@@ -463,8 +380,9 @@ def _build_fdomain_component(
     namespace: dict[str, Any] = {
         "__annotations__": annotations,
         "ports": ports,
-        "states": (),
+        "states": states,
         "_is_fdomain": True,
+        "_holomorphic": True,
         "_uses_time": False,
         "_fast_physics": staticmethod(_fast_physics),
         **_defaults,
@@ -479,7 +397,7 @@ def _build_fdomain_component(
             args: Parameter container for this instance.
 
         Returns:
-            Y-matrix of shape ``(n_ports, n_ports)``.
+            Square operator over ports and states.
 
         """
         return cls._fast_physics(f, args)
@@ -541,6 +459,7 @@ def _build_frequency_sax_component(
     *,
     frequency_param: str,
     name: str | None,
+    r0: float,
 ) -> type[CircuitComponent]:
     """Build the explicit, sweep-frequency-driven form of a SAX model.
 
@@ -559,38 +478,34 @@ def _build_frequency_sax_component(
     base_fn = _unwrap(fn)
     cls_name = name if name is not None else getattr(base_fn, "__name__", "SaxComponent")
 
-    # fdomain_model preserves its source function as private provenance.  In
-    # this common route, use it directly instead of numerically undoing its
-    # Y -> S conversion at every sweep point.
-    source_fn = getattr(fn, "_fdomain_admittance", None)
-    source_frequency = getattr(fn, "_fdomain_frequency_param", None)
-    if source_fn is not None and source_frequency == frequency_param:
-        cls = _build_fdomain_component(source_fn, getattr(fn, "_fdomain_ports"))
-        cls.__name__ = cls_name
-        cls.__qualname__ = cls_name
-        return cls
-
     defaults = {
         param.name: param.default if param.default is not inspect.Parameter.empty else 1.0
         for param in params
         if param.name != frequency_param
     }
     try:
-        initial_kwargs = {**defaults, frequency_param: by_name[frequency_param].default}
+        initial_kwargs = {**defaults, frequency_param: 0.0}
         dummy_s_dict = fn(**initial_kwargs)
         detected_ports = get_ports(dummy_s_dict)
     except Exception as exc:
         msg = f"Failed to dry-run frequency-driven SAX component '{cls_name}': {exc}"
         raise RuntimeError(msg) from exc
 
-    def sax_admittance(f: float, **kwargs: Any) -> jax.Array:
-        s_dict = fn(**{**kwargs, frequency_param: f})
-        s_matrix, _ = sdense(s_dict)
-        return s_to_y(s_matrix)
+    port_names = tuple(_sanitize_port(port) for port in detected_ports)
+    states = tuple(f"wave_{port}" for port in port_names)
 
-    sax_admittance.__name__ = cls_name
-    sax_admittance.__doc__ = getattr(base_fn, "__doc__", None)
-    sax_admittance.__signature__ = inspect.Signature(
+    def sax_operator(f: float, **kwargs: Any) -> jax.Array:
+        s_dict = fn(**{**kwargs, frequency_param: f})
+        s_matrix, port_map = sdense(s_dict)
+        # The solver layout follows discovered ports, while sdense may use
+        # dictionary insertion order. Align both operator axes explicitly.
+        indices = jnp.array([port_map[port] for port in detected_ports])
+        s_matrix = s_matrix[indices[:, None], indices[None, :]]
+        return power_wave_operator(s_matrix, r0=r0)
+
+    sax_operator.__name__ = cls_name
+    sax_operator.__doc__ = getattr(base_fn, "__doc__", None)
+    sax_operator.__signature__ = inspect.Signature(
         parameters=[
             inspect.Parameter("f", inspect.Parameter.POSITIONAL_OR_KEYWORD),
             *[
@@ -605,7 +520,12 @@ def _build_frequency_sax_component(
             ],
         ]
     )
-    return _build_fdomain_component(sax_admittance, tuple(_sanitize_port(port) for port in detected_ports))
+    cls = _build_fdomain_component(sax_operator, port_names, states=states)
+    cls._is_sax_wrapped = True
+    cls._wave_r0 = r0
+    cls._raw_to_sanitized_ports = {str(p): _sanitize_port(p) for p in detected_ports}
+    cls._sanitized_to_raw_ports = {p: (str(raw),) for p, raw in zip(port_names, detected_ports, strict=True)}
+    return cls
 
 
 # ---------------------------------------------------------------------------

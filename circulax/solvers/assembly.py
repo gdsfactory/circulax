@@ -21,6 +21,7 @@ algebra kernels.
 """
 
 import functools
+from typing import Any
 
 import equinox as eqx
 import equinox.internal as eqxi
@@ -34,6 +35,15 @@ try:
     from bosdi.circulax import OsdiComponentGroup
 except ImportError:
     OsdiComponentGroup = None
+
+
+def evaluate_fdomain(group: Any, frequency: Array | float) -> Array:
+    """Batch a local frequency operator over ports and auxiliary states.
+
+    Explicit axis size also supports parameter-free scattering models, whose
+    parameter pytree has no array leaves for vmap to infer a batch size from.
+    """
+    return jax.vmap(functools.partial(group.physics_func, frequency), axis_size=group.var_indices.shape[0])(group.params)
 
 
 def _assemble_osdi_group(
@@ -441,7 +451,7 @@ def assemble_system_real(
         if group.is_fdomain:
             # F-domain component: evaluate admittance at f=0 (DC).
             v_locs = y_guess[group.var_indices]
-            Y_mats = jax.vmap(lambda p: group.physics_func(0.0, p))(group.params)
+            Y_mats = evaluate_fdomain(group, 0.0)
             Y_real = Y_mats.real  # (N, n_ports, n_ports)
             f_l = jnp.einsum("nij,nj->ni", Y_real, v_locs)  # (N, n_ports)
             total_f = total_f.at[group.eq_indices].add(f_l)
@@ -866,7 +876,7 @@ def assemble_system_complex(
             # F-domain component: evaluate admittance at f=0 (DC) — complex circuit path.
             v_r, v_i = y_real[group.var_indices], y_imag[group.var_indices]
             v_c = v_r + 1j * v_i  # (N, n_ports) complex
-            Y_mats = jax.vmap(lambda p: group.physics_func(0.0, p))(group.params)
+            Y_mats = evaluate_fdomain(group, 0.0)
             i_c = jnp.einsum("nij,nj->ni", Y_mats, v_c)  # (N, n_ports) complex
             idx_r, idx_i = group.eq_indices, group.eq_indices + half_size
             total_f = total_f.at[idx_r].add(i_c.real).at[idx_i].add(i_c.imag)
