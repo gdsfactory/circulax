@@ -24,6 +24,7 @@
 * Photonic Examples
     * [Traveling-Wave MZM](examples/traveling_wave_mzm.md)
     * [TFLN Traveling-Wave MZM](examples/tfln_traveling_wave_mzm.md)
+    * [Semiconductor Optical Amplifier](examples/soa.md)
     * [Mach-Zehnder Modulator](examples/mzm.md)
     * [Photonics Transient](examples/photonics_transient.md)
     * [Ring Modulator](examples/ring_modulator.md)

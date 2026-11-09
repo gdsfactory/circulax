@@ -15,6 +15,7 @@ from circulax.components.phase_shifter import (
     tabulated,
 )
 from circulax.components.photonic import OpticalDelayLine, delay_line_fdomain
+from circulax.components.soa import SemiconductorOpticalAmplifier
 from circulax.components.transmission_line import (
     RLGCTransmissionLine,
     mode_transmission_line,
@@ -32,6 +33,7 @@ __all__ = [
     "LowPass1",
     "OpticalDelayLine",
     "RLGCTransmissionLine",
+    "SemiconductorOpticalAmplifier",
     "TransmissionLine",
     "characteristic_rlgc_transmission_line",
     "charge_from_capacitance_table",
