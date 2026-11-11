@@ -3,270 +3,218 @@
 All wavelength parameters are in nanometres and power in watts.
 """
 
+import equinox as eqx
 import jax.nn as jnn
 import jax.numpy as jnp
 
-from circulax.components.base_component import PhysicsReturn, Signals, component, source
-from circulax.s_transforms import fdomain_component, s_to_y
+from circulax.components.base_component import CircuitComponent, PhysicsReturn, Signals, component, source
+from circulax.power_waves import power_wave_constraints, validate_reference
+from circulax.s_transforms import s_to_y, sax_component  # noqa: F401 -- preserve conversion utility import compatibility
 
 # ===========================================================================
 # Passive Optical Components (S-Matrix based)
 # ===========================================================================
 
 
-@component(ports=("p1", "p2"), holomorphic=True)
-def OpticalWaveguide(
-    signals: Signals,
+def _bounded_parameter(value: float, name: str, *, lower: float = 0.0, upper: float = float("inf")) -> jnp.ndarray:
+    """Validate a real passive parameter without clipping its physical law."""
+    value = jnp.asarray(value)
+    invalid = ~jnp.isfinite(value) | (value < lower) | (value > upper)
+    return eqx.error_if(value, invalid, f"{name} must be finite and in [{lower}, {upper}]")
+
+
+def _waveguide_scattering(
     length_um: float = 100.0,
     loss_dB_cm: float = 1.0,
     neff: float = 2.4,
     n_group: float = 4.0,
     center_wavelength_nm: float = 1310.0,
     wavelength_nm: float = 1310.0,
-) -> PhysicsReturn:
-    """Single-mode waveguide with first-order dispersion and propagation loss.
+) -> dict:
+    """Reciprocal matched waveguide with linearised index dispersion.
 
-    The effective index is linearised around ``center_wavelength_nm`` using the
-    group index to approximate dispersion. Phase and loss are combined into a
-    complex transmission coefficient ``T``, from which the 2×2 S-matrix and
-    corresponding Y-matrix are derived.
-
-    Args:
-        signals: Field amplitudes at input (``p1``) and output (``p2``).
-        length_um: Waveguide length in micrometres. Defaults to ``100.0``.
-        loss_dB_cm: Propagation loss in dB/cm. Defaults to ``1.0``.
-        neff: Effective refractive index at ``center_wavelength_nm``. Defaults to ``2.4``.
-        n_group: Group refractive index, used to compute the dispersion slope. Defaults to ``4.0``.
-        center_wavelength_nm: Reference wavelength for dispersion expansion in nm. Defaults to ``1310.0``.
-        wavelength_nm: Operating wavelength in nm. Defaults to ``1310.0``.
-
+    Length is in um, loss in dB/cm, wavelengths in nm. Transmission is
+    10**(-loss_dB_cm*length_um/10000/20) * exp(-1j*phi), with
+    phi=2*pi*n_eff_disp*length_um*1000/wavelength_nm and
+    n_eff_disp=neff+(neff-n_group)*(wavelength_nm-center_wavelength_nm)/center_wavelength_nm.
+    This instantaneous carrier-envelope law adds no envelope flight time.
+    Passive operation requires nonnegative length and propagation loss,
+    and positive wavelengths. Both incident quadratures are retained per port.
     """
+    length_um = _bounded_parameter(length_um, "length_um")
+    loss_dB_cm = _bounded_parameter(loss_dB_cm, "loss_dB_cm")
+    wavelength_nm = _bounded_parameter(wavelength_nm, "wavelength_nm", lower=jnp.finfo(float).tiny)
+    center_wavelength_nm = _bounded_parameter(center_wavelength_nm, "center_wavelength_nm", lower=jnp.finfo(float).tiny)
     d_lam = wavelength_nm - center_wavelength_nm
-    slope = (neff - n_group) / center_wavelength_nm
-    n_eff_disp = neff + slope * d_lam
-
-    # Phase calculation
+    n_eff_disp = neff + (neff - n_group) / center_wavelength_nm * d_lam
     phi = 2.0 * jnp.pi * n_eff_disp * (length_um / wavelength_nm) * 1000.0
-
-    # Loss calculation
-    loss_val = loss_dB_cm * (length_um / 10000.0)
-    T_mag = 10.0 ** (-loss_val / 20.0)
-
-    # S-Matrix construction
-    T = T_mag * jnp.exp(-1j * phi)
-    S = jnp.array([[0.0, T], [T, 0.0]], dtype=jnp.complex128)
-
-    # Convert to Admittance (Y)
-    Y = s_to_y(S)
-
-    # Calculate Currents (I = Y * V)
-    # Note: Explicit complex cast ensures JAX treats the interaction as complex
-    v_vec = jnp.array([signals.p1, signals.p2], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-
-    return {"p1": i_vec[0], "p2": i_vec[1]}, {}
+    transmission = 10.0 ** (-loss_dB_cm * length_um / 10000.0 / 20.0) * jnp.exp(-1j * phi)
+    return {("p1", "p2"): transmission, ("p2", "p1"): transmission}
 
 
-@component(ports=("p1", "p2"), states=("i_p2",))
-def OpticalDelayLine(
-    signals: Signals,
-    length_um: float = 100.0,
-    loss_dB_cm: float = 1.0,
-    neff: float = 2.4,
-    n_group: float = 4.0,
-    wavelength_nm: float = 1310.0,
-) -> PhysicsReturn:
-    """Waveguide modelled as an explicit time-of-flight delay line (real group delay).
+def optical_waveguide(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build OpticalWaveguide with a static finite positive real reference."""
+    return sax_component(_waveguide_scattering, name="OpticalWaveguide", r0=r0)
 
-    Unlike :func:`OpticalWaveguide` -- which is a steady-state S-matrix stamp
-    only valid for CW/frequency-domain analysis -- this component enforces
-    the actual transient envelope delay: the output field at ``p2`` is the
-    input field at ``p1`` from ``tau = length_um * n_group / c`` seconds ago,
-    attenuated and phase-shifted, via a VCVS-style constraint (same pattern as
-    :func:`TunableBeamSplitter`). ``p1`` carries no self-stamp and must be
-    driven by a connected source/component, matching that same convention.
 
-    See ``circulax.solvers.assembly`` for how the delayed local state is
-    computed -- a fixed-size accepted-step history buffer read via
-    ``jnp.interp``, vmapped per-instance since ``tau`` may vary across
-    instances of different length. Adaptive and fixed step-size controllers
-    may take steps longer than ``tau``; interpolation against the current
-    Newton trial supplies the required delay Jacobian in that regime.
+OpticalWaveguide = optical_waveguide()
 
-    Args:
-        signals: Current and delayed component-local fields and branch state.
-        length_um: Waveguide length in micrometres. Defaults to ``100.0``.
-        loss_dB_cm: Propagation loss in dB/cm. Defaults to ``1.0``.
-        neff: Effective refractive index, used for the carrier phase shift
-            over the delay. Defaults to ``2.4``.
-        n_group: Group refractive index; sets the propagation delay via
-            ``tau = length_um * n_group / c``. Defaults to ``4.0``.
-        wavelength_nm: Operating wavelength in nm. Defaults to ``1310.0``.
 
+def optical_delay_line(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build a reciprocal carrier-envelope delay with a static real reference.
+
+    Both incident waves are retained. Outgoing at each port is the opposite
+    incident wave at t-tau, multiplied by physical attenuation and exp(-j*phi).
+    Length is um, wavelength nm, loss dB/cm, tau=length_um*n_group/c.
+    DC uses constant fields; transient holds y0 before t0 and interpolates
+    accepted history/current Newton trials. HB uses a periodic Fourier shift.
+    See docs/bidirectional_optical_delays.md for analysis and history limits.
     """
-    phi = 2.0 * jnp.pi * neff * (length_um / wavelength_nm) * 1000.0
-    loss_val = loss_dB_cm * (length_um / 10000.0)
-    T_mag = 10.0 ** (-loss_val / 20.0)
-    T = T_mag * jnp.exp(-1j * phi)
+    r0 = validate_reference(r0)
 
-    c_um_per_s = 2.99792458e14
-    delay = (length_um * n_group) / c_um_per_s
-    constraint = signals.p2 - T * signals.at_delay(delay).p1
+    @component(ports=("p1", "p2"), states=("wave_p1", "wave_p2"), holomorphic=True)
+    def OpticalDelayLine(  # noqa: PLR0917 -- public component parameters
+        signals: Signals,
+        length_um: float = 100.0,
+        loss_dB_cm: float = 1.0,
+        neff: float = 2.4,
+        n_group: float = 4.0,
+        wavelength_nm: float = 1310.0,
+    ) -> PhysicsReturn:
+        """Reciprocal propagation b1=T*a2(t-tau), b2=T*a1(t-tau)."""
+        length_um = _bounded_parameter(length_um, "length_um")
+        loss_dB_cm = _bounded_parameter(loss_dB_cm, "loss_dB_cm")
+        n_group = _bounded_parameter(n_group, "n_group")
+        wavelength_nm = _bounded_parameter(wavelength_nm, "wavelength_nm", lower=jnp.finfo(float).tiny)
+        phi = 2.0 * jnp.pi * neff * (length_um / wavelength_nm) * 1000.0
+        transmission = 10.0 ** (-loss_dB_cm * length_um / 10000.0 / 20.0) * jnp.exp(-1j * phi)
+        delayed = signals.at_delay(length_um * n_group / 2.99792458e14)
+        outgoing = transmission * jnp.array([delayed.wave_p2, delayed.wave_p1])
+        return power_wave_constraints(signals, ("p1", "p2"), outgoing, r0=r0, algebraic_flow=True)
 
-    return {"p1": 0.0, "p2": signals.i_p2, "i_p2": constraint}, {}
+    OpticalDelayLine._wave_r0 = r0  # noqa: SLF001 -- compiler reference metadata
+    OpticalDelayLine._wave_algebraic_flow = True  # noqa: SLF001 -- terminal F is history independent
+    return OpticalDelayLine
 
 
-@fdomain_component(ports=("p1", "p2"))
-def delay_line_fdomain(
+OpticalDelayLine = optical_delay_line()
+
+
+def _delay_scattering(
     f: float,
     length_um: float = 100.0,
     loss_dB_cm: float = 1.0,
     n_group: float = 4.0,
-) -> jnp.ndarray:
-    """Frequency-domain delay line for AC and harmonic-balance analysis.
+) -> dict:
+    """Modulation-only reciprocal delay; deliberately excludes carrier phase."""
+    length_um = _bounded_parameter(length_um, "length_um")
+    loss_dB_cm = _bounded_parameter(loss_dB_cm, "loss_dB_cm")
+    n_group = _bounded_parameter(n_group, "n_group")
+    tau = length_um * n_group / 2.99792458e14
+    transmission = 10.0 ** (-loss_dB_cm * length_um / 10000.0 / 20.0) * jnp.exp(-2j * jnp.pi * f * tau)
+    return {("p1", "p2"): transmission, ("p2", "p1"): transmission}
 
-    Models a pure transmission-line group delay: ``S21 = T_mag * exp(-j 2pi f tau)``
-    where ``tau = length_um * n_group / c`` and ``T_mag`` accounts for
-    propagation loss.  The S-matrix is converted to a Y-matrix via
-    :func:`s_to_y`.
 
-    This is a frequency-domain-only component (``f`` = modulation / signal
-    frequency, e.g. 1 GHz for an AC sweep).  Carrier-phase effects
-    (``neff``, ``wavelength_nm``) belong in the wavelength-domain
-    :func:`OpticalWaveguide` and are intentionally excluded here.
+def optical_delay_line_fdomain(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build a retained-wave DC/AC/HB delay operator at a static real reference.
 
-    This component is AC/HB-only; it cannot be used in transient simulation
-    (fdomain components raise at transient setup time).
-
-    Args:
-        f: Modulation frequency in Hz (supplied by the AC/HB solver).
-        length_um: Waveguide length in micrometres. Defaults to ``100.0``.
-        loss_dB_cm: Propagation loss in dB/cm. Defaults to ``1.0``.
-        n_group: Group refractive index; sets the propagation delay via
-            ``tau = length_um * n_group / c``. Defaults to ``4.0``.
-
+    Transmission is attenuation*exp(-j*2*pi*f*tau), with f the modulation
+    frequency in Hz. No optical carrier phase is included. Transient and
+    time-domain port-flow reconstruction remain explicitly unsupported.
     """
-    c_um_per_s = 2.99792458e14
-    loss_val = loss_dB_cm * (length_um / 10000.0)
-    T_mag = 10.0 ** (-loss_val / 20.0)
-    tau = (length_um * n_group) / c_um_per_s
-    T = T_mag * jnp.exp(-1j * 2.0 * jnp.pi * f * tau)
-    S = jnp.array([[0.0, T], [T, 0.0]], dtype=jnp.complex128)
-    return s_to_y(S)
+    return sax_component(_delay_scattering, frequency_param="f", name="delay_line_fdomain", r0=r0)
 
 
-@component(ports=("grating", "waveguide"), holomorphic=True)
-def Grating(
-    signals: Signals,
+delay_line_fdomain = optical_delay_line_fdomain()
+
+
+def _grating_scattering(
     center_wavelength_nm: float = 1310.0,
     peak_loss_dB: float = 0.0,
     bandwidth_1dB: float = 20.0,
     wavelength_nm: float = 1310.0,
-) -> PhysicsReturn:
-    """Grating coupler with Gaussian wavelength-dependent insertion loss.
+) -> dict:
+    """Reciprocal matched grating with Gaussian wavelength insertion loss.
 
-    Loss increases quadratically with detuning from ``center_wavelength_nm``,
-    approximating the Gaussian spectral response of a typical grating coupler.
-    Transmission is clipped to ``0.9999`` to keep the Y-matrix well-conditioned.
-
-    Args:
-        signals: Field amplitudes at the grating (``grating``) and waveguide (``waveguide``) ports.
-        center_wavelength_nm: Peak transmission wavelength in nm. Defaults to ``1310.0``.
-        peak_loss_dB: Insertion loss at peak wavelength in dB. Defaults to ``0.0``.
-        bandwidth_1dB: Full 1 dB bandwidth in nm. Defaults to ``20.0``.
-        wavelength_nm: Operating wavelength in nm. Defaults to ``1310.0``.
-
+    Wavelengths and full 1 dB bandwidth are in nm. Loss is peak_loss_dB plus
+    ((wavelength_nm-center_wavelength_nm)/(bandwidth_1dB/2))**2 in dB.
+    Passive operation requires nonnegative peak loss and positive bandwidth.
+    Zero insertion loss gives exactly unit transmission, without a cap.
+    Port order is (grating, waveguide).
     """
+    peak_loss_dB = _bounded_parameter(peak_loss_dB, "peak_loss_dB")
+    bandwidth_1dB = _bounded_parameter(bandwidth_1dB, "bandwidth_1dB", lower=jnp.finfo(float).tiny)
     delta = wavelength_nm - center_wavelength_nm
-    excess_loss = (delta / (0.5 * bandwidth_1dB)) ** 2
-    loss_dB = peak_loss_dB + excess_loss
-
-    T = 10.0 ** (-loss_dB / 20.0)
-    # Numerical stability clip
-    T = jnp.minimum(T, 0.9999)
-
-    S = jnp.array([[0.0, T], [T, 0.0]], dtype=jnp.complex128)
-    Y = s_to_y(S)
-
-    v_vec = jnp.array([signals.grating, signals.waveguide], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-
-    return {"grating": i_vec[0], "waveguide": i_vec[1]}, {}
+    loss = peak_loss_dB + (delta / (0.5 * bandwidth_1dB)) ** 2
+    transmission = 10.0 ** (-loss / 20.0)
+    return {("grating", "waveguide"): transmission, ("waveguide", "grating"): transmission}
 
 
-@component(ports=("p1", "p2", "p3"), holomorphic=True)
-def Splitter(signals: Signals, split_ratio: float = 0.5) -> PhysicsReturn:
-    """Lossless asymmetric optical splitter (Y-junction) with a configurable power split ratio.
+def grating(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build Grating with a static finite positive real reference."""
+    return sax_component(_grating_scattering, name="Grating", r0=r0)
 
-    The S-matrix is constructed to be unitary, with the cross-port coupling
-    carrying a ``j`` phase shift to satisfy energy conservation.
 
-    Args:
-        signals: Field amplitudes at the input (``p1``) and two output ports
-            (``p2``, ``p3``).
-        split_ratio: Fraction of input power routed to ``p2``. The remaining
-            ``1 - split_ratio`` is routed to ``p3``. Defaults to ``0.5``
-            (50/50 splitter).
+Grating = grating()
 
+
+def _splitter_scattering(split_ratio: float = 0.5) -> dict:
+    """Reciprocal passive three-port splitter with an omitted loss channel.
+
+    For 0 <= split_ratio <= 1, p1 sends that power fraction to p2 and the
+    remainder to p3 with +j phase. All physical ports are matched and there
+    is no p2/p3 coupling. This matrix is NOT unitary: its singular values
+    are (1, 1, 0). For arbitrary incident a, missing power is
+    abs(1j*sqrt(1-split_ratio)*a_p2 + sqrt(split_ratio)*a_p3)**2.
+    That orthogonal reverse-input mode exits an omitted matched loss channel.
+    Forward-only input is lossless. Port order is (p1, p2, p3).
     """
+    split_ratio = _bounded_parameter(split_ratio, "split_ratio", upper=1.0)
     r = jnp.sqrt(split_ratio)
-    tc = jnp.sqrt(1.0 - split_ratio)
-
-    S = jnp.array([[0.0, r, 1j * tc], [r, 0.0, 0.0], [1j * tc, 0.0, 0.0]], dtype=jnp.complex128)
-
-    Y = s_to_y(S)
-
-    v_vec = jnp.array([signals.p1, signals.p2, signals.p3], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-
-    return {"p1": i_vec[0], "p2": i_vec[1], "p3": i_vec[2]}, {}
+    tc = 1j * jnp.sqrt(1.0 - split_ratio)
+    return {("p1", "p2"): r, ("p2", "p1"): r, ("p1", "p3"): tc, ("p3", "p1"): tc}
 
 
-@component(ports=("p1", "p2", "p3", "p4"), holomorphic=True)
-def DirectionalCoupler(
-    signals: Signals,
-    coupling: float = 0.5,
-) -> PhysicsReturn:
-    """4-port directional coupler (2×2 beamsplitter) with configurable power split ratio.
+def splitter(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build Splitter with a static finite positive real reference."""
+    return sax_component(_splitter_scattering, name="Splitter", r0=r0)
 
-    Ports p1/p2 are the input ports; p3/p4 are the output ports.
-    Signal entering p1 exits at p3 (bar, amplitude t) and p4 (cross, amplitude jk).
-    Signal entering p2 exits at p3 (cross, jk) and p4 (bar, t).
 
-    S-matrix::
+Splitter = splitter()
 
-        S = [[0, 0, t, jk], [0, 0, jk, t], [t, jk, 0, 0], [jk, t, 0, 0]]
 
-    where t = sqrt(1 - coupling), k = sqrt(coupling).
+def _coupler_scattering(t: jnp.ndarray, k: jnp.ndarray) -> dict:
+    """Reciprocal four-port scattering with bar t and cross j*k."""
+    return {
+        ("p1", "p3"): t,
+        ("p3", "p1"): t,
+        ("p2", "p4"): t,
+        ("p4", "p2"): t,
+        ("p1", "p4"): 1j * k,
+        ("p4", "p1"): 1j * k,
+        ("p2", "p3"): 1j * k,
+        ("p3", "p2"): 1j * k,
+    }
 
-    .. note::
-        ``coupling`` is clipped to (1e-6, 1−1e-6) to prevent ``I + S`` from becoming
-        singular at the degenerate all-through (coupling=0) and all-cross (coupling=1)
-        operating points where the S-matrix has an eigenvalue of −1.
 
-    Args:
-        signals: Field amplitudes at all four ports.
-        coupling: Power fraction routed to the cross port (p4 for p1 input, p3 for p2 input).
-            Defaults to ``0.5`` (50/50 splitter).
+def _directional_coupler_scattering(coupling: float = 0.5) -> dict:
+    """Lossless reciprocal directional coupler, ordered (p1, p2, p3, p4).
 
+    For 0 <= coupling <= 1, bar amplitude sqrt(1-coupling) connects p1/p3
+    and p2/p4; cross amplitude j*sqrt(coupling) connects p1/p4 and p2/p3.
+    Exact endpoints are supported. Square-root parameter derivatives need
+    not be finite at endpoints; use TunableBeamSplitter for a smooth angle.
     """
-    coupling = jnp.clip(coupling, 1e-6, 1.0 - 1e-6)
-    t = jnp.sqrt(1.0 - coupling)
-    k = jnp.sqrt(coupling)
+    coupling = _bounded_parameter(coupling, "coupling", upper=1.0)
+    return _coupler_scattering(jnp.sqrt(1.0 - coupling), jnp.sqrt(coupling))
 
-    S = jnp.array(
-        [
-            [0.0, 0.0, t, 1j * k],
-            [0.0, 0.0, 1j * k, t],
-            [t, 1j * k, 0.0, 0.0],
-            [1j * k, t, 0.0, 0.0],
-        ],
-        dtype=jnp.complex128,
-    )
-    Y = s_to_y(S)
-    v_vec = jnp.array([signals.p1, signals.p2, signals.p3, signals.p4], dtype=jnp.complex128)
-    i_vec = Y @ v_vec
-    return {"p1": i_vec[0], "p2": i_vec[1], "p3": i_vec[2], "p4": i_vec[3]}, {}
+
+def directional_coupler(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build DirectionalCoupler with a static finite positive real reference."""
+    return sax_component(_directional_coupler_scattering, name="DirectionalCoupler", r0=r0)
+
+
+DirectionalCoupler = directional_coupler()
 
 
 # ===========================================================================
@@ -348,55 +296,20 @@ def OpticalSourcePulse(
 # ===========================================================================
 
 
-@component(ports=("p1", "p2", "p3", "p4"), states=("i_top", "i_bot"), holomorphic=True)
-def TunableBeamSplitter(
-    signals: Signals,
-    theta: float = jnp.pi / 4,
-) -> PhysicsReturn:
-    """Ideal lossless 2×2 directional coupler with a variable coupling angle.
+def _tunable_beam_splitter_scattering(theta: float = jnp.pi / 4) -> dict:
+    """Lossless reciprocal four-port coupler with bar cos(theta), cross j*sin(theta).
 
-    Implements a tunable beam splitter using a Modified Nodal Analysis (MNA)
-    voltage-controlled voltage source (VCVS) stamp, which avoids the
-    near-singular ``(I + S)`` matrix that arises when applying ``s_to_y`` to
-    a lossless transmission-only S-matrix.
-
-    The transmission relations enforced are::
-
-        E_p3 = cos(theta) * E_p1 + j * sin(theta) * E_p2
-        E_p4 = j * sin(theta) * E_p1 + cos(theta) * E_p2
-
-    Special cases:
-
-    * ``theta = 0``       — bar state: ``p1 → p3``, ``p2 → p4`` (no coupling).
-    * ``theta = pi/4``    — 50/50 beamsplitter (default).
-    * ``theta = pi/2``    — cross state: ``p1 → p4``, ``p2 → p3`` (full coupling).
-
-    Two internal state variables ``i_top`` and ``i_bot`` carry the branch
-    currents at the output ports ``p3`` and ``p4`` respectively.  The input
-    ports ``p1`` and ``p2`` contribute no self-stamp; they must be driven by
-    connected sources or loads to avoid floating nodes.
-
-    Gradient flow is exact via ``jax.grad`` for all values of ``theta``
-    when using the ``"dense"`` solver backend.
-
-    Args:
-        signals: Port fields and branch-current states ``i_top`` and ``i_bot``.
-        theta: Coupling angle in radians.  Controls the power split ratio:
-            ``P_cross / P_total = sin²(theta)``.  Defaults to ``pi/4`` (50/50).
-
+    Port order is (p1, p2, p3, p4). Forward transmission retains the former
+    convention; reverse illumination and reflecting loads now obey the same
+    reciprocal scattering law. Four incident-wave states replace i_top/i_bot.
+    The angle parameter is smooth, including bar/cross endpoints.
     """
-    c = jnp.cos(theta).astype(jnp.complex128)
-    js = (1j * jnp.sin(theta)).astype(jnp.complex128)
+    return _coupler_scattering(jnp.cos(theta), jnp.sin(theta))
 
-    # Voltage constraints (VCVS): enforce transmission relations
-    eq_top = signals.p3 - c * signals.p1 - js * signals.p2
-    eq_bot = signals.p4 - js * signals.p1 - c * signals.p2
 
-    return {
-        "p1": 0.0,  # no self-stamp on input ports
-        "p2": 0.0,
-        "p3": signals.i_top,  # VCVS branch current injected at output p3
-        "p4": signals.i_bot,  # VCVS branch current injected at output p4
-        "i_top": eq_top,  # constraint: E_p3 = cos(θ)·E_p1 + j·sin(θ)·E_p2
-        "i_bot": eq_bot,  # constraint: E_p4 = j·sin(θ)·E_p1 + cos(θ)·E_p2
-    }, {}
+def tunable_beam_splitter(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build TunableBeamSplitter with a static finite positive real reference."""
+    return sax_component(_tunable_beam_splitter_scattering, name="TunableBeamSplitter", r0=r0)
+
+
+TunableBeamSplitter = tunable_beam_splitter()

@@ -919,9 +919,10 @@ class Circuit:
         terminal F flow, without depending on auxiliary state names. Supported
         components declare a wave reference and have algebraic terminal flows:
         SAX wrappers and explicit optical wave boundaries. Frequency operators
-        support DC only (their zero-frequency operator). Delayed models,
-        legacy potential sources, and dynamic port
-        charges require a separate flow reconstruction and are rejected here.
+        support DC only (their zero-frequency operator). Delayed wave models with
+        explicitly history-independent terminal F are also supported. Other delayed
+        models, legacy potential sources, and dynamic port charges require a separate
+        flow reconstruction and are rejected here.
 
         Pass the same scalar parameter updates used for the solve. Leading y
         dimensions are sample/batch dimensions, with broadcastable sample times.
@@ -941,7 +942,7 @@ class Circuit:
         if len(matches) != 1:
             raise KeyError(port)
         group = matches[0]
-        if group.wave_reference is None or group.has_delay:
+        if group.wave_reference is None or (group.has_delay and not getattr(type(group.params), "_wave_algebraic_flow", False)):
             msg = "port_waves requires an algebraic power-wave component (SAX or explicit optical wave boundary)"
             raise ValueError(msg)
         if group.is_fdomain and analysis != "dc":

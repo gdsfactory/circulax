@@ -63,9 +63,9 @@ The static transistor models describe DC conduction; the dynamic variants also i
 | Component | Purpose |
 | --- | --- |
 | [`OpticalWaveguide`](../references/components/photonic.md#circulax.components.photonic.OpticalWaveguide) | Waveguide with optical phase, propagation loss, and first-order dispersion. |
-| [`OpticalDelayLine`](../references/components/photonic.md#circulax.components.photonic.OpticalDelayLine) | Waveguide modelled as an explicit time-of-flight delay line (real group delay). |
+| [`OpticalDelayLine`](../references/components/photonic.md#circulax.components.photonic.OpticalDelayLine) | Reciprocal retained-wave carrier-envelope delay, including reflected light. |
 | [`Grating`](../references/components/photonic.md#circulax.components.photonic.Grating) | Grating coupler with Gaussian wavelength-dependent insertion loss. |
-| [`Splitter`](../references/components/photonic.md#circulax.components.photonic.Splitter) | Three-port optical splitter with a configurable power split ratio. |
+| [`Splitter`](../references/components/photonic.md#circulax.components.photonic.Splitter) | Reciprocal passive three-port splitter with configurable power split and an omitted matched loss channel. |
 | [`DirectionalCoupler`](../references/components/photonic.md#circulax.components.photonic.DirectionalCoupler) | 4-port directional coupler (2×2 beamsplitter) with configurable power split ratio. |
 | [`TunableBeamSplitter`](../references/components/photonic.md#circulax.components.photonic.TunableBeamSplitter) | Ideal lossless 2×2 directional coupler with a variable coupling angle. |
 | [`OpticalSource`](../references/components/photonic.md#circulax.components.photonic.OpticalSource) | Ideal CW optical source for DC and small-signal AC analysis. |
@@ -73,7 +73,14 @@ The static transistor models describe DC conduction; the dynamic variants also i
 | [`phase_shifter_factory`](../references/components/phase_shifter.md#circulax.components.phase_shifter.phase_shifter_factory) | Electro-optic phase shifter from voltage-dependent index, loss and optional junction charge. |
 | [`pn_diode`](../references/components/phase_shifter.md#circulax.components.phase_shifter.pn_diode) | Reusable electrical junction with depletion charge and diode current. |
 | [`junction_model`](../references/components/phase_shifter.md#circulax.components.phase_shifter.junction_model) | Electrical junction from supplied current, charge or capacitance functions. |
-| [`delay_line_fdomain`](../references/components/photonic.md#circulax.components.photonic.delay_line_fdomain) | Frequency-domain delay line for AC and harmonic-balance analysis. |
+| [`delay_line_fdomain`](../references/components/photonic.md#circulax.components.photonic.delay_line_fdomain) | Retained-wave modulation-only delay for DC, AC and harmonic balance. |
+
+The five algebraic native passives use [retained power-wave ports](../native_passive_power_waves.md),
+including exact lossless through and coupling endpoints. Use explicit launched-wave
+sources/terminations and `Circuit.port_waves` for traveling envelopes and powers.
+`Splitter` is forward-lossless but absorbs one coherent reverse-input mode;
+`TunableBeamSplitter` now propagates in both directions. Legacy sources, delays,
+detectors, and mixed models have separate semantics.
 
 Optical circuits use complex field envelopes. Enable float64 and compile with `is_complex=True`. Use `OpticalDelayLine` when explicit propagation delay is needed in a transient simulation; `delay_line_fdomain` supplies a frequency-domain representation for AC and harmonic balance.
 
@@ -100,3 +107,5 @@ These factories construct circuit models from sampled line properties. The Foste
 | [`rational_delay_component`](../references/components/rational.md#circulax.components.rational.rational_delay_component) | Create an fdomain component from SSModel + per-port delay. |
 
 `rational_component` provides a time-domain realization. The frequency-domain factories support frequency-response analysis. See [Rational Model Enforcement](../rational_model_enforcement.md) and the [vector-fitting example](../examples/vector_fitting.md) for fitting and validation.
+
+See [Bidirectional Optical Delays](../bidirectional_optical_delays.md) for phase conventions, history semantics, observables and raw-state migration.
