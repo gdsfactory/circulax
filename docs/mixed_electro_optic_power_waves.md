@@ -1,5 +1,7 @@
 # Mixed electro-optic phase-shifter power waves
 
+Current follow-up: [notebook observations and small-signal traveling-power derivatives](notebook_power_wave_observations.md). The scope and validation below describe this earlier milestone.
+
 This is the `phase_shifter_factory` milestone of [issue #112](https://github.com/gdsfactory/circulax/issues/112),
 based on delay commit `ffb35317f483b7389c2a539c0f0220b27bce15df` and its
 native-passive parent `0ba4de2edf323e9c149170c8fc0d3ad8f93ffeeb`.

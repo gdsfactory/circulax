@@ -1,5 +1,7 @@
 # Native passive power-wave migration
 
+Current follow-up: [notebook observations and small-signal traveling-power derivatives](notebook_power_wave_observations.md). The scope and validation below describe this earlier milestone.
+
 This is the native algebraic passive milestone of [issue #112](https://github.com/gdsfactory/circulax/issues/112),
 built on the SAX and [optical boundary/observable](optical_wave_boundaries.md) milestones.
 It does **not** complete the issue or migrate the entire photonic library.

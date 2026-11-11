@@ -1,5 +1,7 @@
 # Bidirectional optical delays
 
+Current follow-up: [notebook observations and small-signal traveling-power derivatives](notebook_power_wave_observations.md). The scope and validation below describe this earlier milestone.
+
 This is the delay milestone of [issue #112](https://github.com/gdsfactory/circulax/issues/112),
 built on the [native passive](native_passive_power_waves.md) and
 [optical boundary](optical_wave_boundaries.md) milestones. The issue remains open.

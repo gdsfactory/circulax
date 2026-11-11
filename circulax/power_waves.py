@@ -45,6 +45,22 @@ class PortWaves(NamedTuple):
         return self.incident_power - self.outgoing_power
 
 
+class PortPowerResponse(NamedTuple):
+    """Complex RF peak phasors of traveling-power modulation, in W.
+
+    These are derivatives about a total DC field, not squared AC fields.
+    Net power is positive into the selected component.
+    """
+
+    incident: jax.Array
+    outgoing: jax.Array
+
+    @property
+    def net(self) -> jax.Array:
+        """Signed net-power modulation into the component, in W."""
+        return self.incident - self.outgoing
+
+
 def reconstruct_waves(potential: jax.Array, flow: jax.Array, *, r0: float = 1.0) -> PortWaves:
     """Reconstruct total waves from potential and signed terminal flow.
 

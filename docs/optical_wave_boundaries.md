@@ -1,5 +1,7 @@
 # Optical wave boundaries and observables
 
+Current follow-up: [notebook observations and small-signal traveling-power derivatives](notebook_power_wave_observations.md). The scope and validation below describe this earlier milestone.
+
 Explicit wave boundaries are available alongside the existing optical sources.
 This describes the source/observable milestone of issue #112. The subsequent
 [native passive migration](native_passive_power_waves.md) adds five algebraic

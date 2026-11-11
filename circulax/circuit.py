@@ -14,8 +14,8 @@ import jax.numpy as jnp
 import kfnetlist as kfnl
 
 from circulax.netlist import _is_recursive_netlist
-from circulax.power_waves import PortWaves, reconstruct_waves
-from circulax.small_signal import SmallSignalModel, build_small_signal_model, validate_small_signal_groups
+from circulax.power_waves import PortPowerResponse, PortWaves, reconstruct_waves
+from circulax.small_signal import SmallSignalModel, SmallSignalResponse, build_small_signal_model, validate_small_signal_groups
 from circulax.solvers.ac_sweep import setup_ac_response
 from circulax.solvers.source_settings import record_dc_override
 from circulax.utils import apply_global_params, update_params_dict
@@ -970,6 +970,54 @@ class Circuit:
             )
             flow = flows[:, local_port].reshape(values.shape[:-1])
         return reconstruct_waves(local[..., local_port], flow, r0=group.wave_reference)
+
+    def port_power_response(
+        self,
+        response: SmallSignalResponse,
+        port: str,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> PortPowerResponse:
+        """Differentiate traveling powers about a small-signal DC operating point.
+
+        Returns incident/outgoing/net modulation in W as complex RF peak
+        phasors. Both optical coordinates are differentiated as real variables;
+        RF phase is retained independently. Use this circuit and the same scalar
+        runtime parameters as the small_signal solve. External vmap is supported.
+
+        Only complete, instantaneous terminal F flows with zero optical Q are
+        supported, including delay models declaring algebraic terminal flow.
+        Frequency-domain flow reconstruction and independent source terminals
+        (which require an explicit forcing derivative) are rejected. Observe
+        the connected passive/detector terminal instead. This does not compute
+        total power, electrical power, or square an AC field perturbation.
+        """
+        if (
+            response.num_vars != self.sys_size
+            or response.is_complex != self.solver.is_complex
+            or response.aliases != tuple(sorted(self.port_map.items()))
+        ):
+            msg = "response must use this circuit's small-signal layout"
+            raise ValueError(msg)
+        if response.y_dc.ndim != 1 or response.solution.ndim != 2:
+            msg = "port_power_response needs one operating point; use external vmap for batches"
+            raise ValueError(msg)
+        groups = self._with_param_values(self._require_scalar_params(params or {}, "port_power_response"))
+        instance = port.partition(",")[0]
+        for group in groups.values():
+            if instance in (getattr(group, "index_map", None) or {}) and (group.is_fdomain or group.ac_source_stamp):
+                msg = "port_power_response requires instantaneous terminal flow without independent source forcing"
+                raise ValueError(msg)
+
+        def powers(state: jax.Array) -> jax.Array:
+            waves = self.port_waves(state, port, params=params)
+            return jnp.stack((waves.incident_power, waves.outgoing_power))
+
+        # Linearize a real observable with respect to real state coordinates.
+        # Each coordinate's tangent is itself a complex RF phasor.
+        _, derivative = jax.linearize(powers, response.y_dc)
+        phasors = jax.vmap(lambda tangent: derivative(tangent.real) + 1j * derivative(tangent.imag))(response.solution)
+        return PortPowerResponse(phasors[..., 0], phasors[..., 1])
 
     def with_groups(self, groups: dict) -> Circuit:
         """Return a new Circuit with replaced component groups.

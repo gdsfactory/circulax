@@ -87,8 +87,9 @@ class SmallSignalResponse(eqx.Module):
 
         Declared power-wave component terminal potentials (including electrical
         terminals of mixed components) are rejected: use total-field
-        Circuit.port_waves for DC/transient/HB samples. AC traveling-power
-        reconstruction is not provided here. For other aliases the caller
+        Circuit.port_waves for DC/transient/HB samples and
+        Circuit.port_power_response for supported traveling-power derivatives.
+        For other aliases the caller
         remains responsible for declaring a normalized traveling field.
 
         field_unit must be 'sqrt(W)', explicitly declaring the selected field

@@ -1,5 +1,7 @@
 # Detector power waves
 
+Current follow-up: [notebook observations and small-signal traveling-power derivatives](notebook_power_wave_observations.md). The scope and validation below describe this earlier milestone.
+
 This detector milestone of [issue #112](https://github.com/gdsfactory/circulax/issues/112)
 builds on the uncommitted [phase-shifter milestone](mixed_electro_optic_power_waves.md)
 at `ffb35317f483b7389c2a539c0f0220b27bce15df`. It does not complete #112.
