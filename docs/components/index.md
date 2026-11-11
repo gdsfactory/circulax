@@ -79,8 +79,11 @@ The five algebraic native passives use [retained power-wave ports](../native_pas
 including exact lossless through and coupling endpoints. Use explicit launched-wave
 sources/terminations and `Circuit.port_waves` for traveling envelopes and powers.
 `Splitter` is forward-lossless but absorbs one coherent reverse-input mode;
-`TunableBeamSplitter` now propagates in both directions. Legacy sources, delays,
-detectors, and mixed models have separate semantics.
+`TunableBeamSplitter` now propagates in both directions. The
+[bidirectional delays](../bidirectional_optical_delays.md) and
+[mixed phase shifter](../mixed_electro_optic_power_waves.md) share this optical
+contract with their documented timing and analysis limits. Legacy sources,
+detectors and other mixed models have separate semantics.
 
 Optical circuits use complex field envelopes. Enable float64 and compile with `is_complex=True`. Use `OpticalDelayLine` when explicit propagation delay is needed in a transient simulation; `delay_line_fdomain` supplies a frequency-domain representation for AC and harmonic balance.
 

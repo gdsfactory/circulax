@@ -9,7 +9,7 @@ so the same component serves DC operating points and transient simulation,
 including traveling-wave modulators built from repeated sections. Compile
 circuits that contain it with ``is_complex=True``. The junction voltage is
 taken as a real part, so the component is not holomorphic. Use
-``Circuit.small_signal()`` for its quadrature and optical-power response;
+``Circuit.small_signal()`` for its complete field quadratures;
 the legacy ``ac_response()`` interface excludes this mixed optical model.
 
 The electrical junction is a separate :class:`JunctionModel`, built with
@@ -37,6 +37,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from circulax.components.base_component import CircuitComponent, PhysicsReturn, Signals, component
+from circulax.power_waves import power_wave_constraints, validate_reference
 
 __all__ = [
     "JunctionModel",
@@ -439,6 +440,7 @@ def phase_shifter_factory(
     loss_dB_cm: VoltageFunction | float = 0.0,
     junction: JunctionModel | None = None,
     name: str = "PhaseShifter",
+    r0: float = 1.0,
 ) -> type[CircuitComponent]:
     """Build an electro-optic phase shifter component from functions of voltage.
 
@@ -462,6 +464,8 @@ def phase_shifter_factory(
             as for a Pockels (e.g. thin-film lithium niobate) modulator with
             no junction, whose electrode capacitance belongs in the RF line.
         name: Class name of the generated component.
+        r0: Static finite positive real optical reference (default 1). Does
+            not rescale the electrical voltage, current or charge.
 
     Returns:
         A component class with ports ``("anode", "cathode", "o1", "o2")`` and
@@ -469,7 +473,9 @@ def phase_shifter_factory(
         ``delta_neff`` is zero), ``n_group``, ``wavelength_nm`` plus the
         keyword parameters of the supplied functions.
 
-    Optical model: the section is a matched, reciprocal 1 Ω waveguide. Light
+    Optical model: the section is a matched, reciprocal power-wave guide.
+    Optical potential is sqrt(r0)*(a+b), flow into the section is
+    (a-b)/sqrt(r0), with incident power |a|² and outgoing power |b|². Light
     takes ``length_um * n_group / c`` to cross it in either direction. The
     voltage-dependent transmission
     ``T(v) = 10**(-loss_dB_cm(v)*L_cm/20) * exp(-2j*pi*(neff + delta_neff(v))*L/λ)``
@@ -497,6 +503,7 @@ def phase_shifter_factory(
         # The diode parameters (cj0_F_per_m, vbi, ...) are settings of every "PN" instance.
 
     """
+    r0 = validate_reference(r0)
     if junction is not None and not isinstance(junction, JunctionModel):
         msg = "junction must be a JunctionModel from pn_diode() or junction_model()"
         raise TypeError(msg)
@@ -513,15 +520,18 @@ def phase_shifter_factory(
         transmission = 10.0 ** (-loss_db / 20.0) * jnp.exp(-2j * jnp.pi * neff * length_um * 1e3 / wavelength_nm)
         b1 = transmission * past.m_reverse
         b2 = transmission * past.m_forward
-        f = {
-            "o1": signals.a_forward - b1,
-            "o2": signals.a_reverse - b2,
-            "a_forward": signals.o1 - signals.a_forward - b1,
-            "a_reverse": signals.o2 - signals.a_reverse - b2,
-            "m_forward": signals.m_forward - past.a_forward,
-            "m_reverse": signals.m_reverse - past.a_reverse,
-        }
-        q = {}
+        f, q = power_wave_constraints(
+            signals,
+            ("o1", "o2"),
+            jnp.array([b1, b2]),
+            r0=r0,
+            algebraic_flow=True,
+            incident_states=("a_forward", "a_reverse"),
+        )
+        # One delayed snapshot implements both half-transits. These midpoint
+        # states carry unmodulated sqrt(W) envelopes, in both directions.
+        f["m_forward"] = signals.m_forward - past.a_forward
+        f["m_reverse"] = signals.m_reverse - past.a_reverse
         if junction is not None:
             v_now = jnp.real(signals.anode - signals.cathode)
             length_m = length_um * 1e-6
@@ -532,7 +542,13 @@ def phase_shifter_factory(
         return f, q
 
     _set_signature(physics, name, _RUNTIME_DEFAULTS, tuple(merged.values()))
-    return component(
+    cls = component(
         ports=("anode", "cathode", "o1", "o2"),
         states=("a_forward", "a_reverse", "m_forward", "m_reverse"),
+        holomorphic=False,
     )(physics)
+    # Only optical terminals declare complete history-independent F and zero Q.
+    cls._wave_r0 = r0
+    cls._wave_ports = ("o1", "o2")
+    cls._wave_algebraic_flow = True
+    return cls

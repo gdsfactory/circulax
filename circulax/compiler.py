@@ -75,6 +75,8 @@ class ComponentGroup(eqx.Module):
     holomorphic: bool = eqx.field(static=True, default=False)
     is_sax_wrapped: bool = eqx.field(static=True, default=False)
     wave_reference: float | None = eqx.field(static=True, default=None)
+    # Only these terminals have complete optical F flows and zero optical Q.
+    wave_ports: tuple[str, ...] = eqx.field(static=True, default=())
 
     # Fixed time-delay support (see circulax.solvers.assembly). ``has_delay``
     # is inferred from ``signals.at_delay(...)`` during compilation;
@@ -421,6 +423,7 @@ def compile_netlist(  # noqa: C901, PLR0912, PLR0915
             holomorphic=getattr(comp_cls, "_holomorphic", True),
             is_sax_wrapped=getattr(comp_cls, "_is_sax_wrapped", False),
             wave_reference=getattr(comp_cls, "_wave_r0", None),
+            wave_ports=getattr(comp_cls, "_wave_ports", comp_cls.ports if hasattr(comp_cls, "_wave_r0") else ()),
             has_delay=has_delay,
             tau_func=comp_cls.tau_of if has_delay else None,
         )

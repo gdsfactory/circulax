@@ -920,8 +920,9 @@ class Circuit:
         components declare a wave reference and have algebraic terminal flows:
         SAX wrappers and explicit optical wave boundaries. Frequency operators
         support DC only (their zero-frequency operator). Delayed wave models with
-        explicitly history-independent terminal F are also supported. Other delayed
-        models, legacy potential sources, and dynamic port charges require a separate
+        explicitly history-independent terminal F are also supported, including
+        phase-shifter optical terminals. Mixed electrical terminals are rejected.
+        Other delayed models, legacy potential sources, and dynamic port charges require a separate
         flow reconstruction and are rejected here.
 
         Pass the same scalar parameter updates used for the solve. Leading y
@@ -948,11 +949,7 @@ class Circuit:
         if group.is_fdomain and analysis != "dc":
             msg = "frequency-dependent port_waves supports DC only; time-domain terminal flows require reconstruction"
             raise ValueError(msg)
-        cls = type(group.params)
-        terminal = getattr(cls, "_raw_to_sanitized_ports", {}).get(terminal, terminal)
-        if terminal not in cls.ports:
-            raise KeyError(port)
-        local_port = cls.ports.index(terminal)
+        local_port = _wave_terminal_index(group, terminal, port)
         index = group.index_map[instance]
         local_params = jax.tree.map(lambda leaf: leaf[index] if eqx.is_array(leaf) else leaf, group.params)
         values = jnp.asarray(y)
@@ -1285,3 +1282,15 @@ def _group_outputs_complex(group: Any) -> bool:
         )
         return False
     return bool(jnp.iscomplexobj(f_vals) or jnp.iscomplexobj(q_vals))
+
+
+def _wave_terminal_index(group: Any, terminal: str, port: str) -> int:
+    """Resolve a declared optical terminal without admitting mixed electrodes."""
+    cls = type(group.params)
+    terminal = getattr(cls, "_raw_to_sanitized_ports", {}).get(terminal, terminal)
+    if terminal not in cls.ports:
+        raise KeyError(port)
+    if terminal not in group.wave_ports:
+        msg = f"port_waves requires an optical terminal; {port!r} is electrical or lacks a complete wave-flow contract"
+        raise ValueError(msg)
+    return cls.ports.index(terminal)
