@@ -751,6 +751,12 @@ class SparseSolver(CircuitLinearSolver):
     def _solve_impl(self, all_vals: jax.Array, residual: jax.Array) -> lx.Solution:
         # Jacobi preconditioner: extract diagonal, add leakage and ground stiffness.
         diag_vals = jax.ops.segment_sum(all_vals * self.diag_mask, self.static_rows, num_segments=self.sys_size)
+        # Retained wave/MNA rows can have a structurally zero diagonal.
+        # Scaling those rows by 1/g_leak amplifies roundoff and can stall
+        # transient Newton steps. Use their row norm as a preconditioner
+        # scale; the actual operator and its regularization are unchanged.
+        row_norm = jax.ops.segment_sum(jnp.abs(all_vals), self.static_rows, num_segments=self.sys_size)
+        diag_vals = jnp.where(jnp.abs(diag_vals) < 1e-12, row_norm, diag_vals)
         diag_vals = diag_vals + self.g_leak
         for idx in self.ground_indices:
             diag_vals = diag_vals.at[idx].add(GROUND_STIFFNESS)

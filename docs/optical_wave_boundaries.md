@@ -1,8 +1,10 @@
 # Optical wave boundaries and observables
 
 Explicit wave boundaries are available alongside the existing optical sources.
-This is the source/observable milestone of issue #112; native passives, delays,
-detectors, mixed electro-optic models, and opt-in convergence work remain separate.
+This describes the source/observable milestone of issue #112. The subsequent
+[native passive migration](native_passive_power_waves.md) adds five algebraic
+passives to this contract; delays, detectors, mixed electro-optic models, and
+opt-in convergence work remain separate.
 
 For each component port, with flow **positive into that component**:
 
@@ -127,7 +129,8 @@ same scalar `params` updates used for the solve, and the sample times for a
 time-varying boundary. Leading sample dimensions are preserved; parameter batches
 can use external `jax.vmap` around solving and reading waves together.
 
-The accessor supports static SAX components and these explicit boundaries, whose
+The accessor supports static SAX components, the five migrated native algebraic
+passives, and these explicit boundaries, whose
 terminal flows are algebraic. Frequency-dependent SAX wrappers support DC only,
 using their zero-frequency local operator. It rejects their time-domain
 observables, legacy sources, delayed components, and components without the wave
@@ -160,8 +163,8 @@ connection physics. Use explicit adapters for physical reference/mode changes.
 Connect exactly two compatible optical component terminals per node. Use an
 explicit physical splitter for branching; an electrical-style shared node is
 not a substitute for an optical splitter. The compiler does not yet enforce
-optical disciplines or these connection assumptions. Do not assume native
-passives, delays, detectors, or mixed models already share this contract.
+optical disciplines or these connection assumptions. Only the five native passives listed in the migration guide share this contract;
+do not assume delays, detectors, or mixed models do.
 Existing `Circuit.port` continues to return the potential, with no new power
-interpretation. No existing source settings, convergence defaults, or raw state
-layouts change in this milestone.
+interpretation. No existing source settings or convergence defaults change. The native passive
+milestone changes raw state layouts as described in its migration guide.
