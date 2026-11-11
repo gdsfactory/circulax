@@ -63,6 +63,19 @@ def unsaturated_gain(
     return slope * (density - transparency_m3) * length_um * 1e-6
 
 
+def stimulated_power(gain: ArrayLike, loss: ArrayLike, input_power: ArrayLike) -> ArrayLike:
+    """Stimulated optical generation (W) in a uniform logarithmic-gain cell.
+
+    Integrate g*P along the cell. Passive absorption is excluded from carrier
+    extraction. The series preserves finite derivatives at zero net gain.
+    """
+    net = gain - loss
+    small = jnp.abs(net) < 1e-5
+    safe_net = jnp.where(small, 1.0, net)
+    exprel = jnp.where(small, 1 + net / 2 + net**2 / 6 + net**3 / 24, jnp.expm1(net) / safe_net)
+    return input_power * gain * exprel
+
+
 @component(ports=("anode", "cathode", "optical_in", "optical_out"), states=("v_j", "h", "i_out"), holomorphic=False)
 def SemiconductorOpticalAmplifier(  # noqa: PLR0917 -- component parameters are declared as model fields
     signals: Signals,
@@ -123,13 +136,7 @@ def SemiconductorOpticalAmplifier(  # noqa: PLR0917 -- component parameters are 
     h_real = jnp.real(signals.h)
     pin = jnp.abs(signals.optical_in) ** 2
     loss = loss_db_per_cm * length_um / 10000.0 * jnp.log(10.0) / 10.0
-    net = h_real - loss
-    # Integrate g*P along a constant-gain segment, excluding passive absorption
-    # from carrier extraction. A safe denominator preserves derivatives at net=0.
-    small = jnp.abs(net) < 1e-5
-    safe_net = jnp.where(small, 1.0, net)
-    exprel = jnp.where(small, 1 + net / 2 + net**2 / 6 + net**3 / 24, jnp.expm1(net) / safe_net)
-    depletion = saturation * lifetime_s * pin * h_real * exprel / energy
+    depletion = saturation * lifetime_s * stimulated_power(h_real, loss, pin) / energy
     output = signals.optical_in * jnp.exp(0.5 * ((1 - 1j * alpha_h) * h_real - loss))
     return {
         "anode": terminal_current,
