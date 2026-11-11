@@ -1,10 +1,10 @@
 # Copyright (c) 2026 GDSFactory
 
-"""Forward diode coupled to a single-pass, integrated optical gain state.
+"""Bidirectional diode-driven SOA with a shared, integrated optical gain state.
 
-Optical ports use complex envelopes in sqrt(W). The directional field
-constraint is intended for feed-forward envelope circuits, with no facet
-reflections. All material and diode parameters are illustrative.
+Optical ports use the same unit-reference-impedance wave convention as SAX
+components: V=a+b and I=a-b, with I entering the device. Incident and outgoing
+waves a/b have units sqrt(W). All material and diode parameters are illustrative.
 """
 
 import jax.numpy as jnp
@@ -76,8 +76,12 @@ def stimulated_power(gain: ArrayLike, loss: ArrayLike, input_power: ArrayLike) -
     return input_power * gain * exprel
 
 
-@component(ports=("anode", "cathode", "optical_in", "optical_out"), states=("v_j", "h", "i_out"), holomorphic=False)
-def SemiconductorOpticalAmplifier(  # noqa: PLR0917 -- component parameters are declared as model fields
+@component(
+    ports=("anode", "cathode", "optical_in", "optical_out"),
+    states=("v_j", "h", "wave_optical_in", "wave_optical_out"),
+    holomorphic=False,
+)
+def SemiconductorOpticalAmplifier(
     signals: Signals,
     length_um: float = 600.0,
     width_um: float = 2.0,
@@ -97,18 +101,31 @@ def SemiconductorOpticalAmplifier(  # noqa: PLR0917 -- component parameters are 
     resistance_ohm: float = 5.0,
     capacitance_f: float = 150e-15,
 ) -> PhysicsReturn:
-    """Diode injection, gain depletion/recovery, and carrier-induced phase.
+    """Reciprocal optical transmission with diode injection and shared saturation.
 
-    ``h`` is the integral of modal gain over length. Its storage term yields
-    tau*dh/dt = h0(I_D)-h-saturation*Pin*expm1(h)/Psat for zero passive loss.
+    ``optical_in`` and ``optical_out`` retain their names for connectivity but
+    either port accepts light. States ``wave_optical_in/out`` are the incident
+    fields a_L/a_R; outgoing fields are b_L=T*a_R and b_R=T*a_L. Optical port
+    values are total fields V=a+b, not incident power amplitudes when reflected
+    light is present. Port flows are I=a-b at unit reference impedance. Use a
+    matched source and matched termination for a reflection-free experiment.
+
+    ``h`` is the integral of modal gain over length. Both incident powers
+    deplete the same reservoir: tau*dh/dt=h0-h-saturation*tau*P_stim/E_sat.
+    P_stim=(|a_L|^2+|a_R|^2)*h*exprel(h-loss), using a uniform gain per section.
+    With zero loss and a_R=0 this recovers the original forward-only equation.
+    Counterpropagating interference is spatially averaged: standing-wave
+    carrier gratings and spatial hole burning are not resolved. Bidirectional
+    loading generally needs a segment-convergence check even at zero loss.
+
     Set saturation=0 for a linear amplifier, and alpha_h=0 for no chirp.
     The junction's displacement current is excluded from carrier injection.
     Diode Is and C scale with contact area; vertical series R scales inversely.
     ASE is sampled separately with :func:`ase_field`, never inside Newton.
-    Uniform passive loss is approximated with constant gain per segment.
-    Subdivide the device to resolve loss with longitudinal depletion. The model
-    neglects thermal effects and ASE depletion. Time follows the optical envelope;
-    propagation delay is not included.
+    The optical interfaces are reflection-free internally; external components
+    may reflect light back through them. Transmission has no propagation delay
+    or cold-waveguide phase. Cavity round-trip timing and laser dynamics need
+    a traveling-wave model. Thermal effects and ASE depletion are omitted.
     """
     contact_scale = length_um * width_um / (600.0 * 2.0)
     vj = signals.v_j
@@ -134,18 +151,21 @@ def SemiconductorOpticalAmplifier(  # noqa: PLR0917 -- component parameters are 
         wavelength_nm=wavelength_nm,
     )
     h_real = jnp.real(signals.h)
-    pin = jnp.abs(signals.optical_in) ** 2
+    left_in, right_in = signals.wave_optical_in, signals.wave_optical_out
+    pin = jnp.abs(left_in) ** 2 + jnp.abs(right_in) ** 2
     loss = loss_db_per_cm * length_um / 10000.0 * jnp.log(10.0) / 10.0
     depletion = saturation * lifetime_s * stimulated_power(h_real, loss, pin) / energy
-    output = signals.optical_in * jnp.exp(0.5 * ((1 - 1j * alpha_h) * h_real - loss))
+    transmission = jnp.exp(0.5 * ((1 - 1j * alpha_h) * h_real - loss))
+    left_out, right_out = transmission * right_in, transmission * left_in
     return {
         "anode": terminal_current,
         "cathode": -terminal_current,
         "v_j": (diode_current - terminal_current) / 0.1,
         "h": signals.h - h0 + depletion,
-        "optical_in": signals.optical_in,
-        "optical_out": signals.i_out,
-        "i_out": signals.optical_out - output,
+        "optical_in": left_in - left_out,
+        "optical_out": right_in - right_out,
+        "wave_optical_in": left_in + left_out - signals.optical_in,
+        "wave_optical_out": right_in + right_out - signals.optical_out,
     }, {"v_j": capacitance_f * contact_scale * vj / 0.1, "h": lifetime_s * signals.h}
 
 
