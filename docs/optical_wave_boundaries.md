@@ -5,8 +5,9 @@ This describes the source/observable milestone of issue #112. The subsequent
 [native passive migration](native_passive_power_waves.md) adds five algebraic
 passives to this contract. The [delay milestone](bidirectional_optical_delays.md)
 adds bidirectional delay support. The [mixed phase-shifter milestone](mixed_electro_optic_power_waves.md)
-adds optical-terminal-specific observables for `phase_shifter_factory`; detectors,
-other mixed models and opt-in convergence work remain separate.
+adds optical-terminal-specific observables for `phase_shifter_factory`. The
+[detector milestone](detector_power_waves.md) adds reusable absorbed-power detectors
+and notebook integration. Other mixed models and opt-in convergence work remain separate.
 
 For each component port, with flow **positive into that component**:
 

@@ -89,6 +89,14 @@ Optical circuits use complex field envelopes. Enable float64 and compile with `i
 
 For complete circuits, see the [Mach–Zehnder modulator](../examples/mzm.md), [traveling-wave MZM](../examples/traveling_wave_mzm.md), [photonic transient](../examples/photonics_transient.md), and [ring modulator](../examples/ring_modulator.md) tutorials. The traveling-wave tutorial defines its PN phase-shifter component and composes the MZM from electrode and optical sections.
 
+### Photodetectors
+
+`IdealPhotodetector`, `Photodiode` and `CarrierPhotodiode` are reusable absorbed-power
+models with one optical terminal and electrical anode/cathode. Their factories
+`ideal_photodetector`, `photodiode` and `carrier_photodiode` accept a static optical
+`r0`. See [Detector Power Waves](../detector_power_waves.md) for responsivity,
+carrier/charge balance, parameter units, supported analyses and migration.
+
 ## Fitted transmission lines
 
 | Component | Purpose |
