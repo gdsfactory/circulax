@@ -105,7 +105,7 @@ class SmallSignalResponse(eqx.Module):
             msg = "power() currently supports optical fields in complex-mode circuits only"
             raise NotImplementedError(msg)
         if port in self.wave_component_ports:
-            msg = "power() cannot interpret a power-wave component terminal potential as traveling-wave power"
+            msg = "power() cannot interpret a power-wave component terminal potential or non-wave state as traveling-wave power"
             raise ValueError(msg)
         index = self._index(port)
         dx, dy = self.quadratures(port)
@@ -280,7 +280,11 @@ def build_small_signal_model(
                     for group in groups.values()
                     if getattr(group, "wave_reference", None) is not None
                     for instance in (group.index_map or {})
-                    for port in (*type(group.params).ports, *getattr(type(group.params), "_raw_to_sanitized_ports", {}))
+                    for port in (
+                        *type(group.params).ports,
+                        *getattr(type(group.params), "_raw_to_sanitized_ports", {}),
+                        *getattr(type(group.params), "_non_wave_states", ()),
+                    )
                 }
             )
         ),

@@ -1,6 +1,15 @@
+# Copyright 2026 Circulax contributors
 """Reusable electronic, photonic and fitted circuit models."""
 
 from circulax.components.characteristic_line import characteristic_rlgc_transmission_line
+from circulax.components.detectors import (
+    CarrierPhotodiode,
+    IdealPhotodetector,
+    Photodiode,
+    carrier_photodiode,
+    ideal_photodetector,
+    photodiode,
+)
 from circulax.components.electronic import CoupledInductors, DifferentialAdapter, IdealTransformer, TransmissionLine
 from circulax.components.filters import Bessel3, Biquad, LowPass1
 from circulax.components.optical_boundaries import (
@@ -46,10 +55,12 @@ from circulax.components.transmission_line import (
 __all__ = [
     "Bessel3",
     "Biquad",
+    "CarrierPhotodiode",
     "CoupledInductors",
     "DifferentialAdapter",
     "DirectionalCoupler",
     "Grating",
+    "IdealPhotodetector",
     "IdealTransformer",
     "JunctionModel",
     "LowPass1",
@@ -57,10 +68,12 @@ __all__ = [
     "OpticalWaveSource",
     "OpticalWaveTermination",
     "OpticalWaveguide",
+    "Photodiode",
     "RLGCTransmissionLine",
     "Splitter",
     "TransmissionLine",
     "TunableBeamSplitter",
+    "carrier_photodiode",
     "characteristic_rlgc_transmission_line",
     "charge_from_capacitance_table",
     "delay_line_fdomain",
@@ -69,6 +82,7 @@ __all__ = [
     "diode_current",
     "directional_coupler",
     "grating",
+    "ideal_photodetector",
     "junction_model",
     "mode_transmission_line",
     "optical_delay_line",
@@ -77,6 +91,7 @@ __all__ = [
     "optical_wave_termination",
     "optical_waveguide",
     "phase_shifter_factory",
+    "photodiode",
     "pn_diode",
     "reduced_rlgc_transmission_line",
     "rlgc_transmission_line",

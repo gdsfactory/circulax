@@ -8,6 +8,7 @@
     * [Native Passive Power Waves](native_passive_power_waves.md)
     * [Bidirectional Optical Delays](bidirectional_optical_delays.md)
     * [Mixed Electro-optic Power Waves](mixed_electro_optic_power_waves.md)
+    * [Detector Power Waves](detector_power_waves.md)
     * [Rational Model Enforcement](rational_model_enforcement.md)
     * [Fitting API](fitting_api.md)
     * [Harmonic Balance](harmonic_balance.md)
