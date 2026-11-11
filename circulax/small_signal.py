@@ -44,6 +44,7 @@ class SmallSignalResponse(eqx.Module):
     aliases: tuple[tuple[str, int], ...] = eqx.field(static=True)
     num_vars: int = eqx.field(static=True)
     is_complex: bool = eqx.field(static=True)
+    wave_component_ports: tuple[str, ...] = eqx.field(static=True, default=())
 
     @property
     def port_map(self) -> dict[str, int]:
@@ -84,6 +85,12 @@ class SmallSignalResponse(eqx.Module):
     def power(self, port: str, *, field_unit: str) -> jax.Array:
         """Return complex optical power-modulation peak phasors in watts.
 
+        Declared power-wave component terminal potentials (including electrical
+        terminals of mixed components) are rejected: use total-field
+        Circuit.port_waves for DC/transient/HB samples. AC traveling-power
+        reconstruction is not provided here. For other aliases the caller
+        remains responsible for declaring a normalized traveling field.
+
         field_unit must be 'sqrt(W)', explicitly declaring the selected field
         power normalized, with P = |E|**2. This computes
         2 * (x_dc * dx + y_dc * dy), preserving RF phase. It is not DC power,
@@ -97,6 +104,9 @@ class SmallSignalResponse(eqx.Module):
         if not self.is_complex:
             msg = "power() currently supports optical fields in complex-mode circuits only"
             raise NotImplementedError(msg)
+        if port in self.wave_component_ports:
+            msg = "power() cannot interpret a power-wave component terminal potential as traveling-wave power"
+            raise ValueError(msg)
         index = self._index(port)
         dx, dy = self.quadratures(port)
         return 2 * (self.y_dc[..., index, None] * dx + self.y_dc[..., index + self.num_vars, None] * dy)
@@ -135,6 +145,7 @@ class SmallSignalModel(eqx.Module):
     source_names: tuple[str, ...] = eqx.field(static=True)
     num_vars: int = eqx.field(static=True)
     is_complex: bool = eqx.field(static=True)
+    wave_component_ports: tuple[str, ...] = eqx.field(static=True, default=())
 
     def __call__(
         self,
@@ -196,6 +207,7 @@ class SmallSignalModel(eqx.Module):
             self.aliases,
             self.num_vars,
             self.is_complex,
+            self.wave_component_ports,
         )
 
     def response(
@@ -261,4 +273,15 @@ def build_small_signal_model(
         source_names,
         circuit.sys_size,
         is_complex,
+        tuple(
+            sorted(
+                {
+                    f"{instance},{port}"
+                    for group in groups.values()
+                    if getattr(group, "wave_reference", None) is not None
+                    for instance in (group.index_map or {})
+                    for port in (*type(group.params).ports, *getattr(type(group.params), "_raw_to_sanitized_ports", {}))
+                }
+            )
+        ),
     )

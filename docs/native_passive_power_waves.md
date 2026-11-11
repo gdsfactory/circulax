@@ -192,9 +192,10 @@ GPU execution, full notebooks, and the full documentation-site build were not ru
 The subsequent [bidirectional delay milestone](bidirectional_optical_delays.md)
 migrates `OpticalDelayLine` and `delay_line_fdomain`, including history,
 carrier/modulation phase and supported public observables. Rational
-frequency-domain models still retain a conversion path. Detectors, phase
-shifters and other mixed electro-optic models have not been migrated or audited
-here. Their compatibility must not be inferred from the models above.
+frequency-domain models still retain a conversion path. The subsequent
+[phase-shifter milestone](mixed_electro_optic_power_waves.md) migrates `phase_shifter_factory`. Detectors and other mixed electro-optic models
+have not been migrated here. Their compatibility must not be inferred from
+the models above.
 Detector semantics, remaining conversions, and wider notebook migrations
 remain subsequent work. No FIR propagation or generalized delays are
 implemented. PR #98 remains separate and opt-in; convergence defaults are untouched.

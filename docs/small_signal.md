@@ -203,3 +203,16 @@ The new API preserves non-holomorphic derivatives automatically. There is no
 reference impedances and matching terminations; `small_signal()` retains the
 physical source/load circuit and its full internal response. Pole/zero and noise
 analysis are not part of this API yet.
+
+## Retained optical wave terminals
+
+`power()` differentiates a caller-declared normalized field intensity. A wave
+component's terminal potential includes both incident and returning light; its
+squared magnitude is not traveling power. Declared wave-component terminal
+names now reject this helper, including electrical terminals of mixed models.
+Other aliases still require the caller's explicit normalization/matching
+assertion; an alias does not make a reflected potential a traveling field.
+Use `Circuit.port_waves` for supported total DC, transient and HB time samples.
+AC traveling-power reconstruction remains deferred; field quadratures and
+sidebands remain available. The [phase-shifter guide](mixed_electro_optic_power_waves.md)
+describes full optical transit, midpoint voltage modulation and electrical Q.

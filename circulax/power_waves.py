@@ -108,6 +108,7 @@ def power_wave_constraints(
     *,
     r0: float = 1.0,
     algebraic_flow: bool = False,
+    incident_states: tuple[str, ...] | None = None,
 ) -> PhysicsReturn:
     """Stamp retained incident constraints for arbitrary outgoing envelopes.
 
@@ -115,10 +116,15 @@ def power_wave_constraints(
     replace terminal flow by ``(2*a - potential/sqrt(r0))/sqrt(r0)``. This adds
     the retained constraint divided by sqrt(r0) to each terminal row;
     it preserves the physical solution for arbitrary reflections and delays.
+    ``incident_states`` preserves directional state names in native models;
+    its order must match ``ports`` (by default, ``wave_<port>``).
     Terminal F then depends only on current fields (Q=0), so complete flows
     can be reconstructed without the accepted-step history at solved samples.
     """
-    states = tuple(f"wave_{port}" for port in ports)
+    states = tuple(f"wave_{port}" for port in ports) if incident_states is None else incident_states
+    if len(states) != len(ports):
+        msg = "incident_states must contain one state per optical port"
+        raise ValueError(msg)
     incident = jnp.array([getattr(signals, state) for state in states], dtype=jnp.complex128)
     potential = jnp.array([getattr(signals, port) for port in ports], dtype=jnp.complex128)
     root = jnp.sqrt(r0)

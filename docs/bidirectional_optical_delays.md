@@ -173,7 +173,9 @@ has a physical circulating nullspace. The tests distinguish this whole-network
 singularity from local device validity, without optical-ground penalties or
 leakage. No solver convergence defaults change.
 
-Detectors, mixed electro-optic laws, rational-model conversion paths, FIR,
+The subsequent [phase-shifter milestone](mixed_electro_optic_power_waves.md)
+reuses this terminal-flow construction while preserving midpoint modulation and
+electrical F/Q. Detectors, other mixed electro-optic laws, rational-model conversion paths, FIR,
 notebook migration and PR #98 are outside this milestone. PR #98 remains
 separate and opt-in. The validation results below describe the checked CPU
 paths; they do not establish GPU or arbitrary broadband/dispersive accuracy.

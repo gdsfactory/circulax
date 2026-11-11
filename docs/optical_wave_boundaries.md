@@ -4,8 +4,9 @@ Explicit wave boundaries are available alongside the existing optical sources.
 This describes the source/observable milestone of issue #112. The subsequent
 [native passive migration](native_passive_power_waves.md) adds five algebraic
 passives to this contract. The [delay milestone](bidirectional_optical_delays.md)
-adds bidirectional delay support; detectors, mixed electro-optic models, and
-opt-in convergence work remain separate.
+adds bidirectional delay support. The [mixed phase-shifter milestone](mixed_electro_optic_power_waves.md)
+adds optical-terminal-specific observables for `phase_shifter_factory`; detectors,
+other mixed models and opt-in convergence work remain separate.
 
 For each component port, with flow **positive into that component**:
 
@@ -136,8 +137,10 @@ terminal flows are algebraic. Frequency-dependent SAX wrappers support DC only,
 using their zero-frequency local operator. It rejects their time-domain
 observables, legacy sources, and components without the wave contract.
 `OpticalDelayLine` supports DC, transient and HB time samples because its
-complete terminal F flows are history independent; other delayed models remain
-rejected unless they explicitly provide that contract. For other models,
+complete terminal F flows are history independent. The same applies to the optical
+`o1`/`o2` terminals of `phase_shifter_factory`, whose electrical terminals are
+explicitly rejected even when the group declares a wave reference. Other delayed
+models remain rejected unless they explicitly provide that contract. For other models,
 `circulax.power_waves.reconstruct_waves(potential, flow, r0=...)` is reusable once
 the caller has the **complete** signed terminal flow, including any dQ/dt.
 
@@ -168,7 +171,7 @@ explicit physical splitter for branching; an electrical-style shared node is
 not a substitute for an optical splitter. The compiler does not yet enforce
 optical disciplines or these connection assumptions. The five native passives and the two migrated delay models share the
 documented contract and their respective analysis limits;
-do not assume detectors or mixed models do.
+do not assume detectors or other mixed models do.
 Existing `Circuit.port` continues to return the potential, with no new power
 interpretation. No existing source settings or convergence defaults change. The native passive
 milestone changes raw state layouts as described in its migration guide.
