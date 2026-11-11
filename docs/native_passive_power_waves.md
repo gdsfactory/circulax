@@ -189,11 +189,12 @@ GPU execution, full notebooks, and the full documentation-site build were not ru
 
 ## Remaining paths and milestones
 
-`OpticalDelayLine` remains a legacy directional voltage constraint.
-`delay_line_fdomain` still converts S to Y, and rational frequency-domain
-models also retain a conversion path. Detectors, phase shifters and other mixed
-electro-optic models have not been migrated or audited here. Their compatibility
-must not be inferred from the five models above. Bidirectional delay/history,
-detector semantics, remaining conversions, and wider notebook migrations belong
-to subsequent work. No FIR propagation or generalized delays are implemented.
-PR #98 remains separate and opt-in; convergence defaults are untouched.
+The subsequent [bidirectional delay milestone](bidirectional_optical_delays.md)
+migrates `OpticalDelayLine` and `delay_line_fdomain`, including history,
+carrier/modulation phase and supported public observables. Rational
+frequency-domain models still retain a conversion path. Detectors, phase
+shifters and other mixed electro-optic models have not been migrated or audited
+here. Their compatibility must not be inferred from the models above.
+Detector semantics, remaining conversions, and wider notebook migrations
+remain subsequent work. No FIR propagation or generalized delays are
+implemented. PR #98 remains separate and opt-in; convergence defaults are untouched.

@@ -6,6 +6,7 @@
     * [Waveform Sources](waveform_sources.md)
     * [Optical Wave Boundaries](optical_wave_boundaries.md)
     * [Native Passive Power Waves](native_passive_power_waves.md)
+    * [Bidirectional Optical Delays](bidirectional_optical_delays.md)
     * [Rational Model Enforcement](rational_model_enforcement.md)
     * [Fitting API](fitting_api.md)
     * [Harmonic Balance](harmonic_balance.md)

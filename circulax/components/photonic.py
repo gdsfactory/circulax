@@ -8,7 +8,8 @@ import jax.nn as jnn
 import jax.numpy as jnp
 
 from circulax.components.base_component import CircuitComponent, PhysicsReturn, Signals, component, source
-from circulax.s_transforms import fdomain_component, s_to_y, sax_component
+from circulax.power_waves import power_wave_constraints, validate_reference
+from circulax.s_transforms import s_to_y, sax_component  # noqa: F401 -- preserve conversion utility import compatibility
 
 # ===========================================================================
 # Passive Optical Components (S-Matrix based)
@@ -59,92 +60,72 @@ def optical_waveguide(*, r0: float = 1.0) -> type[CircuitComponent]:
 OpticalWaveguide = optical_waveguide()
 
 
-@component(ports=("p1", "p2"), states=("i_p2",))
-def OpticalDelayLine(
-    signals: Signals,
-    length_um: float = 100.0,
-    loss_dB_cm: float = 1.0,
-    neff: float = 2.4,
-    n_group: float = 4.0,
-    wavelength_nm: float = 1310.0,
-) -> PhysicsReturn:
-    """Waveguide modelled as an explicit time-of-flight delay line (real group delay).
+def optical_delay_line(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build a reciprocal carrier-envelope delay with a static real reference.
 
-    Unlike :func:`OpticalWaveguide` -- an instantaneous carrier-envelope stamp
-    without envelope flight time -- this component enforces
-    the actual transient envelope delay: the output field at ``p2`` is the
-    input field at ``p1`` from ``tau = length_um * n_group / c`` seconds ago,
-    attenuated and phase-shifted, via a legacy VCVS-style constraint. ``p1``
-    carries no self-stamp and must be driven by a connected source/component,
-    using a legacy directional convention.
-
-    See ``circulax.solvers.assembly`` for how the delayed local state is
-    computed -- a fixed-size accepted-step history buffer read via
-    ``jnp.interp``, vmapped per-instance since ``tau`` may vary across
-    instances of different length. Adaptive and fixed step-size controllers
-    may take steps longer than ``tau``; interpolation against the current
-    Newton trial supplies the required delay Jacobian in that regime.
-
-    Args:
-        signals: Current and delayed component-local fields and branch state.
-        length_um: Waveguide length in micrometres. Defaults to ``100.0``.
-        loss_dB_cm: Propagation loss in dB/cm. Defaults to ``1.0``.
-        neff: Effective refractive index, used for the carrier phase shift
-            over the delay. Defaults to ``2.4``.
-        n_group: Group refractive index; sets the propagation delay via
-            ``tau = length_um * n_group / c``. Defaults to ``4.0``.
-        wavelength_nm: Operating wavelength in nm. Defaults to ``1310.0``.
-
+    Both incident waves are retained. Outgoing at each port is the opposite
+    incident wave at t-tau, multiplied by physical attenuation and exp(-j*phi).
+    Length is um, wavelength nm, loss dB/cm, tau=length_um*n_group/c.
+    DC uses constant fields; transient holds y0 before t0 and interpolates
+    accepted history/current Newton trials. HB uses a periodic Fourier shift.
+    See docs/bidirectional_optical_delays.md for analysis and history limits.
     """
-    phi = 2.0 * jnp.pi * neff * (length_um / wavelength_nm) * 1000.0
-    loss_val = loss_dB_cm * (length_um / 10000.0)
-    T_mag = 10.0 ** (-loss_val / 20.0)
-    T = T_mag * jnp.exp(-1j * phi)
+    r0 = validate_reference(r0)
 
-    c_um_per_s = 2.99792458e14
-    delay = (length_um * n_group) / c_um_per_s
-    constraint = signals.p2 - T * signals.at_delay(delay).p1
+    @component(ports=("p1", "p2"), states=("wave_p1", "wave_p2"), holomorphic=True)
+    def OpticalDelayLine(  # noqa: PLR0917 -- public component parameters
+        signals: Signals,
+        length_um: float = 100.0,
+        loss_dB_cm: float = 1.0,
+        neff: float = 2.4,
+        n_group: float = 4.0,
+        wavelength_nm: float = 1310.0,
+    ) -> PhysicsReturn:
+        """Reciprocal propagation b1=T*a2(t-tau), b2=T*a1(t-tau)."""
+        length_um = _bounded_parameter(length_um, "length_um")
+        loss_dB_cm = _bounded_parameter(loss_dB_cm, "loss_dB_cm")
+        n_group = _bounded_parameter(n_group, "n_group")
+        wavelength_nm = _bounded_parameter(wavelength_nm, "wavelength_nm", lower=jnp.finfo(float).tiny)
+        phi = 2.0 * jnp.pi * neff * (length_um / wavelength_nm) * 1000.0
+        transmission = 10.0 ** (-loss_dB_cm * length_um / 10000.0 / 20.0) * jnp.exp(-1j * phi)
+        delayed = signals.at_delay(length_um * n_group / 2.99792458e14)
+        outgoing = transmission * jnp.array([delayed.wave_p2, delayed.wave_p1])
+        return power_wave_constraints(signals, ("p1", "p2"), outgoing, r0=r0, algebraic_flow=True)
 
-    return {"p1": 0.0, "p2": signals.i_p2, "i_p2": constraint}, {}
+    OpticalDelayLine._wave_r0 = r0  # noqa: SLF001 -- compiler reference metadata
+    OpticalDelayLine._wave_algebraic_flow = True  # noqa: SLF001 -- terminal F is history independent
+    return OpticalDelayLine
 
 
-@fdomain_component(ports=("p1", "p2"))
-def delay_line_fdomain(
+OpticalDelayLine = optical_delay_line()
+
+
+def _delay_scattering(
     f: float,
     length_um: float = 100.0,
     loss_dB_cm: float = 1.0,
     n_group: float = 4.0,
-) -> jnp.ndarray:
-    """Frequency-domain delay line for AC and harmonic-balance analysis.
+) -> dict:
+    """Modulation-only reciprocal delay; deliberately excludes carrier phase."""
+    length_um = _bounded_parameter(length_um, "length_um")
+    loss_dB_cm = _bounded_parameter(loss_dB_cm, "loss_dB_cm")
+    n_group = _bounded_parameter(n_group, "n_group")
+    tau = length_um * n_group / 2.99792458e14
+    transmission = 10.0 ** (-loss_dB_cm * length_um / 10000.0 / 20.0) * jnp.exp(-2j * jnp.pi * f * tau)
+    return {("p1", "p2"): transmission, ("p2", "p1"): transmission}
 
-    Models a pure transmission-line group delay: ``S21 = T_mag * exp(-j 2pi f tau)``
-    where ``tau = length_um * n_group / c`` and ``T_mag`` accounts for
-    propagation loss.  The S-matrix is converted to a Y-matrix via
-    :func:`s_to_y`.
 
-    This is a frequency-domain-only component (``f`` = modulation / signal
-    frequency, e.g. 1 GHz for an AC sweep).  Carrier-phase effects
-    (``neff``, ``wavelength_nm``) belong in the wavelength-domain
-    :func:`OpticalWaveguide` and are intentionally excluded here.
+def optical_delay_line_fdomain(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build a retained-wave DC/AC/HB delay operator at a static real reference.
 
-    This component is AC/HB-only; it cannot be used in transient simulation
-    (fdomain components raise at transient setup time).
-
-    Args:
-        f: Modulation frequency in Hz (supplied by the AC/HB solver).
-        length_um: Waveguide length in micrometres. Defaults to ``100.0``.
-        loss_dB_cm: Propagation loss in dB/cm. Defaults to ``1.0``.
-        n_group: Group refractive index; sets the propagation delay via
-            ``tau = length_um * n_group / c``. Defaults to ``4.0``.
-
+    Transmission is attenuation*exp(-j*2*pi*f*tau), with f the modulation
+    frequency in Hz. No optical carrier phase is included. Transient and
+    time-domain port-flow reconstruction remain explicitly unsupported.
     """
-    c_um_per_s = 2.99792458e14
-    loss_val = loss_dB_cm * (length_um / 10000.0)
-    T_mag = 10.0 ** (-loss_val / 20.0)
-    tau = (length_um * n_group) / c_um_per_s
-    T = T_mag * jnp.exp(-1j * 2.0 * jnp.pi * f * tau)
-    S = jnp.array([[0.0, T], [T, 0.0]], dtype=jnp.complex128)
-    return s_to_y(S)
+    return sax_component(_delay_scattering, frequency_param="f", name="delay_line_fdomain", r0=r0)
+
+
+delay_line_fdomain = optical_delay_line_fdomain()
 
 
 def _grating_scattering(

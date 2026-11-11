@@ -97,8 +97,31 @@ def power_wave_stamp(signals: Signals, ports: tuple[str, ...], s_matrix: jax.Arr
     ``ports`` must follow the S-matrix's row/column ordering. This includes
     diagonal reflections and arbitrary multiport coupling.
     """
+    incident = jnp.array([getattr(signals, f"wave_{port}") for port in ports], dtype=jnp.complex128)
+    return power_wave_constraints(signals, ports, jnp.asarray(s_matrix) @ incident, r0=r0)
+
+
+def power_wave_constraints(
+    signals: Signals,
+    ports: tuple[str, ...],
+    outgoing: jax.Array,
+    *,
+    r0: float = 1.0,
+    algebraic_flow: bool = False,
+) -> PhysicsReturn:
+    """Stamp retained incident constraints for arbitrary outgoing envelopes.
+
+    ``outgoing`` may depend on delayed incident states. With ``algebraic_flow``,
+    replace terminal flow by ``(2*a - potential/sqrt(r0))/sqrt(r0)``. This adds
+    the retained constraint divided by sqrt(r0) to each terminal row;
+    it preserves the physical solution for arbitrary reflections and delays.
+    Terminal F then depends only on current fields (Q=0), so complete flows
+    can be reconstructed without the accepted-step history at solved samples.
+    """
     states = tuple(f"wave_{port}" for port in ports)
-    names = (*ports, *states)
-    values = jnp.array([getattr(signals, name) for name in names], dtype=jnp.complex128)
-    residual = power_wave_operator(s_matrix, r0=r0) @ values
-    return dict(zip(names, residual, strict=True)), {}
+    incident = jnp.array([getattr(signals, state) for state in states], dtype=jnp.complex128)
+    potential = jnp.array([getattr(signals, port) for port in ports], dtype=jnp.complex128)
+    root = jnp.sqrt(r0)
+    constraint = incident + outgoing - potential / root
+    flow = (2 * incident - potential / root) / root if algebraic_flow else (incident - outgoing) / root
+    return {**dict(zip(ports, flow, strict=True)), **dict(zip(states, constraint, strict=True))}, {}
