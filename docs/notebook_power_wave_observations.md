@@ -118,24 +118,47 @@ as described in the detector guide; this notebook milestone does not change them
 
 ## Remaining-path inventory
 
-The following concrete paths remain after this focused migration:
+The delayed TPA follow-up is documented in
+[nonlinear optical power waves](nonlinear_optical_power_waves.md).
+`examples/photonic/photonics_transient.ipynb` is now migrated: the library
+`NonlinearOpticalWaveguide` preserves independently delayed directional TPA,
+loss, effective length and carrier phase. Explicit pulse emission/terminations
+and public total incident-power observations replace its local model,
+potential source and resistor monitors. This closes this path, not the issue.
 
-- `examples/photonic/photonics_transient.ipynb`: notebook-local
-  `NonlinearOpticalWaveguide` has incident states, bidirectional delayed
-  intensity-dependent TPA, and a configurable `z0`, but lacks the shared wave
-  metadata/observable contract. Its legacy potential pulse source, resistor
-  monitors and field-squared observations still need an independent delayed
-  nonlinear derivative, boundary and normalization audit.
-- `examples/photonic/ring_modulator.ipynb`: `RingModulator`, `RingModSetup` and
-  `RingModulatorEO`, plus local potential pulse/step/sinusoidal/NRZ sources.
-  Audit resonator-state energy normalization, through-port signed flow,
-  electro-optic sidebands, transient/HB powers and electrical RC behavior before
-  migrating their potential-based observations. The circulating-state magnitude
-  must not be relabeled as terminal traveling power.
-- `examples/photonic/tfln_traveling_wave_mzm.ipynb`: its `sectioned_mzm` uses a
-  legacy potential source and resistor boundaries, and squares returned fields
-  for comparison with the analytical TFLN response. Audit reference planes,
-  electrode filtering and section-dependent propagation separately.
+The following concrete paths remain after that focused migration:
+
+- `examples/photonic/ring_modulator.ipynb`, cell 4 `RingModulator` and cell 18
+  `RingModulatorEO`: unilateral input F=0, constrained output `i_out`, and a
+  complex resonator state `a` with Q=a. Dimensional CMT normalization makes
+  |a|² a candidate stored energy in J (coupling has units 1/sqrt(s)), not port
+  power. Audit energy balance and bidirectional loading before replacing the
+  input-potential drive or interpreting F=0 as a matched wave boundary.
+  Preserve photon lifetime, detuning sign, through-field interference, and the
+  external Rs/Cj circuit; `v_e` is high impedance and reads real electrical
+  voltage. Its non-holomorphic EO derivative/sideband contract also needs audit.
+- Same ring notebook, cell 6 `RingModSetup`: the illustrative all-pass H law,
+  `absorbed=(1-|H|²)*signals.in_` input row and constrained through row do not
+  constitute the retained-wave terminal-flow contract. Audit round-trip phase
+  units/reference wavelength, passivity, .setup gradients and singular whole-ring
+  controls separately; do not relabel that input row as absorbed optical W.
+- Same ring notebook: `OpticalSourcePulseOnOff` (cell 4) and
+  `OpticalSourceStep` (cell 18) prescribe optical potential differences. The
+  local `BiasedACSource`, `BiasedSinSource` and `NRZSource` (cells 18/26/30)
+  are **electrical voltage** sources and must retain bias, waveform, resistance
+  and capacitance semantics. Migrate transient/HB/eye/vmap output-field squares
+  and DC transmission ratios only after qualifying the ring itself. Keep plots
+  of resonator |a|² distinct from traveling optical powers.
+- `examples/photonic/tfln_traveling_wave_mzm.ipynb`: cell 9 `sectioned_mzm`
+  connects a legacy unit-power `OpticalSource` to a directional coupler, with
+  DUMP_IN/DUMP_OUT/LOAD 1-ohm optical resistors. Electrical RS/RL and the ground
+  used by the PWL driver and Pockels junction terminals are separate and remain.
+  Cell 11 saves only LOAD's potential using SaveAt.fn and squares it afterward;
+  migrate that callback to a public wave observation before discarding internal
+  states. Preserve the same midpoint electrode taps in both arms, section delay,
+  opposite modulation signs, carrier-only BIAS, common eye time origin and
+  independent whole-device convolution comparison. Its rational electrical
+  electrode-line fit remains electrical, not an optical scattering realization.
 - `circulax/components/rational.py:rational_delay_component`: re-embeds delays
   through `Y_deembed -> S_deembed -> P S P -> s_to_y(S_full)` in `_fast_physics`.
   This remaining photonic-capable realization conversion is unchanged.
