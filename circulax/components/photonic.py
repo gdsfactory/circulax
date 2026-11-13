@@ -100,6 +100,59 @@ def optical_delay_line(*, r0: float = 1.0) -> type[CircuitComponent]:
 OpticalDelayLine = optical_delay_line()
 
 
+def nonlinear_optical_waveguide(*, r0: float = 1.0) -> type[CircuitComponent]:
+    """Build a bidirectional delayed waveguide with independent directional TPA.
+
+    Preserves the law from photonics_transient.ipynb: each retarded incident
+    envelope u produces T*u/sqrt(1+tpa_coeff*|u|**2*effective_length).
+    T includes linear field loss and negative carrier phase; effective length
+    is in cm and tpa_coeff in 1/(W cm). There is no cross-direction absorption,
+    Kerr phase, carrier population or dispersion. References are static,
+    finite, positive and real; envelopes are in sqrt(W), independently of r0.
+
+    DC, transient, full real-block small_signal and periodic HB are supported.
+    Legacy complex-linear ac_response is rejected for this intensity law.
+    History, interpolation and initialization follow OpticalDelayLine.
+    See docs/nonlinear_optical_power_waves.md for the observation-plane audit.
+    """
+    r0 = validate_reference(r0)
+
+    @component(ports=("p1", "p2"), states=("wave_p1", "wave_p2"), holomorphic=False)
+    def NonlinearOpticalWaveguide(  # noqa: PLR0917 -- public component parameters
+        signals: Signals,
+        length_um: float = 100.0,
+        loss_dB_cm: float = 1.0,
+        tpa_coeff: float = 0.0,
+        neff: float = 2.4,
+        n_group: float = 4.0,
+        wavelength_nm: float = 1310.0,
+    ) -> PhysicsReturn:
+        """Propagate each delayed incident intensity without mixing directions."""
+        length_um = _bounded_parameter(length_um, "length_um")
+        loss_dB_cm = _bounded_parameter(loss_dB_cm, "loss_dB_cm")
+        tpa_coeff = _bounded_parameter(tpa_coeff, "tpa_coeff")
+        n_group = _bounded_parameter(n_group, "n_group")
+        wavelength_nm = _bounded_parameter(wavelength_nm, "wavelength_nm", lower=jnp.finfo(float).tiny)
+        length_cm = length_um / 10000.0
+        alpha_cm = loss_dB_cm * jnp.log(10.0) / 10.0
+        # Keep the notebook's small-alpha branch, but avoid 0/0 in inactive AD.
+        denominator = jnp.where(alpha_cm > 1e-12, alpha_cm, 1.0)
+        effective_length = jnp.where(alpha_cm > 1e-12, -jnp.expm1(-alpha_cm * length_cm) / denominator, length_cm)
+        phase = 2.0 * jnp.pi * neff * length_um * 1000.0 / wavelength_nm
+        transmission = 10.0 ** (-loss_dB_cm * length_cm / 20.0) * jnp.exp(-1j * phase)
+        past = signals.at_delay(length_um * n_group / 2.99792458e14)
+        incident = jnp.array([past.wave_p2, past.wave_p1])
+        outgoing = transmission * incident / jnp.sqrt(1.0 + tpa_coeff * jnp.abs(incident) ** 2 * effective_length)
+        return power_wave_constraints(signals, ("p1", "p2"), outgoing, r0=r0, algebraic_flow=True)
+
+    NonlinearOpticalWaveguide._wave_r0 = r0  # noqa: SLF001 -- compiler reference metadata
+    NonlinearOpticalWaveguide._wave_algebraic_flow = True  # noqa: SLF001 -- complete instantaneous terminal F
+    return NonlinearOpticalWaveguide
+
+
+NonlinearOpticalWaveguide = nonlinear_optical_waveguide()
+
+
 def _delay_scattering(
     f: float,
     length_um: float = 100.0,
