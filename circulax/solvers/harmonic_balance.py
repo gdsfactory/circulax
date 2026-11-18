@@ -280,18 +280,32 @@ def setup_harmonic_balance(
             return y_flat + delta * damping
 
         def _solve(y_flat: Array) -> tuple[Array, Array]:
-            # groups MUST be passed via args= — ImplicitAdjoint differentiates
-            # only through explicit args; closure-captured variables give zero gradients.
-            hb_solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
-            sol = optx.fixed_point(
-                newton_step,
-                hb_solver,
-                y_flat,
-                args=groups,
-                max_steps=max_steps,
-                throw=False,
-            )
-            y_flat_sol = sol.value
+            def residual(y: Array) -> Array:
+                return _hb_residual(
+                    y.reshape(K, sys_size), groups, t_points, omega, ground_indices, is_complex=is_complex
+                ).flatten()
+
+            def solve(_residual: Callable, initial: Array) -> Array:
+                hb_solver = optx.FixedPointIteration(rtol=rtol, atol=atol)
+                sol = optx.fixed_point(
+                    newton_step,
+                    hb_solver,
+                    initial,
+                    args=groups,
+                    max_steps=max_steps,
+                    throw=False,
+                )
+                return sol.value
+
+            def tangent_solve(linear_residual: Callable, rhs: Array) -> Array:
+                jacobian = jax.jacfwd(linear_residual)(jnp.zeros_like(rhs))
+                return jnp.linalg.solve(jacobian, rhs)
+
+            # Differentiate R(y, p) = 0, rather than the Newton update that
+            # contains dR/dy. This needs only first-order device derivatives;
+            # differentiating the update would request unavailable OSDI curvature.
+            # custom_root also includes array parameters captured by residual.
+            y_flat_sol = jax.lax.custom_root(residual, y_flat, solve, tangent_solve)
             y_time_sol = y_flat_sol.reshape(K, sys_size)
             # Normalise by K so that y_freq[k] is the true complex amplitude.
             y_freq_sol = jnp.fft.rfft(y_time_sol, axis=0) / K

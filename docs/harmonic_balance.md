@@ -202,3 +202,30 @@ circuit-level inputs and outputs.
 The Newton Jacobian is $(K \cdot n) \times (K \cdot n)$, stored dense.  For 10 harmonics ($K=21$) and 200 nodes: $4200 \times 4200 \approx 80\,\text{MB}$.
 
 For larger circuits, the block-circulant structure could be exploited to reduce to $n$ independent $K \times K$ systems via `jnp.fft.ifft` — not yet implemented.
+
+
+### Gradients through the periodic solution
+
+HB differentiates the converged residual $R(y, p) = 0$ using
+$dy/dp = -(\partial R/\partial y)^{-1} \partial R/\partial p$.
+This requires only first derivatives of device currents and charges, including
+when a circuit contains native OSDI devices. The Newton damping and numerical
+regularisation are used during iteration; the gradient uses the physical
+residual at the returned solution.
+
+```python
+def amplitude(resistance):
+    _, spectrum = circuit.hb(
+        freq=1e9, harmonics=3, params={"R1.R": resistance}
+    )
+    return 2 * jnp.abs(circuit.port(spectrum[1], "out"))
+
+d_amplitude_d_resistance = jax.jit(jax.grad(amplitude))(50.0)
+```
+
+Gradients assume a converged solution with a nonsingular residual Jacobian.
+Initial guesses do not contribute to the implicit derivative. Native OSDI
+model parameters and second derivatives of native device physics remain
+unsupported; this supports gradients with respect to differentiable parameters
+of other circuit components. Autonomous multi-start differentiates the selected
+solution branch, so its gradient does not describe changes in branch selection.

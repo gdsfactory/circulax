@@ -171,3 +171,85 @@ def test_hb_selects_transient_native_physics(mode_capacitor: str, backend: str, 
     amplitude = 2 * abs(circuit.port(spectrum[1], "out"))
     expected = 1 / np.sqrt(1 + (2 * np.pi * F0 * 50 * 1e-12) ** 2)
     np.testing.assert_allclose(amplitude, expected, rtol=1e-6)
+
+
+@pytest.mark.parametrize("backend", ["dense", "klu_split"])
+@pytest.mark.parametrize("compiled", [False, True])
+def test_hb_osdi_resistance_gradient(backend: str, *, compiled: bool) -> None:
+    """HB sensitivities need only first derivatives of native device physics."""
+    capacitor, ports = _osdi_capacitor()
+    circuit = _rc_divider_circuit(capacitor, ports, backend=backend)
+    y0 = circuit.dc()
+
+    def amplitude(resistance: jax.Array) -> jax.Array:
+        _, spectrum = circuit.hb(
+            freq=F0,
+            harmonics=HARMONICS,
+            y0=y0,
+            params={"R1.R": resistance},
+        )
+        return 2 * abs(circuit.port(spectrum[1], "out"))
+
+    resistance = 50.0
+    transform = jax.jit if compiled else lambda f: f
+    value, gradient = transform(jax.value_and_grad(amplitude))(resistance)
+    forward = transform(jax.jacfwd(amplitude))(resistance)
+    wc = 2 * np.pi * F0 * 1e-12
+    expected_value = 1 / np.sqrt(1 + (wc * resistance) ** 2)
+    expected_gradient = -(wc**2) * resistance / (1 + (wc * resistance) ** 2) ** 1.5
+    np.testing.assert_allclose(value, expected_value, rtol=1e-6)
+    np.testing.assert_allclose(gradient, expected_gradient, rtol=1e-6)
+    np.testing.assert_allclose(forward, expected_gradient, rtol=1e-6)
+    epsilon = 1e-2
+    finite_difference = (amplitude(resistance + epsilon) - amplitude(resistance - epsilon)) / (2 * epsilon)
+    np.testing.assert_allclose(gradient, finite_difference, rtol=1e-6)
+
+
+@pytest.fixture(scope="module")
+def nonlinear_capacitor(tmp_path_factory: pytest.TempPathFactory) -> str:
+    compiler = shutil.which("openvaf-r")
+    if compiler is None:
+        pytest.skip("openvaf-r is not installed")
+    root = tmp_path_factory.mktemp("hb-nonlinear-capacitor")
+    source = root / "capacitor.va"
+    source.write_text("""`include "disciplines.vams"
+module nonlinear_capacitor(p, n);
+  inout p, n;
+  electrical p, n;
+  parameter real c = 1e-12;
+  real v;
+  analog begin
+    v = V(p,n);
+    I(p,n) <+ ddt(c*(v + v*v*v/3));
+  end
+endmodule
+""")
+    target = root / "capacitor.osdi"
+    subprocess.run([compiler, str(source), "-o", str(target)], check=True, capture_output=True)  # noqa: S603
+    return str(target)
+
+
+def test_hb_nonlinear_osdi_source_gradient(nonlinear_capacitor: str) -> None:
+    """A voltage-dependent native stamp still needs no device curvature."""
+    capacitor, ports = _osdi_capacitor(osdi_path=nonlinear_capacitor)
+    circuit = _rc_divider_circuit(capacitor, ports, backend="dense")
+
+    def amplitude(drive: jax.Array) -> jax.Array:
+        _, spectrum = circuit.hb(
+            freq=F0,
+            harmonics=5,
+            params={"Vs.V": drive},
+            rtol=1e-10,
+            atol=1e-12,
+            max_steps=100,
+        )
+        return 2 * abs(circuit.port(spectrum[1], "out"))
+
+    drive = 1.5
+    gradient = jax.jit(jax.grad(amplitude))(drive)
+    forward = jax.jit(jax.jacfwd(amplitude))(drive)
+    epsilon = 1e-4
+    finite_difference = (amplitude(drive + epsilon) - amplitude(drive - epsilon)) / (2 * epsilon)
+    assert abs(float(gradient)) > 0.1
+    np.testing.assert_allclose(gradient, finite_difference, rtol=1e-6)
+    np.testing.assert_allclose(forward, finite_difference, rtol=1e-6)
