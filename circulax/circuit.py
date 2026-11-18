@@ -824,8 +824,10 @@ class Circuit:
         """Run harmonic balance to find the periodic steady state.
 
         Native OSDI devices without ABI state slots use transient-mode F/Q
-        evaluation. Differentiating through the converged native solve is
-        not yet supported.
+        evaluation. Gradients through the converged solution use implicit
+        differentiation of the HB residual and require only first-order
+        device derivatives. Native OSDI model-parameter gradients remain
+        unsupported; parameters of other components can be differentiated.
 
         Args:
             freq: Fundamental frequency in Hz.
@@ -860,7 +862,12 @@ class Circuit:
         # registrations rather than the small-signal AC evaluation mode.
         groups = self._for_analysis("tran")._with_param_values(arrays)
         if y0 is None:
-            y0 = self.dc(params=updates)
+            # DC supplies only an initial guess for the implicit HB root.
+            # Detach its inputs before solving: differentiating the DC Newton
+            # iteration can otherwise request unsupported native stamp curvature.
+            dc_circuit = self._for_analysis("dc")
+            dc_groups = jax.tree.map(jax.lax.stop_gradient, dc_circuit._with_param_values(arrays))  # noqa: SLF001 -- same-class parameter update
+            y0 = dc_circuit.with_groups(dc_groups).dc()
         osc_idx = self._resolve_port_node(osc_node) if isinstance(osc_node, str) else osc_node
         run_hb = setup_harmonic_balance(
             groups,

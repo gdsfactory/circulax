@@ -169,3 +169,35 @@ def test_hb_grad_complex(simple_optical_netlist, backend):
     grad = jax.grad(loss)(y_dc)
     assert grad.shape == y_dc.shape
     assert jnp.isfinite(grad).all()
+
+
+def test_hb_parameter_and_frequency_gradients() -> None:
+    """Implicit gradients include both component params and the HB time grid."""
+    from circulax import compile_circuit
+    from circulax.components.electronic import Capacitor, Resistor, VoltageSourceAC
+
+    net = {
+        "instances": {
+            "Vs": {"component": "source", "settings": {"V": 1.0, "freq": 1e9}},
+            "R": {"component": "resistor", "settings": {"R": 50.0}},
+            "C": {"component": "capacitor", "settings": {"C": 1e-12}},
+            "GND": {"component": "ground"},
+        },
+        "connections": {"Vs,p1": "R,p1", "Vs,p2": "GND,p1", "R,p2": "C,p1", "C,p2": "GND,p1"},
+        "ports": {"out": "C,p1"},
+    }
+    circuit = compile_circuit(net, {"source": VoltageSourceAC, "resistor": Resistor, "capacitor": Capacitor}, backend="dense")
+
+    def amplitude(resistance: jax.Array, frequency: jax.Array) -> jax.Array:
+        _, spectrum = circuit.hb(
+            freq=frequency, harmonics=3, params={"R.R": resistance, "Vs.freq": frequency}, rtol=1e-10, atol=1e-12
+        )
+        return 2 * jnp.abs(circuit.port(spectrum[1], "out"))
+
+    resistance, frequency = 50.0, 1e9
+    value, (d_resistance, d_frequency) = jax.jit(jax.value_and_grad(amplitude, argnums=(0, 1)))(resistance, frequency)
+    z = 2 * jnp.pi * frequency * resistance * 1e-12
+    expected = 1 / jnp.sqrt(1 + z**2)
+    assert jnp.allclose(value, expected, rtol=1e-7)
+    assert jnp.allclose(d_resistance, -(z**2) / resistance * expected**3, rtol=1e-7, atol=1e-15)
+    assert jnp.allclose(d_frequency, -(z**2) / frequency * expected**3, rtol=1e-7, atol=1e-18)
