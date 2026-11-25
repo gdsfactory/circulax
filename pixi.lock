@@ -9590,7 +9590,7 @@ packages:
   - diffrax~=0.7.2
   - equinox~=0.13.0
   - jax>=0.7.2,<0.10.0
-  - kfnetlist~=0.3.0
+  - kfnetlist>=0.3.0,<0.5
   - klujax>=0.5.3,<0.6
   - lineax==0.1.0
   - matplotlib~=3.9
